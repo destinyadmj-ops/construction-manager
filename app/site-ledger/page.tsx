@@ -456,7 +456,7 @@ export default function SiteLedgerPage() {
             <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">（データがありません）</div>
           ) : (
             <div className="mt-2 max-h-64 overflow-auto">
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
                   <div
                     key={`grid-${s.id}`}
