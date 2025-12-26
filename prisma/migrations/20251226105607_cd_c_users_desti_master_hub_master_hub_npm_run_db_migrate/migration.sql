@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE "OutlookSendLog" ALTER COLUMN "updatedAt" DROP DEFAULT;
+ALTER TABLE IF EXISTS "OutlookSendLog" ALTER COLUMN "updatedAt" DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE "Partner" ALTER COLUMN "updatedAt" DROP DEFAULT;
+ALTER TABLE IF EXISTS "Partner" ALTER COLUMN "updatedAt" DROP DEFAULT;
