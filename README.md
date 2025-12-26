@@ -51,9 +51,28 @@ npm run docker:up
 
 - インストール: `npm run dev:autostart:install`
 - アンインストール: `npm run dev:autostart:uninstall`
+
+### Prisma
+
+Prisma Client 生成:
+
 ```bash
 npm run db:generate
+```
+
+マイグレーション適用（推奨: 名前の誤入力防止つき）:
+
+```bash
 npm run db:migrate
+```
+
+補足:
+
+- `db:migrate` は migration name を検証し、誤って長い文字列（例: パス）を入力してしまう事故を防ぎます。
+- Prismaを直接叩きたい場合は `db:migrate:raw` を使います。
+
+```bash
+npm run db:migrate:raw
 ```
 
 ## 開発起動
