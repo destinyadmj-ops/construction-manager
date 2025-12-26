@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: masterhub
+          POSTGRES_PASSWORD: masterhub
+          POSTGRES_DB: masterhub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U masterhub -d masterhub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      NEXT_TELEMETRY_DISABLED: 1
+      DATABASE_URL: postgresql://masterhub:masterhub@127.0.0.1:5432/masterhub
+      # REDIS_URL: (unset on purpose) => smoke asserts 503 fast when not configured
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: master-hub/package-lock.json
+
+      - name: Install dependencies
+        working-directory: master-hub
+        run: npm ci
+
+      - name: Prisma generate
+        working-directory: master-hub
+        run: npx prisma generate
+
+      - name: Prisma migrate (deploy)
+        working-directory: master-hub
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        working-directory: master-hub
+        run: npm run typecheck
+
+      - name: Install Playwright browsers
+        working-directory: master-hub
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke
+        working-directory: master-hub
+        run: npm run e2e:smoke:live

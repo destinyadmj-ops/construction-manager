@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 
 function Test-Health([string]$baseUrl) {
   try {
-    $res = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri ("{0}/api/health" -f $baseUrl)
+    $res = Invoke-WebRequest -TimeoutSec 2 -Uri ("{0}/api/health" -f $baseUrl)
     return ($res.StatusCode -eq 200)
   } catch {
     return $false
