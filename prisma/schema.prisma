@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IntegrationProvider {
+  JDL
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AccountingType {
+  EXPENSE
+  LABOR
+  ACCOUNTS_RECEIVABLE
+}
+
+enum OutlookMailKind {
+  REPORT
+  INVOICE
+}
+
+enum OutlookMailStatus {
+  SENT
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendarEvents CalendarEvent[]
+  workEntries    WorkEntry[]
+  integrations   IntegrationAccount[]
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean  @default(false)
+  description String?
+  location    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+}
+
+model WorkEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  startAt     DateTime
+  endAt       DateTime?
+  note        String?
+  relatedEventId String?
+
+  // Site (genba) ledger relation (optional)
+  siteId      String?
+  site        Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  // Accounting (generic; provider-specific mapping happens in provider)
+  amount      Decimal?
+  taxCategory String?
+  summary     String?
+  department  String?
+  accountingType AccountingType?
+  accountingMeta Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+  @@index([siteId, startAt])
+}
+
+model Site {
+  id          String   @id @default(cuid())
+  companyName String?
+  name        String
+  address     String?
+  phone       String?
+  contactName String?
+  notes       String?
+
+  // Monthly depreciation count threshold (alert when entries >= threshold)
+  depreciationThreshold Int @default(10)
+
+  // Repeat rule (pace) stored as JSON (intervalMonths, weekdays, monthDays)
+  repeatRule  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workEntries WorkEntry[]
+  outlookSendLogs OutlookSendLog[]
+
+  @@index([name])
+  @@index([companyName, name])
+}
+
+model IntegrationAccount {
+  id          String              @id @default(cuid())
+  userId      String
+  provider    IntegrationProvider
+  status      IntegrationStatus   @default(ACTIVE)
+  displayName String?
+  credentials Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider])
+}
+
+model AccountingExportPreset {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String?
+  // Body object for POST /api/accounting/export and /api/accounting/query
+  body      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Partner {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  email     String?
+  notes     String?
+  outlookToEmailDefault        String?
+  outlookSubjectReportDefault  String?
+  outlookSubjectInvoiceDefault String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outlookSendLogs OutlookSendLog[]
+
+  @@index([name])
+}
+
+model OutlookSendLog {
+  id        String           @id @default(cuid())
+  siteId    String
+  partnerId String
+  kind      OutlookMailKind
+  status    OutlookMailStatus
+  toEmail   String
+  subject   String
+  error     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, createdAt])
+  @@index([siteId, createdAt])
+  @@index([createdAt])
+}

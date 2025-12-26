@@ -1,0 +1,6 @@
+- このリポジトリは Next.js(App Router) + TypeScript + Tailwind で構築する。
+- サーバ側の共通ロジックは `src/server/*` に置く（DB/Queue/外部連携）。
+- DB は Prisma + Postgres を前提とし、スキーマは `prisma/schema.prisma` に集約する。
+- ジョブ/リマインド等の非同期処理は BullMQ + Redis を使用する。
+- 会計連携はプロバイダ差し替え方式にし、JDL 固有ロジックは `src/server/accounting/jdl.ts` 以外に漏らさない。
+- 追加機能は最小の差分で実装し、README の手順が壊れないように更新する。
