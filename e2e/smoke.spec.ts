@@ -113,6 +113,7 @@ test('year summary cell drills down to month view', async ({ page }) => {
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
+  await expect(page.getByTestId('year-grid')).toBeVisible();
 
   const anyCell = page.locator('[data-testid^="year-cell-"]').first();
   const emptyState = page.getByText('従業員が未登録、またはデータ取得に失敗しました。');
@@ -148,6 +149,7 @@ test('selected user chip can clear selection', async ({ page }) => {
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
+  await expect(page.getByTestId('year-grid')).toBeVisible();
 
   const anyCell = page.locator('[data-testid^="year-cell-"]').first();
   const emptyState = page.getByText('従業員が未登録、またはデータ取得に失敗しました。');
