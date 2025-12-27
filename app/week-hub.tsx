@@ -3730,6 +3730,42 @@ function Row({
   rowCellClassName?: string;
 }) {
   const isSelectedUser = selectedUserId === user.id;
+  const [cellMenu, setCellMenu] = useState<
+    | null
+    | {
+        day: string;
+        left: number;
+        top: number;
+        slot1: string | null;
+        slot2: string | null;
+      }
+  >(null);
+  const cellMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!cellMenu) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = cellMenuRef.current;
+      if (!el) {
+        setCellMenu(null);
+        return;
+      }
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setCellMenu(null);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCellMenu(null);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [cellMenu]);
 
   const formatCellActionReason = (
     reason: unknown,
@@ -3766,6 +3802,103 @@ function Row({
       return input.toggled === 'off' ? '削除しました' : '追加しました';
     }
     return '反映しました';
+  };
+
+  const runCellAction = async (input: {
+    day: string;
+    action: CellClickAction;
+    color: CellTextColor;
+    siteId?: string | null;
+    siteName?: string | null;
+    beforeFallback: CellSlots;
+  }) => {
+    let resolvedSite = selectedSite;
+    if (input.action !== 'swap' && !input.siteName && !resolvedSite) {
+      resolvedSite = (await onEnsureSite?.()) ?? null;
+      if (!resolvedSite) {
+        onNotify?.('現場名を入力してください');
+        return;
+      }
+    }
+
+    try {
+      const snapshot = async (): Promise<CellSlots | null> => {
+        try {
+          const rs = await fetch(
+            `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(input.day)}&kind=${encodeURIComponent(scheduleKind)}`,
+          );
+          const js = (await rs.json().catch(() => null)) as
+            | { ok: true; slots: [string | null, string | null] }
+            | { ok: false; error?: string }
+            | null;
+          if (!rs.ok || !js || !('ok' in js) || js.ok !== true) return null;
+          return [js.slots?.[0] ?? null, js.slots?.[1] ?? null];
+        } catch {
+          return null;
+        }
+      };
+
+      const before = (await snapshot()) ?? input.beforeFallback;
+
+      const r = await fetch('/api/schedule/cell', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          day: input.day,
+          kind: apiKind,
+          action: input.action,
+          siteId: input.siteName ? null : (input.siteId ?? resolvedSite?.id ?? null),
+          siteName: input.siteName ?? resolvedSite?.label ?? null,
+          color: input.color,
+        }),
+      });
+
+      type CellApiOk = {
+        ok: true;
+        action: CellClickAction;
+        changed?: boolean;
+        reason?: unknown;
+        toggled?: unknown;
+        replaced?: unknown;
+      };
+      type CellApiErr = { ok: false; error?: string };
+      const json = (await r.json().catch(() => null)) as CellApiOk | CellApiErr | null;
+
+      if (!r.ok || !json || json.ok !== true) {
+        const error = json && json.ok === false ? json.error : undefined;
+        onNotify?.(error ? `操作に失敗しました: ${error}` : `操作に失敗しました（HTTP ${r.status}）`);
+        return;
+      }
+
+      if (!json.changed) {
+        onNotify?.(formatCellActionReason(json.reason, input.action) ?? '反映されませんでした');
+        return;
+      }
+
+      const after = await snapshot();
+      if (after) {
+        onCellHistory?.({
+          kind: 'cell',
+          userId: user.id,
+          day: input.day,
+          before,
+          after,
+          at: Date.now(),
+        });
+      }
+
+      onNotify?.(
+        formatCellActionSuccess({
+          action: json.action ?? input.action,
+          toggled: json.toggled,
+          replaced: json.replaced,
+        }),
+      );
+      await onAssigned();
+    } catch {
+      onNotify?.('通信に失敗しました');
+    }
   };
 
   return (
@@ -3828,101 +3961,14 @@ function Row({
           <button
             key={d.key}
             type="button"
-            onClick={async () => {
+            onClick={(e) => {
               if (!isEditable) {
-                onNotify?.('編集するには、ヘッダーの「追加」→編集を開始してください');
+                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
                 return;
               }
 
-              let resolvedSite = selectedSite;
-              if (cellClickAction !== 'swap' && !resolvedSite) {
-                resolvedSite = (await onEnsureSite?.()) ?? null;
-                if (!resolvedSite) {
-                  onNotify?.('現場名を入力してください');
-                  return;
-                }
-              }
-
-              try {
-                const snapshot = async (): Promise<CellSlots | null> => {
-                  try {
-                    const rs = await fetch(
-                      `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(d.key)}&kind=${encodeURIComponent(scheduleKind)}`,
-                    );
-                    const js = (await rs.json().catch(() => null)) as
-                      | { ok: true; slots: [string | null, string | null] }
-                      | { ok: false; error?: string }
-                      | null;
-                    if (!rs.ok || !js || !('ok' in js) || js.ok !== true) return null;
-                    return [js.slots?.[0] ?? null, js.slots?.[1] ?? null];
-                  } catch {
-                    return null;
-                  }
-                };
-
-                const before = (await snapshot()) ?? [slot1, slot2];
-
-                const r = await fetch('/api/schedule/cell', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({
-                    userId: user.id,
-                    day: d.key,
-                    kind: apiKind,
-                    action: cellClickAction,
-                    siteId: resolvedSite?.id ?? null,
-                    siteName: resolvedSite?.label ?? null,
-                    color: cellTextColor,
-                  }),
-                });
-
-                type CellApiOk = {
-                  ok: true;
-                  action: CellClickAction;
-                  changed?: boolean;
-                  reason?: unknown;
-                  toggled?: unknown;
-                  replaced?: unknown;
-                };
-                type CellApiErr = { ok: false; error?: string };
-                const json = (await r.json().catch(() => null)) as CellApiOk | CellApiErr | null;
-
-                if (!r.ok || !json || json.ok !== true) {
-                  const error = json && json.ok === false ? json.error : undefined;
-                  onNotify?.(
-                    error ? `操作に失敗しました: ${error}` : `操作に失敗しました（HTTP ${r.status}）`,
-                  );
-                  return;
-                }
-
-                if (!json.changed) {
-                  onNotify?.(formatCellActionReason(json.reason, cellClickAction) ?? '反映されませんでした');
-                  return;
-                }
-
-                const after = await snapshot();
-                if (after) {
-                  onCellHistory?.({
-                    kind: 'cell',
-                    userId: user.id,
-                    day: d.key,
-                    before,
-                    after,
-                    at: Date.now(),
-                  });
-                }
-
-                onNotify?.(
-                  formatCellActionSuccess({
-                    action: json.action ?? cellClickAction,
-                    toggled: json.toggled,
-                    replaced: json.replaced,
-                  }),
-                );
-                await onAssigned();
-              } catch {
-                onNotify?.('通信に失敗しました');
-              }
+              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+              setCellMenu({ day: d.key, left: rect.left, top: rect.bottom, slot1, slot2 });
             }}
             className={`border-b border-l border-zinc-200 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 ${
               rowCellClassName ?? ''
@@ -3948,6 +3994,56 @@ function Row({
           </button>
         );
       })}
+
+      {cellMenu ? (
+        <div
+          ref={cellMenuRef}
+          className="fixed z-50 w-[160px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+          style={{ left: Math.max(8, Math.round(cellMenu.left)), top: Math.max(8, Math.round(cellMenu.top)) }}
+        >
+          <button
+            type="button"
+            className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+            onClick={() => {
+              const day = cellMenu.day;
+              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
+              setCellMenu(null);
+              void runCellAction({
+                day,
+                action: cellClickAction,
+                color: cellTextColor,
+                beforeFallback,
+              });
+            }}
+          >
+            編集
+          </button>
+          <button
+            type="button"
+            className="block w-full border-t border-zinc-200 px-3 py-2 text-left text-[11px] text-red-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-red-300 dark:hover:bg-zinc-900"
+            onClick={() => {
+              const target = (cellMenu.slot1 ?? cellMenu.slot2 ?? '').trim();
+              if (!target) {
+                onNotify?.('赤文字にする予定がありません');
+                setCellMenu(null);
+                return;
+              }
+              const day = cellMenu.day;
+              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
+              setCellMenu(null);
+              void runCellAction({
+                day,
+                action: 'recolor',
+                color: 'red',
+                siteName: target,
+                beforeFallback,
+              });
+            }}
+          >
+            赤文字
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }
