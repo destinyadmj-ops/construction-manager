@@ -32,8 +32,11 @@ function extractSiteNames(meta: unknown): string[] {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '200') || 200, 1), 1000);
+  const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
+  const kind = kindParam === 'daily' ? 'DAILY' : 'NORMAL';
 
   const sites = await prisma.site.findMany({
+    where: { kind },
     orderBy: [{ companyName: 'asc' }, { name: 'asc' }],
     take: 500,
     select: { id: true, name: true, companyName: true },
@@ -62,6 +65,7 @@ export async function GET(request: Request) {
   const rows = await prisma.workEntry.findMany({
     orderBy: { startAt: 'desc' },
     take: limit,
+    where: { kind },
     select: { accountingMeta: true, summary: true, note: true },
   });
 

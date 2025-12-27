@@ -7,8 +7,11 @@ const BodySchema = z
   .object({
     userId: z.string().min(1),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    kind: z.enum(['NORMAL', 'DAILY']).optional(),
     slot1: z.string().trim().max(200).nullable().optional(),
     slot2: z.string().trim().max(200).nullable().optional(),
+    slot1Color: z.enum(['default', 'red']).optional().nullable(),
+    slot2Color: z.enum(['default', 'red']).optional().nullable(),
   })
   .strict();
 
@@ -30,14 +33,17 @@ function addMinutes(d: Date, minutes: number) {
   return x;
 }
 
-async function resolveSiteByName(siteName: string): Promise<{ id: string; name: string } | null> {
+async function resolveSiteByName(
+  siteName: string,
+  kind: 'NORMAL' | 'DAILY',
+): Promise<{ id: string; name: string } | null> {
   const name = siteName.trim();
   if (!name) return null;
 
-  const found = await prisma.site.findFirst({ where: { name }, select: { id: true, name: true } });
+  const found = await prisma.site.findFirst({ where: { name, kind }, select: { id: true, name: true } });
   if (found) return found;
 
-  const created = await prisma.site.create({ data: { name }, select: { id: true, name: true } });
+  const created = await prisma.site.create({ data: { name, kind }, select: { id: true, name: true } });
   return created;
 }
 
@@ -49,6 +55,7 @@ export async function POST(request: Request) {
   }
 
   const { userId, day } = parsed.data;
+  const kind = parsed.data.kind ?? 'NORMAL';
 
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
@@ -59,23 +66,26 @@ export async function POST(request: Request) {
 
     const slot1Name = (parsed.data.slot1 ?? null)?.trim() || null;
     const slot2Name = (parsed.data.slot2 ?? null)?.trim() || null;
+    const slot1Color: 'default' | 'red' = parsed.data.slot1Color ?? 'default';
+    const slot2Color: 'default' | 'red' = parsed.data.slot2Color ?? 'default';
 
     const [slot1Site, slot2Site] = await Promise.all([
-      slot1Name ? resolveSiteByName(slot1Name) : Promise.resolve(null),
-      slot2Name ? resolveSiteByName(slot2Name) : Promise.resolve(null),
+      slot1Name ? resolveSiteByName(slot1Name, kind) : Promise.resolve(null),
+      slot2Name ? resolveSiteByName(slot2Name, kind) : Promise.resolve(null),
     ]);
 
     await prisma.$transaction(async (tx) => {
-      await tx.workEntry.deleteMany({ where: { userId, startAt: { gte: startAt, lt: until } } });
+      await tx.workEntry.deleteMany({ where: { userId, kind, startAt: { gte: startAt, lt: until } } });
 
       if (slot1Site) {
         await tx.workEntry.create({
           data: {
             userId,
+            kind,
             startAt: addMinutes(startAt, 0),
             summary: slot1Site.name,
             siteId: slot1Site.id,
-            accountingMeta: { siteName: slot1Site.name },
+            accountingMeta: { siteName: slot1Site.name, labelColor: slot1Color },
           },
           select: { id: true },
         });
@@ -85,10 +95,11 @@ export async function POST(request: Request) {
         await tx.workEntry.create({
           data: {
             userId,
+            kind,
             startAt: addMinutes(startAt, 1),
             summary: slot2Site.name,
             siteId: slot2Site.id,
-            accountingMeta: { siteName: slot2Site.name },
+            accountingMeta: { siteName: slot2Site.name, labelColor: slot2Color },
           },
           select: { id: true },
         });
