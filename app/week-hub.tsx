@@ -2257,7 +2257,6 @@ function WeekHubInner() {
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
-                  cellTextColor={cellTextColor}
                   isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
@@ -2443,7 +2442,6 @@ function WeekHubInner() {
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
-                  cellTextColor={cellTextColor}
                   isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
@@ -2820,7 +2818,6 @@ function WeekGrid({
   selectedSite,
   onEnsureSite,
   cellClickAction,
-  cellTextColor,
   isEditable,
   selectedUserId,
   onSelectUser,
@@ -2850,7 +2847,6 @@ function WeekGrid({
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
-  cellTextColor: CellTextColor;
   isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
@@ -3072,7 +3068,6 @@ function WeekGrid({
                   onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
-                  cellTextColor={cellTextColor}
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
@@ -3115,7 +3110,6 @@ function MonthGrid({
   selectedSite,
   onEnsureSite,
   cellClickAction,
-  cellTextColor,
   isEditable,
   selectedUserId,
   onSelectUser,
@@ -3143,7 +3137,6 @@ function MonthGrid({
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
-  cellTextColor: CellTextColor;
   isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
@@ -3343,7 +3336,6 @@ function MonthGrid({
                   onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
-                  cellTextColor={cellTextColor}
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
@@ -3690,7 +3682,6 @@ function Row({
   onEnsureSite,
   selectedUserId,
   cellClickAction,
-  cellTextColor,
   gridLayout,
   cellMinH,
   isEditable,
@@ -3714,7 +3705,6 @@ function Row({
   onEnsureSite?: () => Promise<SiteItem | null>;
   selectedUserId: string | null;
   cellClickAction: CellClickAction;
-  cellTextColor: CellTextColor;
   gridLayout: GridLayout;
   cellMinH: number;
   isEditable: boolean;
@@ -4011,23 +4001,54 @@ function Row({
               void runCellAction({
                 day,
                 action: cellClickAction,
-                color: cellTextColor,
+                color: 'default',
                 beforeFallback,
               });
             }}
           >
-            編集
+            反映（黒）
           </button>
           <button
             type="button"
             className="block w-full border-t border-zinc-200 px-3 py-2 text-left text-[11px] text-red-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-red-300 dark:hover:bg-zinc-900"
             onClick={() => {
-              const target = (cellMenu.slot1 ?? cellMenu.slot2 ?? '').trim();
-              if (!target) {
-                onNotify?.('赤文字にする予定がありません');
-                setCellMenu(null);
-                return;
-              }
+              const day = cellMenu.day;
+              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
+              setCellMenu(null);
+              void runCellAction({
+                day,
+                action: cellClickAction,
+                color: 'red',
+                beforeFallback,
+              });
+            }}
+          >
+            反映（赤）
+          </button>
+
+          <div className="border-t border-zinc-200 dark:border-zinc-800" />
+
+          <button
+            type="button"
+            className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+            onClick={() => {
+              const day = cellMenu.day;
+              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
+              setCellMenu(null);
+              void runCellAction({
+                day,
+                action: 'recolor',
+                color: 'default',
+                beforeFallback,
+              });
+            }}
+          >
+            色変更（黒）
+          </button>
+          <button
+            type="button"
+            className="block w-full border-t border-zinc-200 px-3 py-2 text-left text-[11px] text-red-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-red-300 dark:hover:bg-zinc-900"
+            onClick={() => {
               const day = cellMenu.day;
               const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
               setCellMenu(null);
@@ -4035,12 +4056,11 @@ function Row({
                 day,
                 action: 'recolor',
                 color: 'red',
-                siteName: target,
                 beforeFallback,
               });
             }}
           >
-            赤文字
+            色変更（赤）
           </button>
         </div>
       ) : null}
