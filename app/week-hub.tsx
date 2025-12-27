@@ -201,6 +201,7 @@ function WeekHubInner() {
   const [cellActionMsg, setCellActionMsg] = useState<string | null>(null);
   const cellActionMsgTimer = useRef<number | null>(null);
   const [isCellSettingsOpen, setIsCellSettingsOpen] = useState(false);
+  const cellSettingsRef = useRef<HTMLDivElement | null>(null);
 
   const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
   const [userOrder, setUserOrder] = useState<string[]>([]);
@@ -219,6 +220,22 @@ function WeekHubInner() {
       setMode(m);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!isCellSettingsOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = cellSettingsRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setIsCellSettingsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [isCellSettingsOpen]);
 
   useEffect(() => {
     const k = (searchParams.get('kind') ?? '').toLowerCase();
@@ -660,7 +677,7 @@ function WeekHubInner() {
         </select>
       </div>
 
-      <div className="relative ml-2 flex items-center gap-1">
+      <div ref={cellSettingsRef} className="relative ml-2 flex items-center gap-1">
         <button
           type="button"
           onClick={() => setIsCellSettingsOpen((v) => !v)}
