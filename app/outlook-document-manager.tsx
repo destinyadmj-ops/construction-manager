@@ -88,7 +88,7 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
 
   const [toEmailDraft, setToEmailDraft] = useState('');
   const [subjectDraft, setSubjectDraft] = useState('');
-  const [toEmailTouched, setToEmailTouched] = useState(false);
+  const [, setToEmailTouched] = useState(false);
   const [subjectTouched, setSubjectTouched] = useState(false);
 
   useEffect(() => {

@@ -333,8 +333,7 @@ export default function PartnersPage() {
                                     method: 'DELETE',
                                   });
                                   const j = (await r.json().catch(() => null)) as unknown;
-                                  const obj =
-                                    j && typeof j === 'object' ? (j as Record<string, unknown>) : (null as any);
+                                  const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
                                   if (!r.ok || obj?.ok !== true) {
                                     throw new Error((obj?.error as string) || `HTTP ${r.status}`);
                                   }
