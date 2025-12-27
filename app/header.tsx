@@ -209,10 +209,10 @@ export default function AppHeader() {
               data-testid="header-action-add"
               onClick={() => void actions.add?.onClick()}
               disabled={!actions.add || actions.add.disabled}
-              title={actions.add?.title ?? '追加'}
+              title={actions.add?.title ?? '編集'}
               className="ml-1 rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
             >
-              追加
+              編集
             </button>
 
             <div className="relative">
