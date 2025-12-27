@@ -3757,6 +3757,32 @@ function Row({
     };
   }, [cellMenu]);
 
+  useEffect(() => {
+    if (!cellMenu) return;
+    const el = cellMenuRef.current;
+    if (!el) return;
+
+    const raf = window.requestAnimationFrame(() => {
+      const menuRect = el.getBoundingClientRect();
+      const vw = window.innerWidth || 0;
+      const vh = window.innerHeight || 0;
+      const pad = 8;
+
+      const nextLeft = Math.max(pad, Math.min(cellMenu.left, Math.max(pad, vw - menuRect.width - pad)));
+      const nextTop = Math.max(pad, Math.min(cellMenu.top, Math.max(pad, vh - menuRect.height - pad)));
+
+      if (Math.abs(nextLeft - cellMenu.left) >= 1 || Math.abs(nextTop - cellMenu.top) >= 1) {
+        setCellMenu((cur) => {
+          if (!cur) return cur;
+          if (cur.day !== cellMenu.day) return cur;
+          return { ...cur, left: nextLeft, top: nextTop };
+        });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(raf);
+  }, [cellMenu]);
+
   const formatCellActionReason = (
     reason: unknown,
     action: CellClickAction,
