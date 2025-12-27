@@ -1,12 +1,17 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderActions } from './header-actions';
 
 type ViewMode = 'week' | 'month' | 'year';
 
-type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap';
+type ScheduleKind = 'normal' | 'daily';
+
+type GridLayout = 'compact' | 'comfortable';
+type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
+type CellTextColor = 'default' | 'red';
+type CellBg = 'default' | 'soft';
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
@@ -22,7 +27,6 @@ type ApiCell = {
 type ApiResponse = {
   ok: true;
   weekStart: string;
-  days: string[];
   users: ApiUser[];
   grid: Record<string, Record<string, ApiCell>>; // userId -> day(yyyy-mm-dd) -> cell
 };
@@ -60,6 +64,47 @@ type CellHistoryEntry = {
 };
 
 const HISTORY_GROUP_MS = 800;
+
+function arrayEqual(a: string[], b: string[]) {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function orderUsers(users: ApiUser[], order: string[]) {
+  const filteredUsers = users.filter((u) => {
+    const name = (u.name ?? '').trim();
+    const email = (u.email ?? '').trim();
+    return !(name === 'E2E Cell User' && email.endsWith('@example.test'));
+  });
+
+  if (!order || order.length === 0) return filteredUsers;
+  const byId = new Map(filteredUsers.map((u) => [u.id, u] as const));
+  const used = new Set<string>();
+  const next: ApiUser[] = [];
+  for (const id of order) {
+    const u = byId.get(id);
+    if (!u) continue;
+    next.push(u);
+    used.add(id);
+  }
+  for (const u of filteredUsers) {
+    if (used.has(u.id)) continue;
+    next.push(u);
+  }
+  return next;
+}
+
+function normalizeUserOrder(order: string[], users: ApiUser[]) {
+  const set = new Set(users.map((u) => u.id));
+  const filtered = order.filter((id) => set.has(id));
+  const used = new Set(filtered);
+  const appended = users.filter((u) => !used.has(u.id)).map((u) => u.id);
+  return [...filtered, ...appended];
+}
 
 function slotsEqual(a: CellSlots, b: CellSlots) {
   return a[0] === b[0] && a[1] === b[1];
@@ -111,20 +156,58 @@ function weekdayMon1Sun7FromYmd(ymd: string): number {
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
 
 export default function WeekHub() {
-  const { setAddAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  return (
+    <Suspense fallback={null}>
+      <WeekHubInner />
+    </Suspense>
+  );
+}
+
+function WeekHubInner() {
+  const { setAddAction, setHistoryAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const qsUserId = searchParams.get('userId');
   const [mode, setMode] = useState<ViewMode>('week');
+  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('normal');
+  const [gridLayout, setGridLayout] = useState<GridLayout>('compact');
   const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [data, setData] = useState<ApiResponse | null>(null);
   const [monthData, setMonthData] = useState<MonthApiResponse | null>(null);
   const [yearData, setYearData] = useState<YearSummaryApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [editConfigured, setEditConfigured] = useState(false);
+  const [editEnabled, setEditEnabled] = useState(true);
+  const [editActive, setEditActive] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editPassword, setEditPassword] = useState('');
+  const [editPasswordMsg, setEditPasswordMsg] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [sites, setSites] = useState<SiteItem[]>([]);
   const [selectedSite, setSelectedSite] = useState<SiteItem | null>(null);
+  const [siteQuery, setSiteQuery] = useState('');
+  const [siteQuickInput, setSiteQuickInput] = useState('');
+  const [siteQuickMsg, setSiteQuickMsg] = useState<string | null>(null);
+  const siteQuickInputRef = useRef<HTMLInputElement | null>(null);
+  const pinSiteLabelRef = useRef<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [cellMinW, setCellMinW] = useState<number>(112);
+  const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
+  const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(64);
+  const [cellBg, setCellBg] = useState<CellBg>('default');
   const [cellClickAction, setCellClickAction] = useState<CellClickAction>('toggle');
+  const [cellTextColor, setCellTextColor] = useState<CellTextColor>('default');
   const [cellActionMsg, setCellActionMsg] = useState<string | null>(null);
   const cellActionMsgTimer = useRef<number | null>(null);
+  const [isCellSettingsOpen, setIsCellSettingsOpen] = useState(false);
+
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
+  const [userOrder, setUserOrder] = useState<string[]>([]);
+  const userOrderLoadedRef = useRef(false);
+  const userOrderSavingRef = useRef(false);
+  const pendingUserOrderRef = useRef<string[] | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
 
   const [undoStack, setUndoStack] = useState<CellHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
@@ -138,6 +221,266 @@ export default function WeekHub() {
   }, [searchParams]);
 
   useEffect(() => {
+    const k = (searchParams.get('kind') ?? '').toLowerCase();
+    if (k === 'daily') setScheduleKind('daily');
+    if (k === 'normal') setScheduleKind('normal');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const l = (searchParams.get('layout') ?? '').toLowerCase();
+    setGridLayout(l === 'comfortable' ? 'comfortable' : 'compact');
+  }, [searchParams]);
+
+  const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
+  const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
+
+  const gridPrefsKey = useMemo(() => {
+    return `week-hub:${scheduleKind}:${mode}:gridPrefs`;
+  }, [mode, scheduleKind]);
+
+  const userOrderKey = useMemo(() => {
+    return `week-hub:${scheduleKind}:userOrder`;
+  }, [scheduleKind]);
+
+  const resolveEffectiveUserId = useCallback(async () => {
+    const q = (qsUserId ?? '').trim();
+    if (q) {
+      setEffectiveUserId(q);
+      return q;
+    }
+
+    try {
+      const kind = scheduleKind === 'daily' ? 'daily' : 'normal';
+      const r = await fetch(`/api/users?kind=${encodeURIComponent(kind)}`);
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      const users = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];
+      const first = users[0] && typeof users[0] === 'object' ? (users[0] as Record<string, unknown>) : null;
+      const id = typeof first?.id === 'string' ? first.id : null;
+      setEffectiveUserId(id);
+      return id;
+    } catch {
+      setEffectiveUserId(null);
+      return null;
+    }
+  }, [qsUserId, scheduleKind]);
+
+  const loadUserOrder = useCallback(
+    async (userId: string | null) => {
+      if (!userId) return;
+      try {
+        const r = await fetch(
+          `/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(userOrderKey)}`,
+        );
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) return;
+
+        const raw = obj.value;
+        const arr = Array.isArray(raw) ? (raw as unknown[]) : [];
+        const parsed = arr
+          .map((x) => (typeof x === 'string' ? x.trim() : ''))
+          .filter((x) => x.length > 0)
+          .slice(0, 1000);
+        userOrderLoadedRef.current = true;
+        setUserOrder(parsed);
+      } catch {
+        // ignore
+      }
+    },
+    [userOrderKey],
+  );
+
+  const gridPrefsLoadedRef = useRef<Record<string, true>>({});
+  const gridPrefsSaveTimerRef = useRef<number | null>(null);
+
+  const loadGridPrefs = useCallback(async (userId: string | null, key: string) => {
+    if (!userId) return;
+    if (gridPrefsLoadedRef.current[key]) return;
+    gridPrefsLoadedRef.current[key] = true;
+
+    try {
+      const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(key)}`);
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true) return;
+
+      const raw = obj.value;
+      const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+      if (!o) return;
+
+      const nextLayout =
+        o.gridLayout === 'comfortable' ? 'comfortable' : o.gridLayout === 'compact' ? 'compact' : null;
+      if (nextLayout) setGridLayout(nextLayout);
+
+      const nextAction =
+        o.cellClickAction === 'toggle' ||
+        o.cellClickAction === 'add' ||
+        o.cellClickAction === 'remove' ||
+        o.cellClickAction === 'replace2' ||
+        o.cellClickAction === 'swap' ||
+        o.cellClickAction === 'recolor'
+          ? (o.cellClickAction as CellClickAction)
+          : null;
+      if (nextAction) setCellClickAction(nextAction);
+
+      const nextTextColor = o.cellTextColor === 'red' ? 'red' : o.cellTextColor === 'default' ? 'default' : null;
+      if (nextTextColor) setCellTextColor(nextTextColor);
+
+      const nextBg = o.cellBg === 'soft' ? 'soft' : o.cellBg === 'default' ? 'default' : null;
+      if (nextBg) setCellBg(nextBg);
+
+      const w = typeof o.cellMinW === 'number' ? o.cellMinW : null;
+      if (w && Number.isFinite(w)) {
+        const clamped = Math.max(60, Math.min(240, Math.round(w)));
+        setCellMinW(clamped);
+      }
+
+      const hc = typeof o.cellMinHCompact === 'number' ? o.cellMinHCompact : null;
+      if (hc && Number.isFinite(hc)) {
+        const clamped = Math.max(32, Math.min(120, Math.round(hc)));
+        setCellMinHCompact(clamped);
+      }
+
+      const hh = typeof o.cellMinHComfortable === 'number' ? o.cellMinHComfortable : null;
+      if (hh && Number.isFinite(hh)) {
+        const clamped = Math.max(40, Math.min(180, Math.round(hh)));
+        setCellMinHComfortable(clamped);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveGridPrefs = useCallback(async (userId: string | null, key: string, value: unknown) => {
+    if (!userId) return;
+    try {
+      await fetch('/api/ui-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId, key, value }),
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveUserOrder = useCallback(
+    async (userId: string | null, next: string[]) => {
+      if (!userId) return;
+      pendingUserOrderRef.current = next;
+      if (userOrderSavingRef.current) return;
+
+      userOrderSavingRef.current = true;
+      try {
+        while (pendingUserOrderRef.current) {
+          const v = pendingUserOrderRef.current;
+          pendingUserOrderRef.current = null;
+          await fetch('/api/ui-settings', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ userId, key: userOrderKey, value: v }),
+          });
+        }
+      } finally {
+        userOrderSavingRef.current = false;
+      }
+    },
+    [userOrderKey],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof navigator === 'undefined') return;
+
+    const update = () => setIsOffline(!navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/edit-mode')
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as unknown;
+        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!mounted) return;
+        if (o?.ok !== true) return;
+        setEditConfigured(o?.configured === true);
+        setEditEnabled(o?.enabled === true);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      const uid = await resolveEffectiveUserId();
+      if (!mounted) return;
+      await loadUserOrder(uid);
+      await loadGridPrefs(uid, gridPrefsKey);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [gridPrefsKey, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
+
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    if (!gridPrefsLoadedRef.current[gridPrefsKey]) return;
+    if (typeof window === 'undefined') return;
+
+    if (gridPrefsSaveTimerRef.current) {
+      window.clearTimeout(gridPrefsSaveTimerRef.current);
+      gridPrefsSaveTimerRef.current = null;
+    }
+
+    const payload = {
+        v: 1,
+      gridLayout,
+      cellClickAction,
+      cellTextColor,
+      cellBg,
+      cellMinW,
+      cellMinHCompact,
+      cellMinHComfortable,
+    };
+
+    gridPrefsSaveTimerRef.current = window.setTimeout(() => {
+      gridPrefsSaveTimerRef.current = null;
+      void saveGridPrefs(effectiveUserId, gridPrefsKey, payload);
+    }, 350);
+
+    return () => {
+      if (gridPrefsSaveTimerRef.current) {
+        window.clearTimeout(gridPrefsSaveTimerRef.current);
+        gridPrefsSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    cellBg,
+    cellClickAction,
+    cellMinHCompact,
+    cellMinHComfortable,
+    cellMinW,
+    cellTextColor,
+    effectiveUserId,
+    gridLayout,
+    gridPrefsKey,
+    saveGridPrefs,
+  ]);
+
+  useEffect(() => {
     try {
       const key = 'masterHub.lastSelectedSiteLabel';
       if (selectedSite?.label) {
@@ -149,6 +492,92 @@ export default function WeekHub() {
       // ignore
     }
   }, [selectedSite?.label]);
+
+  useEffect(() => {
+    if (!selectedSite?.label) return;
+    setSiteQuickInput((cur) => (cur.trim() ? cur : selectedSite.label));
+  }, [selectedSite?.label]);
+
+  const normalizeSiteInputToName = useCallback((raw: string) => {
+    const s = raw.trim();
+    if (!s) return '';
+    return s.includes(' / ') ? s.split(' / ').slice(-1)[0]!.trim() : s;
+  }, []);
+
+  const resolveSiteFromText = useCallback(
+    (raw: string): SiteItem | null => {
+      const s = raw.trim();
+      if (!s) return null;
+
+      const exact = sites.find((x) => x.label.trim() === s);
+      if (exact) return exact;
+
+      const suffix = ` / ${s}`;
+      const bySuffix = sites.find((x) => x.label.trim().endsWith(suffix));
+      if (bySuffix) return bySuffix;
+
+      const name = normalizeSiteInputToName(s);
+      if (!name) return null;
+
+      const byName = sites.find((x) => x.label.trim() === name || x.label.trim().endsWith(` / ${name}`));
+      if (byName) return byName;
+
+      return { id: null, label: name };
+    },
+    [normalizeSiteInputToName, sites],
+  );
+
+  const pinSiteToTop = useCallback(
+    (site: SiteItem) => {
+    const label = (site?.label ?? '').trim();
+    if (!label) return;
+
+    // Keep the last pinned label so refreshSites() (which replaces sites) can re-pin.
+    pinSiteLabelRef.current = label;
+
+    setSites((cur) => {
+      const idx = cur.findIndex((x) => x.label.trim() === label);
+      const hit = idx >= 0 ? cur[idx]! : site;
+      return idx >= 0 ? [hit, ...cur.slice(0, idx), ...cur.slice(idx + 1)] : [hit, ...cur];
+    });
+    setSelectedSite((cur) => {
+      if (!cur) return cur;
+      if (cur.label.trim() !== label) return cur;
+      const upgraded = sites.find((x) => x.label.trim() === label);
+      return upgraded?.id ? upgraded : cur;
+    });
+    },
+    [sites],
+  );
+
+  const pickSiteFromInput = useCallback(async () => {
+    setSiteQuickMsg(null);
+    const item = resolveSiteFromText(siteQuickInput);
+    if (!item) {
+      setSiteQuickMsg('現場名を入力してください');
+      return null;
+    }
+    setSelectedSite(item);
+    setSiteQuickInput(item.label);
+    setSiteQuery('');
+    pinSiteLabelRef.current = item.label;
+    pinSiteToTop(item);
+    return item;
+  }, [pinSiteToTop, resolveSiteFromText, siteQuickInput]);
+
+  useEffect(() => {
+    const label = pinSiteLabelRef.current;
+    if (!label) return;
+    // If refreshSites() replaced the list, keep the pinned item at the top.
+    if (sites.length > 0 && sites[0]?.label?.trim() === label.trim()) return;
+    pinSiteToTop({ id: null, label });
+  }, [pinSiteToTop, sites]);
+
+  const visibleSites = useMemo(() => {
+    const q = siteQuery.trim().toLowerCase();
+    if (!q) return sites;
+    return sites.filter((s) => s.label.toLowerCase().includes(q));
+  }, [siteQuery, sites]);
 
   const showCellActionMsg = useCallback((msg: string | null) => {
     if (cellActionMsgTimer.current) {
@@ -164,6 +593,21 @@ export default function WeekHub() {
     }
   }, []);
 
+  const ensureSelectedSite = useCallback(async (): Promise<SiteItem | null> => {
+    if (selectedSite) return selectedSite;
+    const picked = await pickSiteFromInput();
+    if (picked) return picked;
+
+    try {
+      siteQuickInputRef.current?.focus();
+      siteQuickInputRef.current?.select();
+    } catch {
+      // ignore
+    }
+    showCellActionMsg('現場を選択するか、左の入力欄に現場名を入れて「選択」してください');
+    return null;
+  }, [pickSiteFromInput, selectedSite, showCellActionMsg]);
+
   const cellActionButtons = (
     <div className="ml-1 flex items-center gap-1">
       <span className="text-xs text-zinc-500 dark:text-zinc-400">セル操作</span>
@@ -178,6 +622,7 @@ export default function WeekHub() {
             { value: 'add' as const, label: '追加', title: '空きがある時だけ追加（満杯なら変更なし）' },
             { value: 'replace2' as const, label: '置換2', title: '2枠目を置換（空きなら追加）' },
             { value: 'remove' as const, label: '削除', title: '選択現場を削除（無ければ変更なし）' },
+            { value: 'recolor' as const, label: '色', title: '選択現場の文字色を変更（追加/削除なし）' },
             { value: 'swap' as const, label: '入替', title: '1枠目と2枠目を入替（現場選択なしでOK）' },
           ] satisfies Array<{ value: CellClickAction; label: string; title: string }>
         ).map((a) => {
@@ -200,6 +645,119 @@ export default function WeekHub() {
             </button>
           );
         })}
+      </div>
+
+      <div className="ml-2 flex items-center gap-1">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">文字色</span>
+        <select
+          value={cellTextColor}
+          onChange={(e) => setCellTextColor((e.target.value === 'red' ? 'red' : 'default') satisfies CellTextColor)}
+          className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+          aria-label="文字色"
+        >
+          <option value="default">通常</option>
+          <option value="red">赤</option>
+        </select>
+      </div>
+
+      <div className="relative ml-2 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setIsCellSettingsOpen((v) => !v)}
+          aria-expanded={isCellSettingsOpen}
+          className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] text-zinc-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black"
+        >
+          設定
+        </button>
+
+        {isCellSettingsOpen ? (
+          <div className="absolute left-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+            <div className="border-b border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
+              表示（セル）
+            </div>
+
+            <div className="space-y-2 px-3 py-2 text-[11px] text-zinc-700 dark:text-zinc-200">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 背景</div>
+                <select
+                  value={cellBg}
+                  onChange={(e) => setCellBg((e.target.value === 'soft' ? 'soft' : 'default') satisfies CellBg)}
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="背景"
+                >
+                  <option value="default">白</option>
+                  <option value="soft">薄</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 高さ</div>
+                <select
+                  value={gridLayout}
+                  onChange={(e) =>
+                    setGridLayout((e.target.value === 'comfortable' ? 'comfortable' : 'compact') satisfies GridLayout)
+                  }
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="高さ"
+                >
+                  <option value="compact">低</option>
+                  <option value="comfortable">高</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 低(px)</div>
+                <select
+                  value={String(cellMinHCompact)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setCellMinHCompact(Number.isFinite(n) ? n : 48);
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="低(px)"
+                >
+                  <option value="40">40</option>
+                  <option value="48">48</option>
+                  <option value="56">56</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 高(px)</div>
+                <select
+                  value={String(cellMinHComfortable)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setCellMinHComfortable(Number.isFinite(n) ? n : 64);
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="高(px)"
+                >
+                  <option value="56">56</option>
+                  <option value="64">64</option>
+                  <option value="80">80</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">└ 幅</div>
+                <select
+                  value={String(cellMinW)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setCellMinW(Number.isFinite(n) ? n : 112);
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="幅"
+                >
+                  <option value="84">狭</option>
+                  <option value="112">標準</option>
+                  <option value="140">広</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -274,6 +832,21 @@ export default function WeekHub() {
     return hit ? hit.name ?? hit.email ?? hit.id : selectedUserId;
   }, [data?.users, monthData?.users, selectedUserId, yearData?.users]);
 
+  const currentUsersForOrder = useMemo(() => {
+    if (mode === 'week') return data?.users ?? [];
+    if (mode === 'month') return monthData?.users ?? [];
+    return yearData?.users ?? [];
+  }, [data?.users, mode, monthData?.users, yearData?.users]);
+
+  useEffect(() => {
+    if (!userOrderLoadedRef.current) return;
+    if (!effectiveUserId) return;
+    const next = normalizeUserOrder(userOrder, currentUsersForOrder);
+    if (arrayEqual(next, userOrder)) return;
+    setUserOrder(next);
+    void saveUserOrder(effectiveUserId, next);
+  }, [currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
+
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
@@ -284,9 +857,9 @@ export default function WeekHub() {
     const controller = new AbortController();
     queueMicrotask(() => setIsLoading(true));
 
-    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`,
-      { signal: controller.signal },
-    )
+    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
+      signal: controller.signal,
+    })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
         return (await res.json()) as ApiResponse;
@@ -299,7 +872,7 @@ export default function WeekHub() {
       .finally(() => setIsLoading(false));
 
     return () => controller.abort();
-  }, [mode, weekStart]);
+  }, [kindQuery, mode, weekStart]);
 
   const viewMonth = useMemo(() => {
     return `${cursorDate.getFullYear()}-${pad2(cursorDate.getMonth() + 1)}`;
@@ -310,23 +883,122 @@ export default function WeekHub() {
   const refreshCurrentView = useCallback(async () => {
     try {
       if (mode === 'week') {
-        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`);
+        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`);
         if (res.ok) setData((await res.json()) as ApiResponse);
         return;
       }
       if (mode === 'month') {
-        const res = await fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}`);
+        const res = await fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`);
         if (res.ok) setMonthData((await res.json()) as MonthApiResponse);
         return;
       }
       if (mode === 'year') {
-        const res = await fetch(`/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}`);
+        const res = await fetch(
+          `/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}&${kindQuery}`,
+        );
         if (res.ok) setYearData((await res.json()) as YearSummaryApiResponse);
       }
     } catch {
       // ignore
     }
-  }, [mode, viewMonth, viewYear, weekStart]);
+  }, [kindQuery, mode, viewMonth, viewYear, weekStart]);
+
+  const createUser = useCallback(
+    async (input: { name: string; email: string }) => {
+      const name = input.name.trim();
+      const email = input.email.trim();
+      if (!name && !email) return { ok: false as const, error: '名前 または メールが必要です' };
+
+      try {
+        const r = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: name || null,
+            email: email || null,
+            kind: apiKind,
+          }),
+        });
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) {
+          const msg = typeof obj?.error === 'string' ? (obj.error as string) : `HTTP ${r.status}`;
+          return { ok: false as const, error: msg };
+        }
+
+        const user = obj.user && typeof obj.user === 'object' ? (obj.user as Record<string, unknown>) : null;
+        const userId = typeof user?.id === 'string' ? user.id : null;
+        if (!userId) return { ok: false as const, error: 'Invalid response' };
+
+        setUserOrder((cur) => {
+          const next = cur.includes(userId) ? cur : [...cur, userId];
+          queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
+          return next;
+        });
+
+        try {
+          window.dispatchEvent(
+            new CustomEvent('masterHub:dataChanged', {
+              detail: { kind: 'user', action: 'created', targetKind: scheduleKind },
+            }),
+          );
+        } catch {
+          // ignore
+        }
+
+        await refreshCurrentView();
+        return { ok: true as const, userId };
+      } catch {
+        return { ok: false as const, error: '作成に失敗しました' };
+      }
+    },
+    [apiKind, effectiveUserId, refreshCurrentView, saveUserOrder, scheduleKind],
+  );
+
+  const refreshSites = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/schedule/sites?${kindQuery}`);
+      if (!r.ok) return;
+      const json = (await r.json()) as {
+        ok: true;
+        names: string[];
+        sites?: Array<{ id: string; label: string }>;
+      };
+      if (!json?.ok) return;
+      const fromLedger = (json.sites ?? []).map((s) => ({ id: s.id, label: s.label }));
+      if (fromLedger.length > 0) {
+        setSites(fromLedger);
+      } else {
+        setSites((json.names ?? []).map((label) => ({ id: null, label })));
+      }
+    } catch {
+      // ignore
+    }
+  }, [kindQuery]);
+
+  useEffect(() => {
+    const onChanged = (ev: Event) => {
+      const e = ev as CustomEvent<
+        | { kind: 'user' | 'site'; action: 'created'; targetKind: 'normal' | 'daily' }
+        | undefined
+      >;
+      const d = e.detail;
+      if (!d || d.action !== 'created') return;
+      if (d.targetKind !== scheduleKind) return;
+
+      if (d.kind === 'user') {
+        void refreshCurrentView();
+        return;
+      }
+      if (d.kind === 'site') {
+        void refreshSites();
+        return;
+      }
+    };
+
+    window.addEventListener('masterHub:dataChanged', onChanged as EventListener);
+    return () => window.removeEventListener('masterHub:dataChanged', onChanged as EventListener);
+  }, [refreshCurrentView, refreshSites, scheduleKind]);
 
   const pushHistory = (entry: CellHistoryEntry) => {
     setUndoStack((cur) => {
@@ -366,6 +1038,7 @@ export default function WeekHub() {
         body: JSON.stringify({
           userId: entry.userId,
           day: entry.day,
+          kind: apiKind,
           slot1: slots[0],
           slot2: slots[1],
         }),
@@ -387,7 +1060,7 @@ export default function WeekHub() {
     } finally {
       setIsUndoRedoBusy(false);
     }
-  }, [refreshCurrentView, showCellActionMsg]);
+  }, [apiKind, refreshCurrentView, showCellActionMsg]);
 
   const undo = useCallback(async () => {
     const last = undoStack[undoStack.length - 1];
@@ -415,7 +1088,7 @@ export default function WeekHub() {
     const controller = new AbortController();
     queueMicrotask(() => setIsLoading(true));
 
-    fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}`, { signal: controller.signal })
+    fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
         return (await res.json()) as MonthApiResponse;
@@ -427,7 +1100,7 @@ export default function WeekHub() {
       .finally(() => setIsLoading(false));
 
     return () => controller.abort();
-  }, [mode, viewMonth]);
+  }, [kindQuery, mode, viewMonth]);
 
   useEffect(() => {
     if (mode !== 'year') return;
@@ -435,7 +1108,7 @@ export default function WeekHub() {
     const controller = new AbortController();
     queueMicrotask(() => setIsLoading(true));
 
-    fetch(`/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}`, {
+    fetch(`/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}&${kindQuery}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -449,7 +1122,7 @@ export default function WeekHub() {
       .finally(() => setIsLoading(false));
 
     return () => controller.abort();
-  }, [mode, viewYear]);
+  }, [kindQuery, mode, viewYear]);
 
   useEffect(() => {
     if (!siteDetailOpen) return;
@@ -462,7 +1135,7 @@ export default function WeekHub() {
     setDeprSaveMsg(null);
     setDeprState({ status: 'loading' });
     fetch(
-      `/api/sites/depreciation-count?siteId=${encodeURIComponent(selectedSite.id)}&month=${encodeURIComponent(deprMonth)}`,
+      `/api/sites/depreciation-count?siteId=${encodeURIComponent(selectedSite.id)}&month=${encodeURIComponent(deprMonth)}&${kindQuery}`,
       { signal: controller.signal },
     )
       .then(async (r) => {
@@ -481,11 +1154,11 @@ export default function WeekHub() {
       });
 
     return () => controller.abort();
-  }, [deprMonth, selectedSite?.id, siteDetailOpen]);
+  }, [deprMonth, kindQuery, selectedSite?.id, siteDetailOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/schedule/sites', { signal: controller.signal })
+    fetch(`/api/schedule/sites?${kindQuery}`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) return null;
         return (await r.json()) as {
@@ -507,7 +1180,7 @@ export default function WeekHub() {
         // ignore
       });
     return () => controller.abort();
-  }, []);
+  }, [kindQuery]);
 
   useEffect(() => {
     const ids = sites.map((s) => s.id).filter((x): x is string => Boolean(x));
@@ -517,7 +1190,7 @@ export default function WeekHub() {
     }
 
     const controller = new AbortController();
-    fetch(`/api/sites/depreciation-counts?month=${encodeURIComponent(deprMonth)}`, {
+    fetch(`/api/sites/depreciation-counts?month=${encodeURIComponent(deprMonth)}&${kindQuery}`, {
       signal: controller.signal,
     })
       .then(async (r) => {
@@ -541,7 +1214,7 @@ export default function WeekHub() {
       });
 
     return () => controller.abort();
-  }, [deprMonth, sites]);
+  }, [deprMonth, kindQuery, sites]);
 
   useEffect(() => {
     if (!selectedSite?.id) return;
@@ -720,7 +1393,7 @@ export default function WeekHub() {
           </button>
 
           <div className="ml-2 flex min-w-0 flex-1 items-center gap-2 text-xs">
-            <span className="text-zinc-500 dark:text-zinc-400">選択:</span>
+            <span className="text-zinc-500 dark:text-zinc-400">従業員:</span>
             {selectedUserId ? (
               <span
                 className="min-w-0 flex-1 truncate rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-zinc-700 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200"
@@ -734,6 +1407,16 @@ export default function WeekHub() {
                 （なし）
               </span>
             )}
+
+            <button
+              type="button"
+              onClick={() => setReorderMode((v) => !v)}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              aria-pressed={reorderMode}
+            >
+              {reorderMode ? '並べ替え: ON' : '並べ替え'}
+            </button>
+
             {selectedUserId ? (
               <button
                 type="button"
@@ -751,36 +1434,8 @@ export default function WeekHub() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           {mode === 'month' ? (
             <>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={goPrevMonth}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  aria-label="前の月"
-                >
-                  ←
-                </button>
-                <div
-                  className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300"
-                  data-testid="modebar-month"
-                >
-                  {viewMonth}
-                </div>
-                <button
-                  type="button"
-                  onClick={goNextMonth}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  aria-label="次の月"
-                >
-                  →
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWeekStartByDate(new Date())}
-                  className="ml-1 rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                >
-                  今月
-                </button>
+              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-month">
+                {viewMonth}
               </div>
 
               {cellActionButtons}
@@ -864,66 +1519,68 @@ export default function WeekHub() {
     };
   }, [mode]);
 
-  useEffect(() => {
-    const canAddSite = !!newSiteName.trim();
-    const canSaveRule = !!selectedSite?.id && !isSavingRule;
+  const beginEdit = useCallback(() => {
+    setEditPasswordMsg(null);
+    if (editEnabled) {
+      setEditActive(true);
+      return;
+    }
+    setShowEditPassword(true);
+  }, [editEnabled]);
 
+  const submitEditPassword = useCallback(async () => {
+    setEditPasswordMsg(null);
+    try {
+      const r = await fetch('/api/auth/edit-mode', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: editPassword }),
+      });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      if (!r.ok || o?.ok !== true) {
+        const msg = typeof o?.error === 'string' ? (o.error as string) : `HTTP ${r.status}`;
+        setEditPasswordMsg(msg);
+        return;
+      }
+      setEditEnabled(true);
+      setShowEditPassword(false);
+      setEditPassword('');
+      setEditActive(true);
+    } catch {
+      setEditPasswordMsg('通信に失敗しました');
+    }
+  }, [editPassword]);
+
+  useEffect(() => {
     setAddAction({
-      onClick: async () => {
-        const name = newSiteName.trim();
-        if (!name) return;
-        setSiteCreateMsg(null);
-        try {
-          const r = await fetch('/api/sites', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name }),
-          });
-          const json = (await r.json().catch(() => null)) as
-            | { ok: true; site: { id: string } }
-            | { ok: false; error?: string }
-            | null;
-          if (!r.ok || !json?.ok) {
-            const msg = json && !json.ok ? json.error : undefined;
-            setSiteCreateMsg(msg || `HTTP ${r.status}`);
-            return;
-          }
-          const created: SiteItem = { id: json.site.id, label: name };
-          setSites((cur) => [created, ...cur]);
-          setSelectedSite(created);
-          setNewSiteName('');
-          setSiteCreateMsg('追加しました');
-        } catch {
-          setSiteCreateMsg('作成に失敗しました');
-        }
-      },
-      disabled: !canAddSite,
-      title: '追加（現場）',
+      onClick: beginEdit,
+      disabled: editActive,
+      title: editEnabled ? '編集を開始' : editConfigured ? '編集（パスワード）' : '編集',
     });
 
-    setSaveAction({
-      onClick: async () => {
-        if (!selectedSite?.id) return;
-        setIsSavingRule(true);
-        try {
-          await fetch('/api/sites/repeat-rule', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ siteId: selectedSite.id, repeatRule }),
-          });
-        } finally {
-          setIsSavingRule(false);
-        }
-      },
-      disabled: !canSaveRule,
-      title: '作業や入力（リピート設定）',
+    setSaveAction(
+      editActive
+        ? {
+            onClick: () => setEditActive(false),
+            disabled: false,
+            title: '編集を終了',
+          }
+        : undefined,
+    );
+
+    setHistoryAction({
+      onClick: () => setShowHistory((v) => !v),
+      disabled: false,
+      title: showHistory ? '編集履歴を閉じる' : '編集履歴',
     });
 
     return () => {
       setAddAction(undefined);
       setSaveAction(undefined);
+      setHistoryAction(undefined);
     };
-  }, [isSavingRule, newSiteName, repeatRule, selectedSite?.id, setAddAction, setSaveAction]);
+  }, [beginEdit, editActive, editConfigured, editEnabled, setAddAction, setHistoryAction, setSaveAction, showHistory]);
 
   useEffect(() => {
     const canUndo = undoStack.length > 0 && !isUndoRedoBusy;
@@ -952,11 +1609,88 @@ export default function WeekHub() {
       setUndoAction(undefined);
       setRedoAction(undefined);
     };
-  }, [isUndoRedoBusy, redoStack.length, setRedoAction, setUndoAction, undo, undoStack.length]);
+  }, [isUndoRedoBusy, redo, redoStack.length, setRedoAction, setUndoAction, undo, undoStack.length]);
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
+        {isOffline ? (
+          <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+            オフラインのため、表示が古い可能性があります。
+          </div>
+        ) : null}
+
+        {showEditPassword ? (
+          <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
+            <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">編集パスワード</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">この端末で編集を有効にします。</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                className="w-64 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                placeholder="パスワード"
+              />
+              <button
+                type="button"
+                onClick={() => void submitEditPassword()}
+                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditPassword(false);
+                  setEditPassword('');
+                  setEditPasswordMsg(null);
+                }}
+                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              >
+                キャンセル
+              </button>
+            </div>
+            {editPasswordMsg ? (
+              <div className="mt-2 text-xs text-red-700 dark:text-red-300">{editPasswordMsg}</div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showHistory ? (
+          <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
+            <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">編集履歴（この端末）</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">直近の変更を表示します。</div>
+            <div className="mt-2 max-h-40 overflow-y-auto">
+              {undoStack.length === 0 ? (
+                <div className="py-2 text-xs text-zinc-500 dark:text-zinc-400">まだ履歴がありません。</div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {[...undoStack]
+                    .slice(-20)
+                    .reverse()
+                    .map((h) => (
+                      <div
+                        key={`${h.at}:${h.userId}:${h.day}`}
+                        className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {new Date(h.at).toLocaleString()}
+                          </div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{h.day}</div>
+                        </div>
+                        <div className="mt-1">
+                          {h.before[0] ?? '（空）'} / {h.before[1] ?? '（空）'} → {h.after[0] ?? '（空）'} /{' '}
+                          {h.after[1] ?? '（空）'}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
         {/* Main content */}
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[200px_1fr]">
           {mode === 'week' ? (
@@ -965,6 +1699,42 @@ export default function WeekHub() {
                 <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                 <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                   現場を選択 → 週表のセルをクリックで入力
+                </div>
+
+                <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                  <input
+                    value={siteQuery}
+                    onChange={(e) => setSiteQuery(e.target.value)}
+                    placeholder="現場名で絞り込み"
+                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                  />
+
+                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      ref={siteQuickInputRef}
+                      value={siteQuickInput}
+                      onChange={(e) => setSiteQuickInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        void pickSiteFromInput();
+                      }}
+                      placeholder="例: ○○現場  または  会社 / ○○現場"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void pickSiteFromInput()}
+                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      選択
+                    </button>
+                  </div>
+                  {siteQuickMsg ? (
+                    <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+                  ) : null}
                 </div>
 
                 <div className="mt-3">
@@ -982,16 +1752,26 @@ export default function WeekHub() {
                     <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
                       まだ候補がありません（過去データから自動で出ます）。
                     </div>
+                  ) : visibleSites.length === 0 ? (
+                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      {sites.map((s) => {
+                      {visibleSites.map((s) => {
                         const active = selectedSite?.label === s.label;
                         const badge = s.id ? siteDeprMap[s.id] : undefined;
                         return (
                           <button
                             key={s.id ?? s.label}
                             type="button"
-                            onClick={() => setSelectedSite((cur) => (cur?.label === s.label ? null : s))}
+                            onClick={() => {
+                              if (active && s.id) {
+                                const sp = new URLSearchParams({ kind: scheduleKind });
+                                if (selectedUserId) sp.set('userId', selectedUserId);
+                                router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+                                return;
+                              }
+                              setSelectedSite(s);
+                            }}
                             className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
                               active
                                 ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
@@ -1007,12 +1787,19 @@ export default function WeekHub() {
                               </div>
                               {badge ? (
                                 <span
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!s.id) return;
+                                    setSelectedSite(s);
+                                    setSiteDetailOpen(true);
+                                  }}
                                   className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
                                     badge.alert
                                       ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                       : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
                                   }`}
-                                  title={`今月(${deprMonth}): ${badge.count}件 / 閾値 ${badge.threshold}`}
+                                  title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
                                 >
                                   {badge.count}
                                 </span>
@@ -1029,14 +1816,9 @@ export default function WeekHub() {
                   選択中: {selectedSite?.label ?? '（なし）'}
                 </div>
 
-                <button
-                  type="button"
-                  disabled={!selectedSite}
-                  onClick={() => setSiteDetailOpen(true)}
-                  className="mt-2 w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                >
-                  現場詳細（償却カウント）
-                </button>
+                <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  選択中の現場をもう一度クリックで詳細へ
+                </div>
 
                 <div
                   id="site-ledger"
@@ -1064,7 +1846,7 @@ export default function WeekHub() {
                           const r = await fetch('/api/sites', {
                             method: 'POST',
                             headers: { 'content-type': 'application/json' },
-                            body: JSON.stringify({ name }),
+                            body: JSON.stringify({ name, kind: apiKind }),
                           });
                           const json = (await r.json().catch(() => null)) as
                             | { ok: true; site: { id: string } }
@@ -1101,10 +1883,10 @@ export default function WeekHub() {
 
                 <div id="management" className="mt-4 scroll-mt-20 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    ペース（リピート）
+                    ペース
                   </div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    選択した現場のリピート条件（ツリー）を設定します。
+                    選択した現場のペース条件（ツリー）を設定します。
                   </div>
 
                   <div className="mt-3 space-y-3">
@@ -1212,7 +1994,7 @@ export default function WeekHub() {
                       }}
                       className="w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                     >
-                      {isSavingRule ? '保存中…' : 'リピートを保存'}
+                        {isSavingRule ? '保存中…' : 'ペースを保存'}
                     </button>
 
                     <div>
@@ -1233,7 +2015,7 @@ export default function WeekHub() {
                       ) : autoFillPreview.status === 'interval-mismatch' ? (
                         <span>プレビュー: ペース対象外の月です</span>
                       ) : autoFillPreview.status === 'no-repeat' ? (
-                        <span>プレビュー: リピート条件が未設定です</span>
+                        <span>プレビュー: ペース条件が未設定です</span>
                       ) : (
                         <span>
                           プレビュー: {autoFillPreview.targets.length}日（
@@ -1279,6 +2061,7 @@ export default function WeekHub() {
                               userId: selectedUserId,
                               siteId: selectedSite.id,
                               month: autoFillMonth,
+                              kind: apiKind,
                             }),
                           });
 
@@ -1297,7 +2080,7 @@ export default function WeekHub() {
                           }
 
                           const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`,
+                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
                           );
                           if (res.ok) setData((await res.json()) as ApiResponse);
                         } finally {
@@ -1326,6 +2109,7 @@ export default function WeekHub() {
                               siteId: selectedSite.id,
                               month: autoFillMonth,
                               days: weekDays,
+                              kind: apiKind,
                             }),
                           });
 
@@ -1344,7 +2128,7 @@ export default function WeekHub() {
                           }
 
                           const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`,
+                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
                           );
                           if (res.ok) setData((await res.json()) as ApiResponse);
                         } finally {
@@ -1377,6 +2161,7 @@ export default function WeekHub() {
                                 userId: u.id,
                                 siteId: selectedSite.id,
                                 month: autoFillMonth,
+                                kind: apiKind,
                               }),
                             });
                             const json = (await r.json().catch(() => null)) as
@@ -1400,7 +2185,7 @@ export default function WeekHub() {
                           });
 
                           const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`,
+                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
                           );
                           if (res.ok) setData((await res.json()) as ApiResponse);
                         } finally {
@@ -1441,27 +2226,58 @@ export default function WeekHub() {
                   data={data}
                   weekStart={weekStart}
                   monthWeekTabs={monthWeekTabs}
+                  apiKind={apiKind}
+                  scheduleKind={scheduleKind}
+                  gridLayout={gridLayout}
+                  cellMinW={cellMinW}
+                  cellMinHCompact={cellMinHCompact}
+                  cellMinHComfortable={cellMinHComfortable}
+                  cellBg={cellBg}
                   onSelectWeekStart={setWeekStartByDate}
                   onPrevMonth={goPrevMonth}
                   onNextMonth={goNextMonth}
                   onToday={() => setCursorDate(new Date())}
                   selectedSite={selectedSite}
+                  onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
+                  isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
                   onAssigned={async () => {
+                    if (selectedSite?.label) {
+                      pinSiteLabelRef.current = selectedSite.label;
+                      pinSiteToTop(selectedSite);
+                    }
                     // Refresh week after an assignment
                     try {
                       const res = await fetch(
-                        `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}`,
+                        `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
                       );
                       if (res.ok) setData((await res.json()) as ApiResponse);
                     } catch {
                       // ignore
                     }
                   }}
+                  userOrder={userOrder}
+                  reorderMode={reorderMode}
+                  onMoveUser={(userId, dir) => {
+                    setUserOrder((cur) => {
+                      const i = cur.indexOf(userId);
+                      if (i < 0) return cur;
+                      const j = i + dir;
+                      if (j < 0 || j >= cur.length) return cur;
+                      const next = [...cur];
+                      const tmp = next[i];
+                      next[i] = next[j];
+                      next[j] = tmp;
+                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
+                      return next;
+                    });
+                  }}
+                  onCreateUser={createUser}
                 />
               </div>
             </>
@@ -1471,6 +2287,42 @@ export default function WeekHub() {
                 <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                 <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                   現場を選択 → 月表のセルをクリックで入力
+                </div>
+
+                <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                  <input
+                    value={siteQuery}
+                    onChange={(e) => setSiteQuery(e.target.value)}
+                    placeholder="現場名で絞り込み"
+                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                  />
+
+                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      ref={siteQuickInputRef}
+                      value={siteQuickInput}
+                      onChange={(e) => setSiteQuickInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        void pickSiteFromInput();
+                      }}
+                      placeholder="例: ○○現場  または  会社 / ○○現場"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void pickSiteFromInput()}
+                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      選択
+                    </button>
+                  </div>
+                  {siteQuickMsg ? (
+                    <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+                  ) : null}
                 </div>
 
                 <div className="mt-3">
@@ -1488,18 +2340,26 @@ export default function WeekHub() {
                     <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
                       まだ候補がありません（過去データから自動で出ます）。
                     </div>
+                  ) : visibleSites.length === 0 ? (
+                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      {sites.map((s) => {
+                      {visibleSites.map((s) => {
                         const active = selectedSite?.label === s.label;
                         const badge = s.id ? siteDeprMap[s.id] : undefined;
                         return (
                           <button
                             key={s.id ?? s.label}
                             type="button"
-                            onClick={() =>
-                              setSelectedSite((cur) => (cur?.label === s.label ? null : s))
-                            }
+                            onClick={() => {
+                              if (active && s.id) {
+                                const sp = new URLSearchParams({ kind: scheduleKind });
+                                if (selectedUserId) sp.set('userId', selectedUserId);
+                                router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+                                return;
+                              }
+                              setSelectedSite(s);
+                            }}
                             className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
                               active
                                 ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
@@ -1515,7 +2375,14 @@ export default function WeekHub() {
                                       ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                       : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
                                   }`}
-                                  title={`今月(${deprMonth}): ${badge.count}件 / 閾値 ${badge.threshold}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!s.id) return;
+                                    setSelectedSite(s);
+                                    setSiteDetailOpen(true);
+                                  }}
+                                  title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
                                 >
                                   {badge.count}
                                 </span>
@@ -1535,37 +2402,67 @@ export default function WeekHub() {
                   選択中: {selectedSite?.label ?? '（なし）'}
                 </div>
 
-                <button
-                  type="button"
-                  disabled={!selectedSite}
-                  onClick={() => setSiteDetailOpen(true)}
-                  className="mt-2 w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                >
-                  現場詳細（償却カウント）
-                </button>
+                <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  選択中の現場をもう一度クリックで詳細へ
+                </div>
               </div>
 
               <div className="space-y-3">
                 {modeTabs}
                 <MonthGrid
+                  monthKey={viewMonth}
+                  onPrevMonth={goPrevMonth}
+                  onNextMonth={goNextMonth}
+                  onToday={() => setWeekStartByDate(new Date())}
                   dayLabels={monthDayLabels}
                   data={monthData}
+                  apiKind={apiKind}
+                  scheduleKind={scheduleKind}
+                  gridLayout={gridLayout}
+                  cellMinW={cellMinW}
+                  cellMinHCompact={cellMinHCompact}
+                  cellMinHComfortable={cellMinHComfortable}
+                  cellBg={cellBg}
                   selectedSite={selectedSite}
+                  onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
+                  isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
                   onAssigned={async () => {
+                    if (selectedSite?.label) {
+                      pinSiteLabelRef.current = selectedSite.label;
+                      pinSiteToTop(selectedSite);
+                    }
                     try {
                       const res = await fetch(
-                        `/api/schedule/month?month=${encodeURIComponent(viewMonth)}`,
+                        `/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`,
                       );
                       if (res.ok) setMonthData((await res.json()) as MonthApiResponse);
                     } catch {
                       // ignore
                     }
                   }}
+                  userOrder={userOrder}
+                  reorderMode={reorderMode}
+                  onMoveUser={(userId, dir) => {
+                    setUserOrder((cur) => {
+                      const i = cur.indexOf(userId);
+                      if (i < 0) return cur;
+                      const j = i + dir;
+                      if (j < 0 || j >= cur.length) return cur;
+                      const next = [...cur];
+                      const tmp = next[i];
+                      next[i] = next[j];
+                      next[j] = tmp;
+                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
+                      return next;
+                    });
+                  }}
+                  onCreateUser={createUser}
                 />
               </div>
             </>
@@ -1589,6 +2486,111 @@ export default function WeekHub() {
                     className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                   />
                 </div>
+
+                <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
+
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                    <input
+                      value={siteQuery}
+                      onChange={(e) => setSiteQuery(e.target.value)}
+                      placeholder="現場名で絞り込み"
+                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+
+                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        ref={siteQuickInputRef}
+                        value={siteQuickInput}
+                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          void pickSiteFromInput();
+                        }}
+                        placeholder="例: ○○現場  または  会社 / ○○現場"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void pickSiteFromInput()}
+                        className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        選択
+                      </button>
+                    </div>
+                    {siteQuickMsg ? (
+                      <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 max-h-[calc(100vh-56px-240px)] overflow-y-auto">
+                    {sites.length === 0 ? (
+                      <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                        まだ候補がありません（過去データから自動で出ます）。
+                      </div>
+                    ) : visibleSites.length === 0 ? (
+                      <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {visibleSites.map((s) => {
+                          const active = selectedSite?.label === s.label;
+                          const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          return (
+                            <button
+                              key={s.id ?? s.label}
+                              type="button"
+                              onClick={() => {
+                                if (active && s.id) {
+                                  const sp = new URLSearchParams({ kind: scheduleKind });
+                                  if (selectedUserId) sp.set('userId', selectedUserId);
+                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+                                  return;
+                                }
+                                setSelectedSite(s);
+                              }}
+                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
+                                active
+                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
+                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0 flex-1 truncate">{s.label}</div>
+                                {badge ? (
+                                  <span
+                                    className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                      badge.alert
+                                        ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
+                                        : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                                    }`}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (!s.id) return;
+                                      setSelectedSite(s);
+                                      setSiteDetailOpen(true);
+                                    }}
+                                    title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
+                                  >
+                                    {badge.count}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    選択中: {selectedSite?.label ?? '（なし）'}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -1598,6 +2600,27 @@ export default function WeekHub() {
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onOpenMonth={openMonthFromYear}
+                  userOrder={userOrder}
+                  reorderMode={reorderMode}
+                  gridLayout={gridLayout}
+                  cellMinW={cellMinW}
+                  cellMinHCompact={cellMinHCompact}
+                  cellMinHComfortable={cellMinHComfortable}
+                  cellBg={cellBg}
+                  onMoveUser={(userId, dir) => {
+                    setUserOrder((cur) => {
+                      const i = cur.indexOf(userId);
+                      if (i < 0) return cur;
+                      const j = i + dir;
+                      if (j < 0 || j >= cur.length) return cur;
+                      const next = [...cur];
+                      const tmp = next[i];
+                      next[i] = next[j];
+                      next[j] = tmp;
+                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
+                      return next;
+                    });
+                  }}
                 />
               </div>
             </>
@@ -1640,7 +2663,7 @@ export default function WeekHub() {
               <div className="mt-4 rounded-md border border-zinc-200 bg-white px-3 py-3 text-xs dark:border-zinc-800 dark:bg-black">
                 <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">償却カウント</div>
                 <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  指定月に、この現場の入力件数を集計します（閾値以上でアラート）。
+                  指定月に、この現場の入力件数を集計します（月回数以上でアラート）。
                 </div>
 
                 <div className="mt-2">
@@ -1676,7 +2699,7 @@ export default function WeekHub() {
 
                 <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    アラート閾値（現場ごと）
+                    アラート月回数（現場ごと）
                   </div>
                   <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                     例: 10 → 10件以上でアラート
@@ -1766,38 +2789,101 @@ function WeekGrid({
   data,
   weekStart,
   monthWeekTabs,
+  apiKind,
+  scheduleKind,
+  gridLayout,
+  cellMinW,
+  cellMinHCompact,
+  cellMinHComfortable,
+  cellBg,
   onSelectWeekStart,
   onPrevMonth,
   onNextMonth,
   onToday,
   selectedSite,
+  onEnsureSite,
   cellClickAction,
+  cellTextColor,
+  isEditable,
   selectedUserId,
   onSelectUser,
   onNotify,
   onCellHistory,
   onAssigned,
+  userOrder,
+  reorderMode,
+  onMoveUser,
+  onCreateUser,
 }: {
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: ApiResponse | null;
   weekStart: Date;
   monthWeekTabs: { monthKey: string; tabs: Date[] };
+  apiKind: 'NORMAL' | 'DAILY';
+  scheduleKind: ScheduleKind;
+  gridLayout: GridLayout;
+  cellMinW: number;
+  cellMinHCompact: number;
+  cellMinHComfortable: number;
+  cellBg: CellBg;
   onSelectWeekStart: (d: Date) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onToday: () => void;
   selectedSite: SiteItem | null;
+  onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
+  isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  userOrder: string[];
+  reorderMode: boolean;
+  onMoveUser: (userId: string, dir: -1 | 1) => void;
+  onCreateUser: (
+    input: { name: string; email: string },
+  ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
 }) {
-  const users = data?.users ?? [];
+  const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
   const activeWeekKey = toYmd(weekStart);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef<0 | 1>(0);
+
+  const weekTabsRef = useRef<HTMLDivElement | null>(null);
+  const [weekTabsH, setWeekTabsH] = useState(0);
+
+  useEffect(() => {
+    const el = weekTabsRef.current;
+    if (!el) return;
+
+    const apply = () => {
+      const h = Math.max(0, Math.round(el.getBoundingClientRect().height));
+      setWeekTabsH((prev) => (prev === h ? prev : h));
+    };
+
+    const raf = window.requestAnimationFrame(apply);
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    window.addEventListener('resize', apply);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, [monthWeekTabs.monthKey]);
+
+  const headerTop = useMemo(() => {
+    return `calc(var(--app-header-h) + var(--mode-tabs-h) + ${weekTabsH}px)`;
+  }, [weekTabsH]);
+
+  const cellMinH = useMemo(() => {
+    return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
+  }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -1810,122 +2896,185 @@ function WeekGrid({
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
   }, [selectedUserId, users.length]);
 
+  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to) return;
+    const left = from.scrollLeft;
+    if (to.scrollLeft !== left) to.scrollLeft = left;
+  }, []);
+
+  const onHeaderScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
+  const onBodyScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
-      <div ref={scrollRootRef} className="overflow-x-auto">
+    <div
+      className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
+      data-testid="week-grid"
+    >
+      {/* Week switch tabs: sticky at the top (viewport) */}
+      <div
+        ref={weekTabsRef}
+        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-200 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-800 dark:bg-black/90"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onPrevMonth}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              aria-label="前の月"
+            >
+              ←
+            </button>
+
+            <div className="flex items-center gap-1 overflow-x-auto rounded-md border border-zinc-200 bg-white/60 px-2 py-1 dark:border-zinc-800 dark:bg-black/60">
+              {monthWeekTabs.tabs.map((t) => {
+                const k = toYmd(t);
+                const active = k === activeWeekKey;
+                const label = `${t.getMonth() + 1}/${t.getDate()}`;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => onSelectWeekStart(t)}
+                    className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
+                      active
+                        ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                        : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                    }`}
+                    aria-current={active ? 'true' : undefined}
+                    title={k}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={onNextMonth}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              aria-label="次の月"
+            >
+              →
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToday}
+            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+          >
+            今週
+          </button>
+        </div>
+      </div>
+
+      {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
+      <div className="sticky z-30 border-b border-zinc-200 dark:border-zinc-800" style={{ top: headerTop }}>
+        <div
+          ref={headerScrollRef}
+          className="overflow-x-auto"
+          onScroll={onHeaderScroll}
+          data-testid="week-grid-header-scroll"
+        >
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `minmax(120px, 180px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            }}
+          >
+            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+            {dayLabels.map((d) => (
+              <div
+                key={d.key}
+                className={`pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
+                  d.isSun
+                    ? 'text-red-600 dark:text-red-400'
+                    : d.isSat
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-zinc-600 dark:text-zinc-300'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span className="tabular-nums">{d.dayNum}</span>
+                  <span>{d.dow}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body: horizontal scroll */}
+      <div
+        ref={scrollRootRef}
+        className="overflow-x-auto"
+        onScroll={onBodyScroll}
+        data-testid="week-grid-body-scroll"
+      >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: 'minmax(120px, 180px) repeat(7, minmax(0, 1fr))',
+            gridTemplateColumns: `minmax(120px, 180px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
-          {/* Header row */}
-          <div className="pointer-events-none sticky left-0 top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-30 border-b border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300">
-            従業員
-          </div>
-          {dayLabels.map((d) => (
-            <div
-              key={d.key}
-              className={`pointer-events-none sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-20 border-b border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
-                d.isSun
-                  ? 'text-red-600 dark:text-red-400'
-                  : d.isSat
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-zinc-600 dark:text-zinc-300'
-              }`}
-            >
-              <div className="flex items-center gap-1">
-                <span className="tabular-nums">{d.dayNum}</span>
-                <span>{d.dow}</span>
-              </div>
-            </div>
-          ))}
-
-          {/* Rows */}
           {users.length === 0 ? (
             <div className="col-span-8 px-3 py-6 text-sm text-zinc-500 dark:text-zinc-400">
               従業員が未登録、またはデータ取得に失敗しました。
             </div>
           ) : (
-            users.map((u) => {
+            users.map((u, idx) => {
               const isSelectedUser = selectedUserId === u.id;
+              const baseBg = cellBg === 'soft' ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black';
+              const selectedBg = 'bg-zinc-50 dark:bg-zinc-950';
               return (
                 <Row
                   key={u.id}
                   user={u}
                   dayLabels={dayLabels}
                   grid={grid[u.id] ?? {}}
+                  apiKind={apiKind}
+                  scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
+                  onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
+                  gridLayout={gridLayout}
+                  cellMinH={cellMinH}
+                  isEditable={isEditable}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
                   onAssigned={onAssigned}
-                  rowCellClassName={
-                    isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black'
-                  }
+                  reorderMode={reorderMode}
+                  moveUpDisabled={idx === 0}
+                  moveDownDisabled={idx === users.length - 1}
+                  onMoveUp={() => onMoveUser(u.id, -1)}
+                  onMoveDown={() => onMoveUser(u.id, 1)}
+                  rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                 />
               );
             })
           )}
-        </div>
 
-        {/* Month week-start tabs: sticky bottom-left inside the grid scroll area */}
-        <div className="sticky bottom-0 left-0 z-20 border-t border-zinc-200 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-800 dark:bg-black/90">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={onPrevMonth}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="前の月"
-              >
-                ←
-              </button>
-
-              <div className="flex items-center gap-1 overflow-x-auto rounded-md border border-zinc-200 bg-white/60 px-2 py-1 dark:border-zinc-800 dark:bg-black/60">
-                {monthWeekTabs.tabs.map((t) => {
-                  const k = toYmd(t);
-                  const active = k === activeWeekKey;
-                  const label = `${t.getMonth() + 1}/${t.getDate()}`;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => onSelectWeekStart(t)}
-                      className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
-                        active
-                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                      }`}
-                      aria-current={active ? 'true' : undefined}
-                      title={k}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={onNextMonth}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="次の月"
-              >
-                →
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={onToday}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-            >
-              今週
-            </button>
-          </div>
+          <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} />
         </div>
       </div>
     </div>
@@ -1933,29 +3082,100 @@ function WeekGrid({
 }
 
 function MonthGrid({
+  monthKey,
+  onPrevMonth,
+  onNextMonth,
+  onToday,
   dayLabels,
   data,
+  apiKind,
+  scheduleKind,
+  gridLayout,
+  cellMinW,
+  cellMinHCompact,
+  cellMinHComfortable,
+  cellBg,
   selectedSite,
+  onEnsureSite,
   cellClickAction,
+  cellTextColor,
+  isEditable,
   selectedUserId,
   onSelectUser,
   onNotify,
   onCellHistory,
   onAssigned,
+  userOrder,
+  reorderMode,
+  onMoveUser,
+  onCreateUser,
 }: {
+  monthKey: string;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onToday: () => void;
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: MonthApiResponse | null;
+  apiKind: 'NORMAL' | 'DAILY';
+  scheduleKind: ScheduleKind;
+  gridLayout: GridLayout;
+  cellMinW: number;
+  cellMinHCompact: number;
+  cellMinHComfortable: number;
+  cellBg: CellBg;
   selectedSite: SiteItem | null;
+  onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
+  isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  userOrder: string[];
+  reorderMode: boolean;
+  onMoveUser: (userId: string, dir: -1 | 1) => void;
+  onCreateUser: (
+    input: { name: string; email: string },
+  ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
 }) {
-  const users = data?.users ?? [];
+  const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef<0 | 1>(0);
+
+  const monthTabsRef = useRef<HTMLDivElement | null>(null);
+  const [monthTabsH, setMonthTabsH] = useState(0);
+
+  useEffect(() => {
+    const el = monthTabsRef.current;
+    if (!el) return;
+
+    const apply = () => {
+      const h = Math.max(0, Math.round(el.getBoundingClientRect().height));
+      setMonthTabsH((prev) => (prev === h ? prev : h));
+    };
+
+    const raf = window.requestAnimationFrame(apply);
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    window.addEventListener('resize', apply);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, [monthKey]);
+
+  const headerTop = useMemo(() => {
+    return `calc(var(--app-header-h) + var(--mode-tabs-h) + ${monthTabsH}px)`;
+  }, [monthTabsH]);
+
+  const cellMinH = useMemo(() => {
+    return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
+  }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -1968,37 +3188,120 @@ function MonthGrid({
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
   }, [selectedUserId, users.length]);
 
+  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to) return;
+    const left = from.scrollLeft;
+    if (to.scrollLeft !== left) to.scrollLeft = left;
+  }, []);
+
+  const onHeaderScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
+  const onBodyScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
-      <div ref={scrollRootRef} className="overflow-x-auto">
+    <div
+      className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
+      data-testid="month-grid"
+    >
+      {/* Month switch: sticky at the top (viewport) */}
+      <div
+        ref={monthTabsRef}
+        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-200 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-800 dark:bg-black/90"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onPrevMonth}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              aria-label="前の月"
+            >
+              ←
+            </button>
+            <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300">{monthKey}</div>
+            <button
+              type="button"
+              onClick={onNextMonth}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              aria-label="次の月"
+            >
+              →
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToday}
+            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+          >
+            今月
+          </button>
+        </div>
+      </div>
+
+      {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
+      <div className="sticky z-30 border-b border-zinc-200 dark:border-zinc-800" style={{ top: headerTop }}>
+        <div
+          ref={headerScrollRef}
+          className="overflow-x-auto"
+          onScroll={onHeaderScroll}
+          data-testid="month-grid-header-scroll"
+        >
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            }}
+          >
+            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+            {dayLabels.map((d) => (
+              <div
+                key={d.key}
+                className={`pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
+                  d.isSun
+                    ? 'text-red-600 dark:text-red-400'
+                    : d.isSat
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-zinc-600 dark:text-zinc-300'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span className="tabular-nums">{d.dayNum}</span>
+                  <span>{d.dow}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body: horizontal scroll */}
+      <div
+        ref={scrollRootRef}
+        className="overflow-x-auto"
+        onScroll={onBodyScroll}
+        data-testid="month-grid-body-scroll"
+      >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(0, 1fr))`,
+            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
-          <div className="pointer-events-none sticky left-0 top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-30 border-b border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300">
-            従業員
-          </div>
-
-          {dayLabels.map((d) => (
-            <div
-              key={d.key}
-              className={`pointer-events-none sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-20 border-b border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
-                d.isSun
-                  ? 'text-red-600 dark:text-red-400'
-                  : d.isSat
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-zinc-600 dark:text-zinc-300'
-              }`}
-            >
-              <div className="flex items-center gap-1">
-                <span className="tabular-nums">{d.dayNum}</span>
-                <span>{d.dow}</span>
-              </div>
-            </div>
-          ))}
-
           {users.length === 0 ? (
             <div
               className="px-3 py-6 text-sm text-zinc-500 dark:text-zinc-400"
@@ -2007,31 +3310,121 @@ function MonthGrid({
               従業員が未登録、またはデータ取得に失敗しました。
             </div>
           ) : (
-            users.map((u) => {
+            users.map((u, idx) => {
               const isSelectedUser = selectedUserId === u.id;
+              const baseBg = cellBg === 'soft' ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black';
+              const selectedBg = 'bg-zinc-50 dark:bg-zinc-950';
               return (
                 <Row
                   key={u.id}
                   user={u}
                   dayLabels={dayLabels}
                   grid={grid[u.id] ?? {}}
+                  apiKind={apiKind}
+                  scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
+                  onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
+                  gridLayout={gridLayout}
+                  cellMinH={cellMinH}
+                  isEditable={isEditable}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
                   onAssigned={onAssigned}
-                  rowCellClassName={
-                    isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black'
-                  }
+                  reorderMode={reorderMode}
+                  moveUpDisabled={idx === 0}
+                  moveDownDisabled={idx === users.length - 1}
+                  onMoveUp={() => onMoveUser(u.id, -1)}
+                  onMoveDown={() => onMoveUser(u.id, 1)}
+                  rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                 />
               );
             })
           )}
+
+          <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} />
         </div>
       </div>
     </div>
+  );
+}
+
+function AddUserRow({
+  dayLabels,
+  cellMinH,
+  onCreateUser,
+}: {
+  dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
+  cellMinH: number;
+  onCreateUser: (
+    input: { name: string; email: string },
+  ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <>
+      <div
+        className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-2 py-2 text-left text-[12px] dark:border-zinc-800 dark:bg-black"
+        style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
+      >
+        <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">従業員追加</div>
+        <div className="mt-1 flex flex-col gap-1">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="名前"
+            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] dark:border-zinc-800 dark:bg-black"
+            disabled={busy}
+          />
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="メール（任意）"
+            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] dark:border-zinc-800 dark:bg-black"
+            disabled={busy}
+          />
+          <button
+            type="button"
+            onClick={async () => {
+              setMsg(null);
+              if (busy) return;
+              setBusy(true);
+              try {
+                const r = await onCreateUser({ name, email });
+                if (!r.ok) {
+                  setMsg(r.error);
+                  return;
+                }
+                setName('');
+                setEmail('');
+                setMsg('追加しました');
+              } finally {
+                setBusy(false);
+              }
+            }}
+            disabled={busy || (!name.trim() && !email.trim())}
+            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+          >
+            {busy ? '追加中…' : '追加'}
+          </button>
+          {msg ? <div className="text-[10px] text-zinc-500 dark:text-zinc-400">{msg}</div> : null}
+        </div>
+      </div>
+      {dayLabels.map((d) => (
+        <div
+          key={`add-user-${d.key}`}
+          className="border-b border-l border-zinc-200 bg-white px-2 py-2 text-left text-xs dark:border-zinc-800 dark:bg-black"
+          style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
+        />
+      ))}
+    </>
   );
 }
 
@@ -2040,16 +3433,37 @@ function YearGrid({
   selectedUserId,
   onSelectUser,
   onOpenMonth,
+  userOrder,
+  reorderMode,
+  gridLayout,
+  cellMinW,
+  cellMinHCompact,
+  cellMinHComfortable,
+  cellBg,
+  onMoveUser,
 }: {
   data: YearSummaryApiResponse | null;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onOpenMonth: (month: string, userId: string) => void;
+  userOrder: string[];
+  reorderMode: boolean;
+  gridLayout: GridLayout;
+  cellMinW: number;
+  cellMinHCompact: number;
+  cellMinHComfortable: number;
+  cellBg: CellBg;
+  onMoveUser: (userId: string, dir: -1 | 1) => void;
 }) {
-  const users = data?.users ?? [];
+  const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const months = data?.months ?? [];
   const grid = data?.grid ?? {};
+    const cellMinH = useMemo(() => {
+      return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
+    }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef<0 | 1>(0);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -2062,34 +3476,85 @@ function YearGrid({
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
   }, [selectedUserId, users.length]);
 
+  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to) return;
+    const left = from.scrollLeft;
+    if (to.scrollLeft !== left) to.scrollLeft = left;
+  }, []);
+
+  const onHeaderScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
+  const onBodyScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
-      <div ref={scrollRootRef} className="overflow-x-auto">
+    <div
+      className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
+      data-testid="year-grid"
+    >
+      {/* Month header row: sticky (viewport) + horizontal-scroll synced */}
+      <div
+        className="sticky z-30 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
+        style={{ top: `calc(var(--app-header-h) + var(--mode-tabs-h))` }}
+      >
+        <div
+          ref={headerScrollRef}
+          className="overflow-x-auto"
+          onScroll={onHeaderScroll}
+          data-testid="year-grid-header-scroll"
+        >
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            }}
+          >
+            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+
+            {months.map((m) => {
+              const mm = Number(m.slice(-2));
+              return (
+                <div
+                  key={m}
+                  className="pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="tabular-nums">{mm}</span>
+                    <span>月</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Body: horizontal scroll */}
+      <div
+        ref={scrollRootRef}
+        className="overflow-x-auto"
+        onScroll={onBodyScroll}
+        data-testid="year-grid-body-scroll"
+      >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(months.length, 1)}, minmax(0, 1fr))`,
+            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
-          <div className="pointer-events-none sticky left-0 top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-30 border-b border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300">
-            従業員
-          </div>
-
-          {months.map((m) => {
-            const mm = Number(m.slice(-2));
-            return (
-              <div
-                key={m}
-                className="pointer-events-none sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-20 border-b border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
-              >
-                <div className="flex items-center gap-1">
-                  <span className="tabular-nums">{mm}</span>
-                  <span>月</span>
-                </div>
-              </div>
-            );
-          })}
-
           {users.length === 0 ? (
             <div
               className="px-3 py-6 text-sm text-zinc-500 dark:text-zinc-400"
@@ -2098,8 +3563,19 @@ function YearGrid({
               従業員が未登録、またはデータ取得に失敗しました。
             </div>
           ) : (
-            users.map((u) => {
+            users.map((u, idx) => {
               const isSelectedUser = selectedUserId === u.id;
+              const baseBg = cellBg === 'soft' ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black';
+              const selectedBg = 'bg-zinc-50 dark:bg-zinc-950';
+              const sum = months.reduce(
+                (acc, m) => {
+                  const cell = grid[u.id]?.[m];
+                  acc.days += cell?.days ?? 0;
+                  acc.entries += cell?.entries ?? 0;
+                  return acc;
+                },
+                { days: 0, entries: 0 },
+              );
               return (
                 <Fragment key={u.id}>
                   <button
@@ -2110,10 +3586,47 @@ function YearGrid({
                     data-user-row={u.id}
                     data-testid={`user-row-${u.id}`}
                     className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-2 py-2 text-left text-[13px] dark:border-zinc-800 ${
-                      isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : 'bg-white dark:bg-black'
+                      isSelectedUser ? selectedBg : baseBg
                     }`}
                   >
-                    <div className="truncate font-medium">{u.name ?? u.email ?? u.id}</div>
+                    <div className="flex items-start justify-between gap-2" style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{u.name ?? u.email ?? u.id}</div>
+                        <div className="mt-0.5 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                          合計: {sum.days}日 / {sum.entries}件
+                        </div>
+                      </div>
+                      {reorderMode ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onMoveUser(u.id, -1);
+                            }}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            aria-label="上へ"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === users.length - 1}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onMoveUser(u.id, 1);
+                            }}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            aria-label="下へ"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </button>
 
                   {months.map((m) => {
@@ -2129,7 +3642,7 @@ function YearGrid({
                         title={`${m}の月予定へ（${cell.days}日 / ${cell.entries}件）`}
                         data-testid={`year-cell-${u.id}-${m}`}
                       >
-                        <div className="min-h-10">
+                        <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
                           <div className="text-zinc-800 dark:text-zinc-200">
                             <span className="tabular-nums">{cell.days}</span>日
                           </div>
@@ -2154,25 +3667,49 @@ function Row({
   user,
   dayLabels,
   grid,
+  apiKind,
+  scheduleKind,
   selectedSite,
+  onEnsureSite,
   selectedUserId,
   cellClickAction,
+  cellTextColor,
+  gridLayout,
+  cellMinH,
+  isEditable,
   onSelectUser,
   onNotify,
   onCellHistory,
   onAssigned,
+  reorderMode,
+  moveUpDisabled,
+  moveDownDisabled,
+  onMoveUp,
+  onMoveDown,
   rowCellClassName,
 }: {
   user: ApiUser;
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   grid: Record<string, ApiCell>;
+  apiKind: 'NORMAL' | 'DAILY';
+  scheduleKind: ScheduleKind;
   selectedSite: SiteItem | null;
+  onEnsureSite?: () => Promise<SiteItem | null>;
   selectedUserId: string | null;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
+  gridLayout: GridLayout;
+  cellMinH: number;
+  isEditable: boolean;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  reorderMode?: boolean;
+  moveUpDisabled?: boolean;
+  moveDownDisabled?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   rowCellClassName?: string;
 }) {
   const isSelectedUser = selectedUserId === user.id;
@@ -2203,6 +3740,7 @@ function Row({
     replaced?: unknown;
   }): string => {
     if (input.action === 'swap') return '入替しました';
+    if (input.action === 'recolor') return '色を変更しました';
     if (input.replaced === 'slot2') return '2枠目を置換しました';
     if (input.action === 'remove') return '削除しました';
     if (input.action === 'add') return '追加しました';
@@ -2225,7 +3763,42 @@ function Row({
           isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : ''
         }`}
       >
-        <div className="truncate font-medium">{user.name ?? user.email ?? user.id}</div>
+        <div
+          className="flex items-start justify-between gap-2"
+          style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
+        >
+          <div className="min-w-0 truncate font-medium">{user.name ?? user.email ?? user.id}</div>
+          {reorderMode ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={moveUpDisabled}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onMoveUp?.();
+                }}
+                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="上へ"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                disabled={moveDownDisabled}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onMoveDown?.();
+                }}
+                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="下へ"
+              >
+                ▼
+              </button>
+            </div>
+          ) : null}
+        </div>
       </button>
       {dayLabels.map((d) => {
         const cell = grid[d.key];
@@ -2239,16 +3812,25 @@ function Row({
             key={d.key}
             type="button"
             onClick={async () => {
-              if (cellClickAction !== 'swap' && !selectedSite) {
-                onNotify?.('現場を選択してください');
+              if (!isEditable) {
+                onNotify?.('編集するには、ヘッダーの「追加」→編集を開始してください');
                 return;
+              }
+
+              let resolvedSite = selectedSite;
+              if (cellClickAction !== 'swap' && !resolvedSite) {
+                resolvedSite = (await onEnsureSite?.()) ?? null;
+                if (!resolvedSite) {
+                  onNotify?.('現場名を入力してください');
+                  return;
+                }
               }
 
               try {
                 const snapshot = async (): Promise<CellSlots | null> => {
                   try {
                     const rs = await fetch(
-                      `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(d.key)}`,
+                      `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(d.key)}&kind=${encodeURIComponent(scheduleKind)}`,
                     );
                     const js = (await rs.json().catch(() => null)) as
                       | { ok: true; slots: [string | null, string | null] }
@@ -2269,9 +3851,11 @@ function Row({
                   body: JSON.stringify({
                     userId: user.id,
                     day: d.key,
+                    kind: apiKind,
                     action: cellClickAction,
-                    siteId: selectedSite?.id ?? null,
-                    siteName: selectedSite?.label ?? null,
+                    siteId: resolvedSite?.id ?? null,
+                    siteName: resolvedSite?.label ?? null,
+                    color: cellTextColor,
                   }),
                 });
 
@@ -2327,15 +3911,19 @@ function Row({
               rowCellClassName ?? ''
             }`}
           >
-            <div className="min-h-12">
+            <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {/* Two-slot compact layout (no extra controls yet) */}
               <div
-                className={`whitespace-normal break-words text-[11px] leading-tight ${c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'}`}
+                className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'text-xs leading-snug' : 'text-[11px] leading-tight'} ${
+                  c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
+                }`}
               >
                 {slot1 ?? ''}
               </div>
               <div
-                className={`mt-0.5 whitespace-normal break-words text-[10px] leading-tight ${c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'}`}
+                className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'text-[11px] leading-snug' : 'text-[10px] leading-tight'} ${
+                  c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
+                }`}
               >
                 {slot2 ?? ''}
               </div>
