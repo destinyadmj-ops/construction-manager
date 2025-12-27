@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from 'react';
 import "./globals.css";
 import ServiceWorkerRegister from "./sw-register";
 import AppHeader from "./header";
@@ -29,12 +30,14 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className="antialiased">
-        <HeaderActionsProvider>
-          <ServiceWorkerRegister />
-          <PwaBackGuard />
-          <AppHeader />
-          {children}
-        </HeaderActionsProvider>
+        <Suspense fallback={null}>
+          <HeaderActionsProvider>
+            <ServiceWorkerRegister />
+            <PwaBackGuard />
+            <AppHeader />
+            {children}
+          </HeaderActionsProvider>
+        </Suspense>
       </body>
     </html>
   );
