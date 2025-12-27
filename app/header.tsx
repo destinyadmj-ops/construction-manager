@@ -30,11 +30,14 @@ export default function AppHeader() {
   const navIntentRef = useRef<'push' | 'back' | 'forward' | null>(null);
   const didInitNavRef = useRef(false);
   const navStateRef = useRef<{ stack: string[]; index: number }>({ stack: [], index: 0 });
+  const [navStack, setNavStack] = useState<string[]>([]);
   const [navIndex, setNavIndex] = useState(0);
   const [navLen, setNavLen] = useState(1);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const setNavState = useCallback((stack: string[], index: number) => {
     navStateRef.current = { stack, index };
+    setNavStack(stack);
     setNavIndex(index);
     setNavLen(stack.length || 1);
     try {
@@ -44,6 +47,10 @@ export default function AppHeader() {
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    setIsHistoryOpen(false);
+  }, [routeKey]);
 
   useEffect(() => {
     try {
@@ -69,12 +76,11 @@ export default function AppHeader() {
       return;
     }
 
-    const intent = navIntentRef.current;
     navIntentRef.current = null;
 
     const cur = navStateRef.current;
     const stack = cur.stack.length ? cur.stack : [routeKey];
-    let index = Math.max(0, Math.min(stack.length - 1, cur.index));
+    const index = Math.max(0, Math.min(stack.length - 1, cur.index));
     const curKey = stack[index] ?? null;
     if (curKey === routeKey) return;
 
@@ -208,6 +214,51 @@ export default function AppHeader() {
             >
               追加
             </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="header-action-history"
+                onClick={() => setIsHistoryOpen((v) => !v)}
+                disabled={navStack.length === 0}
+                title="履歴"
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              >
+                履歴
+              </button>
+
+              {isHistoryOpen ? (
+                <div className="absolute left-0 top-full mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+                  {actions.history ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void actions.history?.onClick();
+                        setIsHistoryOpen(false);
+                      }}
+                      disabled={actions.history.disabled}
+                      className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      title={actions.history.title ?? '編集履歴'}
+                    >
+                      {actions.history.title ?? '編集履歴'}
+                    </button>
+                  ) : null}
+
+                  <div className="max-h-64 overflow-auto py-1">
+                    {navStack
+                      .map((key, idx) => ({ key, idx }))
+                      .slice(-20)
+                      .reverse()
+                      .map((it) => (
+                        <div key={`${it.idx}-${it.key}`} className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                          <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
+                          <span className="break-all">{it.key}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 

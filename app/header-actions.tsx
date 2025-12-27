@@ -11,6 +11,7 @@ export type HeaderAction = {
 
 type HeaderActionsState = {
   add?: HeaderAction;
+  history?: HeaderAction;
   save?: HeaderAction;
   undo?: HeaderAction;
   redo?: HeaderAction;
@@ -19,6 +20,7 @@ type HeaderActionsState = {
 type HeaderActionsContextValue = {
   actions: HeaderActionsState;
   setAddAction: (action: HeaderAction | undefined) => void;
+  setHistoryAction: (action: HeaderAction | undefined) => void;
   setSaveAction: (action: HeaderAction | undefined) => void;
   setUndoAction: (action: HeaderAction | undefined) => void;
   setRedoAction: (action: HeaderAction | undefined) => void;
@@ -33,11 +35,17 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   const [actions, setActions] = useState<HeaderActionsState>({});
 
   useEffect(() => {
+    // This intentionally clears header actions on navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActions({});
   }, [pathname, searchKey]);
 
   const setAddAction = useCallback((action: HeaderAction | undefined) => {
     setActions((cur) => ({ ...cur, add: action }));
+  }, []);
+
+  const setHistoryAction = useCallback((action: HeaderAction | undefined) => {
+    setActions((cur) => ({ ...cur, history: action }));
   }, []);
 
   const setSaveAction = useCallback((action: HeaderAction | undefined) => {
@@ -53,8 +61,8 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const value = useMemo<HeaderActionsContextValue>(
-    () => ({ actions, setAddAction, setSaveAction, setUndoAction, setRedoAction }),
-    [actions, setAddAction, setRedoAction, setSaveAction, setUndoAction],
+    () => ({ actions, setAddAction, setHistoryAction, setSaveAction, setUndoAction, setRedoAction }),
+    [actions, setAddAction, setHistoryAction, setRedoAction, setSaveAction, setUndoAction],
   );
 
   return <HeaderActionsContext.Provider value={value}>{children}</HeaderActionsContext.Provider>;
