@@ -226,10 +226,8 @@ function WeekHubInner() {
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
   const [isUndoRedoBusy, setIsUndoRedoBusy] = useState(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [draggedCell, setDraggedCell] = useState<{ userId: string; day: string; slots: CellSlots } | null>(null);
 
   useEffect(() => {
@@ -2409,6 +2407,10 @@ function WeekHubInner() {
                   }}
                   onCreateUser={createUser}
                   draggedSite={draggedSite}
+                  selectedCell={selectedCell}
+                  onSetSelectedCell={setSelectedCell}
+                  draggedCell={draggedCell}
+                  onSetDraggedCell={setDraggedCell}
                 />
               </div>
             </>
@@ -3135,6 +3137,10 @@ function WeekGrid({
   onMoveUser,
   onCreateUser,
   draggedSite,
+  selectedCell,
+  onSetSelectedCell,
+  draggedCell,
+  onSetDraggedCell,
 }: {
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: ApiResponse | null;
@@ -3169,6 +3175,10 @@ function WeekGrid({
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
   draggedSite: SiteItem | null;
+  selectedCell: { userId: string; day: string } | null;
+  onSetSelectedCell: (cell: { userId: string; day: string } | null) => void;
+  draggedCell: { userId: string; day: string; slots: CellSlots } | null;
+  onSetDraggedCell: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
@@ -3394,6 +3404,10 @@ function WeekGrid({
                   onMoveDown={() => onMoveUser(u.id, 1)}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={draggedSite}
+                  selectedCell={selectedCell}
+                  onSetSelectedCell={onSetSelectedCell}
+                  draggedCell={draggedCell}
+                  onSetDraggedCell={onSetDraggedCell}
                 />
               );
             })
@@ -4018,6 +4032,10 @@ function Row({
   onMoveDown,
   rowCellClassName,
   draggedSite,
+  selectedCell,
+  onSetSelectedCell,
+  draggedCell,
+  onSetDraggedCell,
 }: {
   user: ApiUser;
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
@@ -4044,6 +4062,10 @@ function Row({
   onMoveDown?: () => void;
   rowCellClassName?: string;
   draggedSite: SiteItem | null;
+  selectedCell?: { userId: string; day: string } | null;
+  onSetSelectedCell?: (cell: { userId: string; day: string } | null) => void;
+  draggedCell?: { userId: string; day: string; slots: CellSlots } | null;
+  onSetDraggedCell?: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
 }) {
   const isSelectedUser = selectedUserId === user.id;
 
@@ -4243,23 +4265,46 @@ function Row({
           <button
             key={d.key}
             type="button"
+            draggable={isEditable && Boolean(slot1 || slot2)}
+            onDragStart={(e) => {
+              if (!isEditable || (!slot1 && !slot2)) return;
+              onSetDraggedCell?.({ userId: user.id, day: d.key, slots: [slot1, slot2] });
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+            onDragEnd={() => onSetDraggedCell?.(null)}
             onDragOver={(e) => {
-              if (!isEditable || !draggedSite) return;
+              if (!isEditable || (!draggedSite && !draggedCell)) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
             }}
             onDrop={(e) => {
-              if (!isEditable || !draggedSite) return;
+              if (!isEditable) return;
               e.preventDefault();
               const beforeFallback: CellSlots = [slot1, slot2];
-              void runCellAction({
-                day: d.key,
-                action: 'toggle',
-                color: cellTextColor,
-                siteId: draggedSite.id,
-                siteName: draggedSite.label,
-                beforeFallback,
-              });
+              
+              if (draggedSite) {
+                // 現場リストからドラッグされた現場をセルに入力
+                void runCellAction({
+                  day: d.key,
+                  action: 'toggle',
+                  color: cellTextColor,
+                  siteId: draggedSite.id,
+                  siteName: draggedSite.label,
+                  beforeFallback,
+                });
+              } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
+                // 別のセルからドラッグされた現場をコピー
+                const siteName = draggedCell.slots.find(Boolean);
+                if (siteName) {
+                  void runCellAction({
+                    day: d.key,
+                    action: 'toggle',
+                    color: cellTextColor,
+                    siteName,
+                    beforeFallback,
+                  });
+                }
+              }
             }}
             onClick={(e) => {
               if (!isEditable) {
@@ -4268,17 +4313,37 @@ function Row({
               }
 
               e.preventDefault();
-              const beforeFallback: CellSlots = [slot1, slot2];
-              void runCellAction({
-                day: d.key,
-                action: cellClickAction,
-                color: cellTextColor,
-                beforeFallback,
-              });
+              
+              // セルが選択されている場合は通常のアクションを実行、そうでなければセルを選択
+              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
+                // 同じセルをクリックした場合は通常のアクション
+                const beforeFallback: CellSlots = [slot1, slot2];
+                void runCellAction({
+                  day: d.key,
+                  action: cellClickAction,
+                  color: cellTextColor,
+                  beforeFallback,
+                });
+                onSetSelectedCell?.(null);
+              } else if (selectedSite) {
+                // 現場が選択されている場合は通常のアクション
+                const beforeFallback: CellSlots = [slot1, slot2];
+                void runCellAction({
+                  day: d.key,
+                  action: cellClickAction,
+                  color: cellTextColor,
+                  beforeFallback,
+                });
+              } else {
+                // セルを選択状態にする（現場リストをクリックすると入力される）
+                onSetSelectedCell?.({ userId: user.id, day: d.key });
+              }
             }}
             className={`border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
               isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
-            } ${rowCellClassName ?? ''}`}
+            } ${selectedCell?.userId === user.id && selectedCell?.day === d.key ? 'ring-2 ring-blue-500 ring-inset' : ''} ${
+              rowCellClassName ?? ''
+            } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
           >
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {/* Two-slot compact layout (no extra controls yet) */}
