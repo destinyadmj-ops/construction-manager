@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16
+    container_name: masterhub-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-masterhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-masterhub}
+      POSTGRES_DB: ${POSTGRES_DB:-masterhub}
+    ports:
+      - "5432:5432"
+    volumes:
+      - masterhub_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: masterhub-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - masterhub_redisdata:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    env_file:
+      - ./.env.synology
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    env_file:
+      - ./.env.synology
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+volumes:
+  masterhub_pgdata:
+  masterhub_redisdata:

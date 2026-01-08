@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
+const LabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
+
 const BodySchema = z
   .object({
     userId: z.string().min(1),
@@ -10,8 +12,8 @@ const BodySchema = z
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
     slot1: z.string().trim().max(200).nullable().optional(),
     slot2: z.string().trim().max(200).nullable().optional(),
-    slot1Color: z.enum(['default', 'red']).optional().nullable(),
-    slot2Color: z.enum(['default', 'red']).optional().nullable(),
+    slot1Color: LabelColorSchema.optional().nullable(),
+    slot2Color: LabelColorSchema.optional().nullable(),
   })
   .strict();
 
@@ -66,8 +68,8 @@ export async function POST(request: Request) {
 
     const slot1Name = (parsed.data.slot1 ?? null)?.trim() || null;
     const slot2Name = (parsed.data.slot2 ?? null)?.trim() || null;
-    const slot1Color: 'default' | 'red' = parsed.data.slot1Color ?? 'default';
-    const slot2Color: 'default' | 'red' = parsed.data.slot2Color ?? 'default';
+    const slot1Color = parsed.data.slot1Color ?? 'default';
+    const slot2Color = parsed.data.slot2Color ?? 'default';
 
     const [slot1Site, slot2Site] = await Promise.all([
       slot1Name ? resolveSiteByName(slot1Name, kind) : Promise.resolve(null),

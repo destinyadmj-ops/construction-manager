@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type SiteListItem = { id: string; companyName: string | null; name: string };
 type PartnerListItem = {
@@ -24,6 +25,21 @@ type OutlookSendLogItem = {
   partner: { id: string; name: string; email: string | null };
 };
 
+type StoredHistoryItem = {
+  id: string;
+  createdAt: string;
+  kind: 'REPORT' | 'INVOICE';
+  action: string;
+  subject: string | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storedPath: string;
+  tags: unknown;
+  site: { id: string; label: string } | null;
+  partner: { id: string; name: string; email: string | null } | null;
+};
+
 type JsonObject = Record<string, unknown>;
 
 function asObject(v: unknown): JsonObject | null {
@@ -34,6 +50,34 @@ function getStringField(obj: unknown, key: string): string | null {
   const o = asObject(obj);
   const v = o?.[key];
   return typeof v === 'string' ? v : null;
+}
+
+function getNumberField(obj: unknown, key: string): number | null {
+  const o = asObject(obj);
+  const v = o?.[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function getPeriodText(tags: unknown): string | null {
+  const obj = asObject(tags);
+  if (!obj) return null;
+  const from = getStringField(obj, 'from');
+  const to = getStringField(obj, 'to');
+  if (from && to) return `${from}〜${to}`;
+  const periodObj = asObject(obj.period);
+  const from2 = getStringField(periodObj, 'from');
+  const to2 = getStringField(periodObj, 'to');
+  if (from2 && to2) return `${from2}〜${to2}`;
+  return null;
+}
+
+function formatActionLabel(action: string): string {
+  const a = action.trim().toUpperCase();
+  if (a === 'ISSUE') return '発行';
+  if (a === 'PRINT') return '印刷';
+  if (a === 'FAX') return 'FAX';
+  if (a === 'MAIL' || a === 'EMAIL') return 'メール';
+  return action || '履歴';
 }
 
 function toYmd(d: Date) {
@@ -71,6 +115,8 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
   const kind = props.kind;
   const title = kind === 'report' ? '報告書' : '請求書';
 
+  const router = useRouter();
+
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const [sites, setSites] = useState<SiteListItem[]>([]);
@@ -85,6 +131,8 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
   const [siteId, setSiteId] = useState('');
   const [partnerId, setPartnerId] = useState('');
   const [sending, setSending] = useState(false);
+  const [faxSending, setFaxSending] = useState(false);
+  const [printSending, setPrintSending] = useState(false);
 
   const [toEmailDraft, setToEmailDraft] = useState('');
   const [subjectDraft, setSubjectDraft] = useState('');
@@ -145,6 +193,12 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
   const [logs, setLogs] = useState<OutlookSendLogItem[]>([]);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
+  const logsLoadingRef = useRef(false);
+
+  const [storedDocs, setStoredDocs] = useState<StoredHistoryItem[]>([]);
+  const [storedError, setStoredError] = useState<string | null>(null);
+  const [storedLoading, setStoredLoading] = useState(false);
+  const storedLoadingRef = useRef(false);
 
   const loadLists = useCallback(async () => {
     setLoadError(null);
@@ -218,7 +272,8 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
       setLogs([]);
       return;
     }
-    if (logsLoading) return;
+    if (logsLoadingRef.current) return;
+    logsLoadingRef.current = true;
 
     setLogsLoading(true);
     setLogsError(null);
@@ -284,12 +339,95 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
       setLogsError(e instanceof Error ? e.message : '履歴の取得に失敗しました');
     } finally {
       setLogsLoading(false);
+      logsLoadingRef.current = false;
     }
-  }, [fromDate, kind, logsLoading, partnerId, siteId, statusFilter, toDate]);
+  }, [fromDate, kind, partnerId, siteId, statusFilter, toDate]);
 
   useEffect(() => {
     void loadLogs();
   }, [loadLogs]);
+
+  const loadStoredHistory = useCallback(async () => {
+    if (!siteId) {
+      setStoredDocs([]);
+      return;
+    }
+    if (storedLoadingRef.current) return;
+    storedLoadingRef.current = true;
+
+    setStoredLoading(true);
+    setStoredError(null);
+
+    try {
+      const qs = new URLSearchParams();
+      qs.set('siteId', siteId);
+      qs.set('kind', kind === 'invoice' ? 'INVOICE' : 'REPORT');
+      if (fromDate.trim()) qs.set('from', `${fromDate}T00:00:00.000Z`);
+      if (toDate.trim()) qs.set('to', `${toDate}T00:00:00.000Z`);
+      qs.set('limit', '50');
+
+      const r = await fetch(`/api/documents/stored-history?${qs.toString()}`);
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = asObject(j);
+      if (!r.ok || obj?.ok !== true) throw new Error(getStringField(obj, 'error') || `HTTP ${r.status}`);
+
+      const raw = Array.isArray(obj.documents) ? obj.documents : [];
+      const parsed = raw
+        .map((x) => asObject(x))
+        .map((o) => {
+          const id = getStringField(o, 'id');
+          const createdAt = getStringField(o, 'createdAt');
+          const kindStr = getStringField(o, 'kind');
+          const action = getStringField(o, 'action') ?? '';
+          const subject = getStringField(o, 'subject');
+          const fileName = getStringField(o, 'fileName');
+          const mimeType = getStringField(o, 'mimeType');
+          const sizeBytes = getNumberField(o, 'sizeBytes');
+          const storedPath = getStringField(o, 'storedPath');
+          const tags = o?.tags as unknown;
+          const siteObj = asObject(o?.site);
+          const partnerObj = asObject(o?.partner);
+
+          const siteIdVal = getStringField(siteObj, 'id');
+          const siteLabel = getStringField(siteObj, 'label');
+          const partnerIdVal = getStringField(partnerObj, 'id');
+          const partnerName = getStringField(partnerObj, 'name');
+          const partnerEmailVal = partnerObj?.email;
+          const partnerEmail = typeof partnerEmailVal === 'string' ? partnerEmailVal : partnerEmailVal === null ? null : null;
+
+          if (!id || !createdAt || !fileName || !mimeType || sizeBytes === null || !storedPath) return null;
+          if (kindStr !== 'REPORT' && kindStr !== 'INVOICE') return null;
+
+          return {
+            id,
+            createdAt,
+            kind: kindStr,
+            action,
+            subject,
+            fileName,
+            mimeType,
+            sizeBytes,
+            storedPath,
+            tags,
+            site: siteIdVal && siteLabel ? { id: siteIdVal, label: siteLabel } : null,
+            partner: partnerIdVal && partnerName ? { id: partnerIdVal, name: partnerName, email: partnerEmail } : null,
+          } satisfies StoredHistoryItem;
+        })
+        .filter((x): x is StoredHistoryItem => !!x);
+
+      setStoredDocs(parsed);
+    } catch (e) {
+      setStoredDocs([]);
+      setStoredError(e instanceof Error ? e.message : '履歴の取得に失敗しました');
+    } finally {
+      setStoredLoading(false);
+      storedLoadingRef.current = false;
+    }
+  }, [fromDate, kind, siteId, toDate]);
+
+  useEffect(() => {
+    void loadStoredHistory();
+  }, [loadStoredHistory]);
 
   const siteLabel = useMemo(() => {
     const hit = sites.find((s) => s.id === siteId);
@@ -359,25 +497,146 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
     }
   }, []);
 
+  const sendFaxReport = useCallback(async () => {
+    if (kind !== 'report') return;
+    if (!siteId || !partnerId) return;
+    if (faxSending) return;
+
+    const ok = window.confirm('報告書PDFをFAX送信（アウトボックス）に出しますか？');
+    if (!ok) return;
+
+    setFaxSending(true);
+    setStatusMsg(null);
+    try {
+      const r = await fetch('/api/fax/send-report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ siteId, partnerId }),
+      });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = asObject(j);
+      if (!r.ok || obj?.ok !== true) throw new Error(getStringField(obj, 'error') || `HTTP ${r.status}`);
+      setStatusMsg('FAX送信用に出力しました');
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : 'FAX送信に失敗しました');
+    } finally {
+      setFaxSending(false);
+    }
+  }, [faxSending, kind, partnerId, siteId]);
+
+  const sendFaxInvoice = useCallback(async () => {
+    if (kind !== 'invoice') return;
+    if (!siteId || !partnerId) return;
+    if (faxSending) return;
+
+    const ok = window.confirm('請求書PDFをFAX送信（アウトボックス）に出しますか？');
+    if (!ok) return;
+
+    setFaxSending(true);
+    setStatusMsg(null);
+    try {
+      const r = await fetch('/api/fax/send-invoice', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ siteId, partnerId }),
+      });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = asObject(j);
+      if (!r.ok || obj?.ok !== true) throw new Error(getStringField(obj, 'error') || `HTTP ${r.status}`);
+      setStatusMsg('FAX送信用に出力しました');
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : 'FAX送信に失敗しました');
+    } finally {
+      setFaxSending(false);
+    }
+  }, [faxSending, kind, partnerId, siteId]);
+
+  const printDoc = useCallback(async () => {
+    if (!siteId || !partnerId) return;
+    if (printSending) return;
+
+    const ok = window.confirm(`${title}PDFを印刷用に出力しますか？`);
+    if (!ok) return;
+
+    setPrintSending(true);
+    setStatusMsg(null);
+    try {
+      const r = await fetch(kind === 'invoice' ? '/api/print/invoice' : '/api/print/report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ siteId, partnerId }),
+      });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = asObject(j);
+      if (!r.ok || obj?.ok !== true) throw new Error(getStringField(obj, 'error') || `HTTP ${r.status}`);
+      setStatusMsg('印刷用に出力しました');
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : '印刷用の出力に失敗しました');
+    } finally {
+      setPrintSending(false);
+    }
+  }, [kind, partnerId, printSending, siteId, title]);
+
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-black">
-        <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{title} 管理</h1>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{title} 管理</h1>
+          {kind === 'invoice' ? (
+            <button
+              type="button"
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              onClick={() => router.push('/invoices/issue')}
+            >
+              請求書発行
+            </button>
+          ) : null}
+        </div>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           送信（Outlook）と送信フォルダ（履歴）をまとめて管理します。
         </div>
 
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
 
-        <div className="mt-5 rounded-lg border border-zinc-200 bg-white/60 p-3 dark:border-zinc-800 dark:bg-black/60">
+        <div className="mt-5 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">送信</div>
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">選択した現場/会社へ {title} PDF を送信します。</div>
             </div>
-            <button type="button" className={smallBtn} onClick={() => void loadLists()}>
-              再読込
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={smallBtn}
+                onClick={() => void printDoc()}
+                disabled={printSending || !siteId || !partnerId}
+              >
+                {printSending ? '印刷準備中…' : '印刷'}
+              </button>
+
+              {kind === 'report' ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => void sendFaxReport()}
+                  disabled={faxSending || !siteId || !partnerId}
+                >
+                  {faxSending ? 'FAX準備中…' : 'FAX送信'}
+                </button>
+              ) : kind === 'invoice' ? (
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => void sendFaxInvoice()}
+                  disabled={faxSending || !siteId || !partnerId}
+                >
+                  {faxSending ? 'FAX準備中…' : 'FAX送信'}
+                </button>
+              ) : null}
+              <button type="button" className={smallBtn} onClick={() => void loadLists()}>
+                再読込
+              </button>
+            </div>
           </div>
 
           {loadError ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{loadError}</div> : null}
@@ -456,6 +715,30 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
                 className={smallBtn}
                 disabled={!partnerId}
                 onClick={() => {
+                  if (!partnerId) return;
+                  const hit = partners.find((p) => p.id === partnerId) ?? null;
+                  setToEmailTouched(false);
+                  setSubjectTouched(false);
+
+                  const baseToEmail = (hit?.outlookToEmailDefault ?? hit?.email ?? '').trim();
+                  setToEmailDraft(baseToEmail);
+
+                  const generated = computeDefaultSubject({ title, siteLabel, partnerName: hit?.name ?? '' });
+                  const baseSubject =
+                    kind === 'report'
+                      ? (hit?.outlookSubjectReportDefault ?? generated)
+                      : (hit?.outlookSubjectInvoiceDefault ?? generated);
+                  setSubjectDraft(baseSubject);
+                  setStatusMsg('フォーマットを取り込みました');
+                }}
+              >
+                フォーマット取り込み
+              </button>
+              <button
+                type="button"
+                className={smallBtn}
+                disabled={!partnerId}
+                onClick={() => {
                   void (async () => {
                     if (!partnerId) return;
                     setStatusMsg(null);
@@ -492,7 +775,7 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
               </button>
               <button
                 type="button"
-                className={smallBtn}
+                className="mh-btn-primary"
                 disabled={sending || !siteId || !partnerId || !toEmailDraft.trim() || !subjectDraft.trim()}
                 onClick={() => {
                   void (async () => {
@@ -557,14 +840,22 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
           </div>
         </div>
 
-        <div className="mt-6 rounded-lg border border-zinc-200 bg-white/60 p-3 dark:border-zinc-800 dark:bg-black/60">
+        <div className="mt-6 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">送信フォルダ（履歴）</div>
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">会社/現場/日付で検索できます。</div>
             </div>
-            <button type="button" className={smallBtn} onClick={() => void loadLogs()} disabled={logsLoading}>
-              {logsLoading ? '更新中…' : '更新'}
+            <button
+              type="button"
+              className={smallBtn}
+              onClick={() => {
+                void loadLogs();
+                void loadStoredHistory();
+              }}
+              disabled={logsLoading || storedLoading}
+            >
+              {logsLoading || storedLoading ? '更新中…' : '更新'}
             </button>
           </div>
 
@@ -653,6 +944,52 @@ export default function OutlookDocumentManager(props: { kind: 'report' | 'invoic
               className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
             />
           </div>
+
+          <div className="mt-3 text-[11px] font-medium text-zinc-700 dark:text-zinc-300">発行 / 印刷 / FAX</div>
+          <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">印刷・FAX・発行の履歴です（宛先なしの発行も含みます）。</div>
+
+          {storedError ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{storedError}</div> : null}
+          {storedDocs.length === 0 ? (
+            <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">（履歴なし）</div>
+          ) : (
+            <div className="mt-2 space-y-1">
+              {storedDocs.slice(0, 50).map((x) => {
+                const period = getPeriodText(x.tags);
+                const partnerText = x.partner ? `${x.partner.name}${x.partner.email ? ` <${x.partner.email}>` : ''}` : '（宛先なし）';
+                return (
+                  <div
+                    key={x.id}
+                    className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 truncate">
+                        {x.createdAt.replace('T', ' ').replace('Z', '')}
+                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">{formatActionLabel(x.action)}</span>
+                        {period ? <span className="ml-2 text-zinc-500 dark:text-zinc-400">{period}</span> : null}
+                      </div>
+                      <button type="button" className={smallBtn} onClick={() => void copyText('保存パス', x.storedPath)}>
+                        パスコピー
+                      </button>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 truncate text-zinc-500 dark:text-zinc-400">
+                        {x.site?.label ?? '（現場なし）'} / {partnerText}
+                      </div>
+                      <button type="button" className={smallBtn} onClick={() => void copyText('ファイル名', x.fileName)}>
+                        ファイル名コピー
+                      </button>
+                    </div>
+                    {x.subject ? (
+                      <div className="mt-1 min-w-0 truncate text-zinc-500 dark:text-zinc-400">{x.subject}</div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 text-[11px] font-medium text-zinc-700 dark:text-zinc-300">メール送信（Outlook）</div>
+          <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">Outlook送信の結果（成功/失敗）です。</div>
 
           {logsError ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{logsError}</div> : null}
 

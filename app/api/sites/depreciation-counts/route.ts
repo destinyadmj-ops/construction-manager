@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const sites = await prisma.site.findMany({
       orderBy: [{ companyName: 'asc' }, { name: 'asc' }],
       take: 1000,
-      select: { id: true, depreciationThreshold: true },
+      select: { id: true, depreciationThreshold: true, alertsEnabled: true },
     });
 
     const ids = sites.map((s) => s.id);
@@ -49,12 +49,13 @@ export async function GET(request: Request) {
     const items = sites.map((s) => {
       const count = counts[s.id] ?? 0;
       const threshold = s.depreciationThreshold ?? 10;
+      const alertsEnabled = s.alertsEnabled ?? true;
       return {
         siteId: s.id,
         month,
         count,
         threshold,
-        alert: count >= threshold,
+        alert: alertsEnabled ? count >= threshold : false,
       };
     });
 

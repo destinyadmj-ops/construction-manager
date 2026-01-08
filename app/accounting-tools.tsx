@@ -49,15 +49,15 @@ type CsvColumnKey =
 
 const CSV_COLUMNS: Array<{ key: CsvColumnKey; label: string }> = [
   { key: 'date', label: '日付' },
-  { key: 'summary', label: '摘要' },
+  { key: 'summary', label: '現場名' },
   { key: 'amount', label: '金額' },
-  { key: 'department', label: '部門' },
+  { key: 'department', label: '従業員' },
   { key: 'taxCategory', label: '税区分' },
   { key: 'accountingType', label: '種別' },
   { key: 'note', label: 'メモ' },
   { key: 'startAt', label: '開始' },
   { key: 'endAt', label: '終了' },
-  { key: 'id', label: 'id' },
+  { key: 'id', label: '会社名' },
 ];
 
 function asObject(v: unknown): JsonObject | null {
@@ -283,15 +283,25 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   const [csvSelectedColumns, setCsvSelectedColumns] = useState<CsvColumnKey[]>(() =>
     CSV_COLUMNS.map((c) => c.key),
   );
-  const [csvMetaKeysText, setCsvMetaKeysText] = useState<string>('');
+  const [csvMetaKeys, setCsvMetaKeys] = useState<string[]>([]);
+  const [csvMetaKeyDraft, setCsvMetaKeyDraft] = useState<string>('');
 
-  const csvMetaKeys = useMemo(() => {
-    const raw = (csvMetaKeysText ?? '')
+  const addCsvMetaKeys = useCallback(() => {
+    const raw = (csvMetaKeyDraft ?? '')
       .split(/[\n,]/g)
       .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    return Array.from(new Set(raw)).slice(0, 50);
-  }, [csvMetaKeysText]);
+      .filter((s) => s.length > 0)
+      .filter((s) => !s.includes(','))
+      .slice(0, 50);
+
+    if (raw.length === 0) return;
+
+    setCsvMetaKeys((cur) => {
+      const uniq = Array.from(new Set([...cur, ...raw]));
+      return uniq.slice(0, 50);
+    });
+    setCsvMetaKeyDraft('');
+  }, [csvMetaKeyDraft]);
 
   const presetJsonValid = useMemo(() => {
     try {
@@ -589,10 +599,13 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
     'rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black';
 
   return (
-    <div ref={rootRef} className="space-y-3">
+    <div ref={rootRef} className="space-y-3" data-color-edit-slot="panel">
       <div className="text-[11px] text-zinc-500 dark:text-zinc-400">現場: {effectiveSiteLabelText}</div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Outlook送信（請求書/報告書PDF）</div>
           <button type="button" className={smallBtn} onClick={() => void loadMailLists()}>
@@ -697,6 +710,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
                 <div
                   key={x.id}
                   className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
+                  data-color-edit-slot="border"
                   title={x.error ?? ''}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -719,7 +733,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         </div>
       </div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={smallBtn} onClick={loadPing}>
             会計Ping
@@ -740,7 +757,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         {statusMsg ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
       </div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">CSV出力（プリセット）</div>
           <div className="flex flex-wrap gap-2">
@@ -752,7 +772,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         </div>
       </div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">CSV出力（項目選択）</div>
           <div className="flex flex-wrap gap-2">
@@ -776,6 +799,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
               <label
                 key={c.key}
                 className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                data-color-edit-slot="border"
               >
                 <input
                   type="checkbox"
@@ -795,13 +819,51 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
 
         <div className="mt-3">
           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">追加列（accountingMeta）</div>
-          <textarea
-            value={csvMetaKeysText}
-            onChange={(e) => setCsvMetaKeysText(e.target.value)}
-            placeholder={'例: project\nclient\ninvoiceNo'}
-            className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-            rows={3}
-          />
+
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <input
+              value={csvMetaKeyDraft}
+              onChange={(e) => setCsvMetaKeyDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                addCsvMetaKeys();
+              }}
+              placeholder="例: project, client, invoiceNo"
+              className="w-[min(520px,100%)] rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+              data-color-edit-slot="border"
+            />
+            <button type="button" className={smallBtn} onClick={addCsvMetaKeys} disabled={csvMetaKeyDraft.trim().length === 0}>
+              追加
+            </button>
+            <button type="button" className={smallBtn} onClick={() => setCsvMetaKeys([])} disabled={csvMetaKeys.length === 0}>
+              全解除
+            </button>
+          </div>
+
+          {csvMetaKeys.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {csvMetaKeys.map((k) => (
+                <div
+                  key={k}
+                  className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-300"
+                  data-color-edit-slot="border"
+                  title={`meta.${k}`}
+                >
+                  <span className="max-w-[200px] truncate">{k}</span>
+                  <button
+                    type="button"
+                    className="mh-btn-danger"
+                    aria-label={`${k} を削除`}
+                    onClick={() => setCsvMetaKeys((cur) => cur.filter((x) => x !== k))}
+                  >
+                    削除
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
             出力列: {csvSelectedColumns.length || '（未選択）'} / metaKeys: {csvMetaKeys.length}
           </div>
@@ -818,7 +880,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         </div>
       </div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">出力一覧</div>
           <button type="button" className={smallBtn} onClick={loadExports} disabled={exportsLoading}>
@@ -833,7 +898,11 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         ) : (
           <div className="mt-2 space-y-1">
             {exportFiles.slice(0, 20).map((f) => (
-              <div key={f.fileName} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-2 dark:border-zinc-800">
+              <div
+                key={f.fileName}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-2 dark:border-zinc-800"
+                data-color-edit-slot="border"
+              >
                 <div className="min-w-0 flex-1 truncate text-[11px] text-zinc-700 dark:text-zinc-300" title={f.fileName}>
                   {f.fileName}
                   <span className="ml-2 text-zinc-500 dark:text-zinc-400">{formatBytes(f.sizeBytes)}</span>
@@ -843,12 +912,13 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
                   <a
                     className={smallBtn}
                     href={`/api/accounting/exports/${encodeURIComponent(f.fileName)}`}
+                    data-color-edit-slot="button"
                   >
                     DL
                   </a>
                   <button
                     type="button"
-                    className={smallBtn}
+                    className="mh-btn-danger"
                     onClick={() => deleteExport(f.fileName)}
                     disabled={exportDeletingFile === f.fileName}
                   >
@@ -861,7 +931,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         )}
       </div>
 
-      <div className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+      <div
+        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-slot="border"
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">テンプレ（条件プリセット）</div>
           <button type="button" className={smallBtn} onClick={loadPresetList} disabled={presetsLoading}>

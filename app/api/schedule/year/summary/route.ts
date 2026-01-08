@@ -19,6 +19,8 @@ function startOfDay(d: Date) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const yearParam = (url.searchParams.get('year') ?? '').trim();
+  const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
+  const kind = kindParam === 'daily' ? 'DAILY' : 'NORMAL';
   const year = /^\d{4}$/.test(yearParam) ? Number(yearParam) : new Date().getFullYear();
 
   const since = startOfDay(new Date(year, 0, 1));
@@ -27,6 +29,7 @@ export async function GET(request: Request) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad2(i + 1)}`);
 
   const users = await prisma.user.findMany({
+    where: { kind },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, email: true },
     take: 200,
@@ -38,6 +41,7 @@ export async function GET(request: Request) {
     where: {
       startAt: { gte: since, lt: until },
       userId: { in: userIds },
+      kind,
     },
     select: { userId: true, startAt: true },
     orderBy: [{ userId: 'asc' }, { startAt: 'asc' }],
