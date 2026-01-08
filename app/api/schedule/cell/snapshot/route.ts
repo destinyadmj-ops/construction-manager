@@ -2,6 +2,13 @@ import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
 
+const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+type LabelColor = (typeof LABEL_COLORS)[number];
+
+function isLabelColor(v: unknown): v is LabelColor {
+  return typeof v === 'string' && (LABEL_COLORS as readonly string[]).includes(v);
+}
+
 function startOfDayLocal(ymd: string) {
   const d = new Date(`${ymd}T00:00:00`);
   d.setHours(0, 0, 0, 0);
@@ -56,11 +63,11 @@ function labelForEntry(e: {
   return fallback || null;
 }
 
-function colorForEntry(label: string, meta: unknown): 'default' | 'red' {
+function colorForEntry(label: string, meta: unknown): LabelColor {
   if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
     const m = meta as Record<string, unknown>;
     const c = m.labelColor;
-    if (c === 'red' || c === 'default') return c;
+    if (isLabelColor(c)) return c;
   }
   return label.includes('!') ? 'red' : 'default';
 }
@@ -99,8 +106,8 @@ export async function GET(request: Request) {
     const slot1 = existing[0] ? labelForEntry(existing[0]) : null;
     const slot2 = existing[1] ? labelForEntry(existing[1]) : null;
 
-    const color1: 'default' | 'red' = slot1 && existing[0] ? colorForEntry(slot1, existing[0].accountingMeta) : 'default';
-    const color2: 'default' | 'red' = slot2 && existing[1] ? colorForEntry(slot2, existing[1].accountingMeta) : 'default';
+    const color1: LabelColor = slot1 && existing[0] ? colorForEntry(slot1, existing[0].accountingMeta) : 'default';
+    const color2: LabelColor = slot2 && existing[1] ? colorForEntry(slot2, existing[1].accountingMeta) : 'default';
 
     return Response.json({ ok: true, day, slots: [slot1, slot2], colors: [color1, color2] });
   } catch (e) {

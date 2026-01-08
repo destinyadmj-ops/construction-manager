@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { useHeaderActions } from './header-actions';
 
 type ViewMode = 'week' | 'month' | 'year';
@@ -50,6 +50,10 @@ type YearSummaryApiResponse = {
 type SiteItem = {
   id: string | null;
   label: string;
+  invoiceIssuedThisMonth?: boolean;
+  reportIssuedThisMonth?: boolean;
+  paceNotConsumedAlert?: boolean;
+  unassignedThisMonth?: boolean;
 };
 
 type CellSlots = [string | null, string | null];
@@ -164,7 +168,7 @@ export default function WeekHub() {
 }
 
 function WeekHubInner() {
-  const { setAddAction, setHistoryAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const { setAddAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
@@ -183,7 +187,7 @@ function WeekHubInner() {
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editPasswordMsg, setEditPasswordMsg] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [historyHover, setHistoryHover] = useState<{ userId: string; day: string } | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
   const [selectedSite, setSelectedSite] = useState<SiteItem | null>(null);
   const [siteQuery, setSiteQuery] = useState('');
@@ -191,6 +195,14 @@ function WeekHubInner() {
   const [siteQuickMsg, setSiteQuickMsg] = useState<string | null>(null);
   const siteQuickInputRef = useRef<HTMLInputElement | null>(null);
   const pinSiteLabelRef = useRef<string | null>(null);
+  const sitePaneScrollRef = useRef<HTMLDivElement | null>(null);
+  const onSiteBannerWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
+    const el = sitePaneScrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight) return;
+    e.preventDefault();
+    el.scrollTop += e.deltaY;
+  }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cellMinW, setCellMinW] = useState<number>(112);
   const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
@@ -793,6 +805,9 @@ function WeekHubInner() {
     const now = new Date();
     return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
   });
+  const [contactNameInput, setContactNameInput] = useState('');
+  const [contactSaveMsg, setContactSaveMsg] = useState<string | null>(null);
+  const [isSavingContact, setIsSavingContact] = useState(false);
 
   const [siteDetailOpen, setSiteDetailOpen] = useState(false);
   const [deprMonth, setDeprMonth] = useState<string>(() => {
@@ -848,6 +863,19 @@ function WeekHubInner() {
     const hit = pools.find((u) => u.id === selectedUserId);
     return hit ? hit.name ?? hit.email ?? hit.id : selectedUserId;
   }, [data?.users, monthData?.users, selectedUserId, yearData?.users]);
+
+  const userLabelById = useMemo(() => {
+    const pools: ApiUser[] = [
+      ...(data?.users ?? []),
+      ...(monthData?.users ?? []),
+      ...(yearData?.users ?? []),
+    ];
+    const map = new Map<string, string>();
+    for (const u of pools) {
+      map.set(u.id, u.name ?? u.email ?? u.id);
+    }
+    return map;
+  }, [data?.users, monthData?.users, yearData?.users]);
 
   const currentUsersForOrder = useMemo(() => {
     if (mode === 'week') return data?.users ?? [];
@@ -974,24 +1002,40 @@ function WeekHubInner() {
 
   const refreshSites = useCallback(async () => {
     try {
-      const r = await fetch(`/api/schedule/sites?${kindQuery}`);
+      const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`);
       if (!r.ok) return;
       const json = (await r.json()) as {
         ok: true;
-        names: string[];
-        sites?: Array<{ id: string; label: string }>;
+        sites: Array<{
+          id: string;
+          companyName?: string | null;
+          name: string;
+          invoiceIssuedThisMonth?: boolean;
+          reportIssuedThisMonth?: boolean;
+          paceNotConsumedAlert?: boolean;
+          unassignedThisMonth?: boolean;
+        }>;
       };
       if (!json?.ok) return;
-      const fromLedger = (json.sites ?? []).map((s) => ({ id: s.id, label: s.label }));
-      if (fromLedger.length > 0) {
-        setSites(fromLedger);
-      } else {
-        setSites((json.names ?? []).map((label) => ({ id: null, label })));
-      }
+      setSites(json.sites.map((s) => {
+        const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
+        return {
+          id: s.id,
+          label,
+          invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
+          reportIssuedThisMonth: s.reportIssuedThisMonth,
+          paceNotConsumedAlert: s.paceNotConsumedAlert,
+          unassignedThisMonth: s.unassignedThisMonth,
+        };
+      }));
     } catch {
       // ignore
     }
-  }, [kindQuery]);
+  }, [deprMonth, scheduleKind]);
+
+  useEffect(() => {
+    void refreshSites();
+  }, [refreshSites]);
 
   useEffect(() => {
     const onChanged = (ev: Event) => {
@@ -1241,13 +1285,14 @@ function WeekHubInner() {
         if (!r.ok) return null;
         return (await r.json()) as {
           ok: true;
-          sites: Array<{ id: string; repeatRule: unknown; createdAt: string | Date }>;
+          sites: Array<{ id: string; repeatRule: unknown; createdAt: string | Date; contactName?: string | null }>;
         };
       })
       .then((json) => {
         if (!json?.ok) return;
         const found = json.sites.find((s) => s.id === selectedSite.id);
         setSelectedSiteCreatedAt(found?.createdAt ? String(found.createdAt) : null);
+        setContactNameInput(typeof found?.contactName === 'string' ? found.contactName : '');
         const rr = (found?.repeatRule ?? null) as Partial<RepeatRule> | null;
         setRepeatRule({
           intervalMonths: typeof rr?.intervalMonths === 'number' ? rr.intervalMonths : 1,
@@ -1301,6 +1346,23 @@ function WeekHubInner() {
     }
     return { status: 'ok' as const, targets };
   }, [autoFillMonth, repeatRule.intervalMonths, repeatRule.weekdays, repeatRule.monthDays, selectedSite?.id, selectedSiteCreatedAt]);
+
+  const autoFillUserIdByContact = useMemo(() => {
+    const contact = contactNameInput.trim();
+    if (!contact) return null;
+
+    const users = data?.users ?? monthData?.users ?? yearData?.users ?? [];
+    if (users.length === 0) return null;
+
+    const hitByName = users.find((u) => (u.name ?? '').trim() === contact);
+    if (hitByName) return hitByName.id;
+
+    const lower = contact.toLowerCase();
+    const hitByEmail = users.find((u) => (u.email ?? '').trim().toLowerCase() === lower);
+    return hitByEmail?.id ?? null;
+  }, [contactNameInput, data?.users, monthData?.users, yearData?.users]);
+
+  const effectiveAutoFillUserId = selectedUserId ?? autoFillUserIdByContact;
 
   const dayLabels = useMemo(() => {
     return days.map((d, i) => ({
@@ -1586,18 +1648,30 @@ function WeekHubInner() {
         : undefined,
     );
 
-    setHistoryAction({
-      onClick: () => setShowHistory((v) => !v),
-      disabled: false,
-      title: showHistory ? '編集履歴を閉じる' : '編集履歴',
-    });
+    setHistoryMenu(
+      undoStack.length > 0
+        ? {
+            items: [...undoStack]
+              .slice(-40)
+              .reverse()
+              .map((h) => ({
+                key: `${h.at}:${h.userId}:${h.day}`,
+                at: h.at,
+                editorLabel: userLabelById.get(h.userId) ?? h.userId,
+                siteLabel: `${(h.after[0] ?? h.before[0] ?? '').trim() || '（空）'} (${h.day})`,
+                hover: { userId: h.userId, day: h.day },
+              })),
+            onHover: (hover) => setHistoryHover(hover),
+          }
+        : undefined,
+    );
 
     return () => {
       setAddAction(undefined);
       setSaveAction(undefined);
-      setHistoryAction(undefined);
+      setHistoryMenu(undefined);
     };
-  }, [beginEdit, editActive, editConfigured, editEnabled, setAddAction, setHistoryAction, setSaveAction, showHistory]);
+  }, [beginEdit, editActive, editConfigured, editEnabled, setAddAction, setHistoryMenu, setSaveAction, undoStack, userLabelById]);
 
   useEffect(() => {
     const canUndo = undoStack.length > 0 && !isUndoRedoBusy;
@@ -1630,7 +1704,7 @@ function WeekHubInner() {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
+      <div className="w-full px-4 py-4 lg:px-6">
         {isOffline ? (
           <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
             オフラインのため、表示が古い可能性があります。
@@ -1673,169 +1747,193 @@ function WeekHubInner() {
             ) : null}
           </div>
         ) : null}
-
-        {showHistory ? (
-          <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
-            <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">編集履歴（この端末）</div>
-            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">直近の変更を表示します。</div>
-            <div className="mt-2 max-h-40 overflow-y-auto">
-              {undoStack.length === 0 ? (
-                <div className="py-2 text-xs text-zinc-500 dark:text-zinc-400">まだ履歴がありません。</div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {[...undoStack]
-                    .slice(-20)
-                    .reverse()
-                    .map((h) => (
-                      <div
-                        key={`${h.at}:${h.userId}:${h.day}`}
-                        className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {new Date(h.at).toLocaleString()}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{h.day}</div>
-                        </div>
-                        <div className="mt-1">
-                          {h.before[0] ?? '（空）'} / {h.before[1] ?? '（空）'} → {h.after[0] ?? '（空）'} /{' '}
-                          {h.after[1] ?? '（空）'}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
         {/* Main content */}
-        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[200px_1fr]">
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[360px_1fr]">
           {mode === 'week' ? (
             <>
-              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
-                <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
-                <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  現場を選択 → 週表のセルをクリックで入力
-                </div>
-
-                <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
-                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
-                  <input
-                    value={siteQuery}
-                    onChange={(e) => setSiteQuery(e.target.value)}
-                    placeholder="現場名で絞り込み"
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                  />
-
-                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
-                  <div className="mt-1 flex gap-2">
-                    <input
-                      ref={siteQuickInputRef}
-                      value={siteQuickInput}
-                      onChange={(e) => setSiteQuickInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        void pickSiteFromInput();
-                      }}
-                      placeholder="例: ○○現場  または  会社 / ○○現場"
-                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void pickSiteFromInput()}
-                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                    >
-                      選択
-                    </button>
+              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
+                <div onWheel={onSiteBannerWheel}>
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    現場を選択 → 週表のセルをクリックで入力
                   </div>
-                  {siteQuickMsg ? (
-                    <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
-                  ) : null}
-                </div>
 
-                <div className="mt-3">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">バッジ月（償却カウント）</div>
-                  <input
-                    type="month"
-                    value={deprMonth}
-                    onChange={(e) => setDeprMonth(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                  />
-                </div>
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                    <input
+                      value={siteQuery}
+                      onChange={(e) => setSiteQuery(e.target.value)}
+                      placeholder="現場名で絞り込み"
+                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
 
-                <div className="mt-3 max-h-[calc(100vh-56px-240px)] overflow-y-auto">
-                  {sites.length === 0 ? (
-                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      まだ候補がありません（過去データから自動で出ます）。
+                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        ref={siteQuickInputRef}
+                        value={siteQuickInput}
+                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          void pickSiteFromInput();
+                        }}
+                        placeholder="例: ○○現場  または  会社 / ○○現場"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void pickSiteFromInput()}
+                        className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        選択
+                      </button>
                     </div>
-                  ) : visibleSites.length === 0 ? (
-                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
-                      {visibleSites.map((s) => {
-                        const active = selectedSite?.label === s.label;
-                        const badge = s.id ? siteDeprMap[s.id] : undefined;
-                        return (
-                          <button
-                            key={s.id ?? s.label}
-                            type="button"
-                            onClick={() => {
-                              if (active && s.id) {
-                                const sp = new URLSearchParams({ kind: scheduleKind });
-                                if (selectedUserId) sp.set('userId', selectedUserId);
-                                router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
-                                return;
-                              }
-                              setSelectedSite(s);
-                            }}
-                            className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                              active
-                                ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
-                                : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1 truncate">
-                                {s.label}
-                                {s.label.includes('!') ? (
-                                  <span className="ml-2 text-red-600 dark:text-red-400">!</span>
-                                ) : null}
+                    {siteQuickMsg ? (
+                      <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  ref={sitePaneScrollRef}
+                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
+                    <input
+                      type="month"
+                      value={deprMonth}
+                      onChange={(e) => setDeprMonth(e.target.value)}
+                      className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </div>
+
+                  <div
+                    className="mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                  >
+                    {sites.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                        まだ候補がありません（過去データから自動で出ます）。
+                      </div>
+                    ) : visibleSites.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {visibleSites.map((s) => {
+                          const active = selectedSite?.label === s.label;
+                          const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          return (
+                            <button
+                              key={s.id ?? s.label}
+                              type="button"
+                              onClick={() => {
+                                if (active && s.id) {
+                                  const sp = new URLSearchParams({ kind: scheduleKind });
+                                  if (selectedUserId) sp.set('userId', selectedUserId);
+                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+                                  return;
+                                }
+                                setSelectedSite(s);
+                              }}
+                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
+                                active
+                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
+                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0 flex-1 truncate">
+                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                  {s.label.includes('!') ? (
+                                    <span className="ml-2 text-red-600 dark:text-red-400">!</span>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {s.invoiceIssuedThisMonth === false ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                                      title="請求未発行"
+                                    />
+                                  ) : null}
+                                  {s.reportIssuedThisMonth === false ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600"
+                                      title="報告未発行"
+                                    />
+                                  ) : null}
+                                  {s.unassignedThisMonth ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                                      title="未配置"
+                                    />
+                                  ) : null}
+                                  {badge ? (
+                                    <span
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!s.id) return;
+                                        setSelectedSite(s);
+                                        setSiteDetailOpen(true);
+                                      }}
+                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                        badge.alert
+                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
+                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                                      }`}
+                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
+                                    >
+                                      {badge.count}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
-                              {badge ? (
-                                <span
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    if (!s.id) return;
-                                    setSelectedSite(s);
-                                    setSiteDetailOpen(true);
-                                  }}
-                                  className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                    badge.alert
-                                      ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                      : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                  }`}
-                                  title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                >
-                                  {badge.count}
-                                </span>
-                              ) : null}
-                            </div>
-                          </button>
-                        );
-                      })}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    選択中: {selectedSite?.label ?? '（なし）'}
+                  </div>
+
+                  {selectedSite?.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#punch`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        打刻
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#photos`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        写真
+                      </button>
                     </div>
-                  )}
-                </div>
+                  ) : null}
 
-                <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  選択中: {selectedSite?.label ?? '（なし）'}
-                </div>
-
-                <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  選択中の現場をもう一度クリックで詳細へ
-                </div>
+                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    選択中の現場をもう一度クリックで詳細へ
+                  </div>
 
                 <div
                   id="site-ledger"
@@ -2065,9 +2163,9 @@ function WeekHubInner() {
 
                     <button
                       type="button"
-                      disabled={!selectedSite?.id || !selectedUserId || isAutoFilling}
+                      disabled={!selectedSite?.id || !effectiveAutoFillUserId || isAutoFilling}
                       onClick={async () => {
-                        if (!selectedSite?.id || !selectedUserId) return;
+                        if (!selectedSite?.id || !effectiveAutoFillUserId) return;
                         setIsAutoFilling(true);
                         setAutoFillResult(null);
                         try {
@@ -2075,7 +2173,7 @@ function WeekHubInner() {
                             method: 'POST',
                             headers: { 'content-type': 'application/json' },
                             body: JSON.stringify({
-                              userId: selectedUserId,
+                              userId: effectiveAutoFillUserId,
                               siteId: selectedSite.id,
                               month: autoFillMonth,
                               kind: apiKind,
@@ -2111,9 +2209,9 @@ function WeekHubInner() {
 
                     <button
                       type="button"
-                      disabled={!selectedSite?.id || !selectedUserId || isAutoFilling}
+                      disabled={!selectedSite?.id || !effectiveAutoFillUserId || isAutoFilling}
                       onClick={async () => {
-                        if (!selectedSite?.id || !selectedUserId) return;
+                        if (!selectedSite?.id || !effectiveAutoFillUserId) return;
                         setIsAutoFilling(true);
                         setAutoFillResult(null);
                         try {
@@ -2122,7 +2220,7 @@ function WeekHubInner() {
                             method: 'POST',
                             headers: { 'content-type': 'application/json' },
                             body: JSON.stringify({
-                              userId: selectedUserId,
+                              userId: effectiveAutoFillUserId,
                               siteId: selectedSite.id,
                               month: autoFillMonth,
                               days: weekDays,
@@ -2234,6 +2332,7 @@ function WeekHubInner() {
                     ) : null}
                   </div>
                 </div>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -2257,11 +2356,13 @@ function WeekHubInner() {
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
                   isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
+                  historyHover={historyHover}
                   onAssigned={async () => {
                     if (selectedSite?.label) {
                       pinSiteLabelRef.current = selectedSite.label;
@@ -2299,127 +2400,189 @@ function WeekHubInner() {
             </>
           ) : mode === 'month' ? (
             <>
-              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
-                <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
-                <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  現場を選択 → 月表のセルをクリックで入力
-                </div>
-
-                <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
-                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
-                  <input
-                    value={siteQuery}
-                    onChange={(e) => setSiteQuery(e.target.value)}
-                    placeholder="現場名で絞り込み"
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                  />
-
-                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
-                  <div className="mt-1 flex gap-2">
-                    <input
-                      ref={siteQuickInputRef}
-                      value={siteQuickInput}
-                      onChange={(e) => setSiteQuickInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        void pickSiteFromInput();
-                      }}
-                      placeholder="例: ○○現場  または  会社 / ○○現場"
-                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void pickSiteFromInput()}
-                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                    >
-                      選択
-                    </button>
+              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
+                <div onWheel={onSiteBannerWheel}>
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    現場を選択 → 月表のセルをクリックで入力
                   </div>
-                  {siteQuickMsg ? (
-                    <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                    <input
+                      value={siteQuery}
+                      onChange={(e) => setSiteQuery(e.target.value)}
+                      placeholder="現場名で絞り込み"
+                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+
+                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        ref={siteQuickInputRef}
+                        value={siteQuickInput}
+                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          void pickSiteFromInput();
+                        }}
+                        placeholder="例: ○○現場  または  会社 / ○○現場"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void pickSiteFromInput()}
+                        className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        選択
+                      </button>
+                    </div>
+                    {siteQuickMsg ? (
+                      <div className="mt-2 text-[11px] text-red-700 dark:text-red-300">{siteQuickMsg}</div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  ref={sitePaneScrollRef}
+                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
+                    <input
+                      type="month"
+                      value={deprMonth}
+                      onChange={(e) => setDeprMonth(e.target.value)}
+                      className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </div>
+
+                  <div
+                    className="mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                  >
+                    {sites.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                        まだ候補がありません（過去データから自動で出ます）。
+                      </div>
+                    ) : visibleSites.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {visibleSites.map((s) => {
+                          const active = selectedSite?.label === s.label;
+                          const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          return (
+                            <button
+                              key={s.id ?? s.label}
+                              type="button"
+                              onClick={() => {
+                                if (active && s.id) {
+                                  const sp = new URLSearchParams({ kind: scheduleKind });
+                                  if (selectedUserId) sp.set('userId', selectedUserId);
+                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+                                  return;
+                                }
+                                setSelectedSite(s);
+                              }}
+                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
+                                active
+                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
+                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0 flex-1 truncate">
+                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {s.invoiceIssuedThisMonth === false ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                                      title="請求未発行"
+                                    />
+                                  ) : null}
+                                  {s.reportIssuedThisMonth === false ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600"
+                                      title="報告未発行"
+                                    />
+                                  ) : null}
+                                  {s.unassignedThisMonth ? (
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                                      title="未配置"
+                                    />
+                                  ) : null}
+                                  {badge ? (
+                                    <span
+                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                        badge.alert
+                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
+                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                                      }`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!s.id) return;
+                                        setSelectedSite(s);
+                                        setSiteDetailOpen(true);
+                                      }}
+                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
+                                    >
+                                      {badge.count}
+                                    </span>
+                                  ) : null}
+                                  {s.label.includes('!') ? (
+                                    <span className="ml-2 text-red-600 dark:text-red-400">!</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    選択中: {selectedSite?.label ?? '（なし）'}
+                  </div>
+
+                  {selectedSite?.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#punch`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        打刻
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#photos`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        写真
+                      </button>
+                    </div>
                   ) : null}
-                </div>
 
-                <div className="mt-3">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">バッジ月（償却カウント）</div>
-                  <input
-                    type="month"
-                    value={deprMonth}
-                    onChange={(e) => setDeprMonth(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                  />
-                </div>
-
-                <div className="mt-3 max-h-[calc(100vh-56px-240px)] overflow-y-auto">
-                  {sites.length === 0 ? (
-                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      まだ候補がありません（過去データから自動で出ます）。
-                    </div>
-                  ) : visibleSites.length === 0 ? (
-                    <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
-                      {visibleSites.map((s) => {
-                        const active = selectedSite?.label === s.label;
-                        const badge = s.id ? siteDeprMap[s.id] : undefined;
-                        return (
-                          <button
-                            key={s.id ?? s.label}
-                            type="button"
-                            onClick={() => {
-                              if (active && s.id) {
-                                const sp = new URLSearchParams({ kind: scheduleKind });
-                                if (selectedUserId) sp.set('userId', selectedUserId);
-                                router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
-                                return;
-                              }
-                              setSelectedSite(s);
-                            }}
-                            className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                              active
-                                ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
-                                : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1 truncate">{s.label}</div>
-                              {badge ? (
-                                <span
-                                  className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                    badge.alert
-                                      ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                      : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                  }`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    if (!s.id) return;
-                                    setSelectedSite(s);
-                                    setSiteDetailOpen(true);
-                                  }}
-                                  title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                >
-                                  {badge.count}
-                                </span>
-                              ) : null}
-                              {s.label.includes('!') ? (
-                                <span className="ml-2 text-red-600 dark:text-red-400">!</span>
-                              ) : null}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  選択中: {selectedSite?.label ?? '（なし）'}
-                </div>
-
-                <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  選択中の現場をもう一度クリックで詳細へ
+                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    選択中の現場をもう一度クリックで詳細へ
+                  </div>
                 </div>
               </div>
 
@@ -2442,11 +2605,13 @@ function WeekHubInner() {
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
                   isEditable={editActive}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
+                  historyHover={historyHover}
                   onAssigned={async () => {
                     if (selectedSite?.label) {
                       pinSiteLabelRef.current = selectedSite.label;
@@ -2483,26 +2648,32 @@ function WeekHubInner() {
             </>
           ) : mode === 'year' ? (
             <>
-              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black">
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">年予定（サマリ）</div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400">{viewYear}年</div>
-                </div>
-                <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  従業員×12ヶ月。各セルは「日数 / 件数」です（セルクリックで月予定へ）。
-                </div>
-
-                <div className="mt-3">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">バッジ月（償却カウント）</div>
-                  <input
-                    type="month"
-                    value={deprMonth}
-                    onChange={(e) => setDeprMonth(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                  />
+              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
+                <div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">年予定（サマリ）</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400">{viewYear}年</div>
+                  </div>
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    従業員×12ヶ月。各セルは「日数 / 件数」です（セルクリックで月予定へ）。
+                  </div>
                 </div>
 
-                <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <div
+                  ref={sitePaneScrollRef}
+                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
+                    <input
+                      type="month"
+                      value={deprMonth}
+                      onChange={(e) => setDeprMonth(e.target.value)}
+                      className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </div>
+
+                  <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
 
@@ -2542,13 +2713,13 @@ function WeekHubInner() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 max-h-[calc(100vh-56px-240px)] overflow-y-auto">
+                  <div className="mt-3 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
                     {sites.length === 0 ? (
-                      <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                         まだ候補がありません（過去データから自動で出ます）。
                       </div>
                     ) : visibleSites.length === 0 ? (
-                      <div className="py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {visibleSites.map((s) => {
@@ -2574,26 +2745,39 @@ function WeekHubInner() {
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1 truncate">{s.label}</div>
-                                {badge ? (
-                                  <span
-                                    className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                      badge.alert
-                                        ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                        : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                    }`}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      if (!s.id) return;
-                                      setSelectedSite(s);
-                                      setSiteDetailOpen(true);
-                                    }}
-                                    title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                  >
-                                    {badge.count}
-                                  </span>
-                                ) : null}
+                                <div className="min-w-0 flex-1 truncate">
+                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {s.invoiceIssuedThisMonth === false ? (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600" title="請求未発行" />
+                                  ) : null}
+                                  {s.reportIssuedThisMonth === false ? (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600" title="報告未発行" />
+                                  ) : null}
+                                  {s.unassignedThisMonth ? (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600" title="未配置" />
+                                  ) : null}
+                                  {badge ? (
+                                    <span
+                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                        badge.alert
+                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
+                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                                      }`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!s.id) return;
+                                        setSelectedSite(s);
+                                        setSiteDetailOpen(true);
+                                      }}
+                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
+                                    >
+                                      {badge.count}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
                             </button>
                           );
@@ -2605,6 +2789,38 @@ function WeekHubInner() {
                   <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
                     選択中: {selectedSite?.label ?? '（なし）'}
                   </div>
+                </div>
+
+                  {selectedSite?.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#punch`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        打刻
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const siteId = selectedSite.id;
+                          if (!siteId) return;
+                          const sp = new URLSearchParams({ kind: scheduleKind });
+                          if (selectedUserId) sp.set('userId', selectedUserId);
+                          router.push(`/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}#photos`);
+                        }}
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                      >
+                        写真
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -2673,6 +2889,66 @@ function WeekHubInner() {
                 >
                   閉じる
                 </button>
+              </div>
+
+              <div className="mt-4 rounded-md border border-zinc-200 bg-white px-3 py-3 text-xs dark:border-zinc-800 dark:bg-black">
+                <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">担当者</div>
+                <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  自動入力の対象にも使います（従業員名/メールに一致した場合）。
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    value={contactNameInput}
+                    onChange={(e) => {
+                      setContactSaveMsg(null);
+                      setContactNameInput(e.target.value);
+                    }}
+                    placeholder="例: 山田太郎"
+                    className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                  />
+                  <button
+                    type="button"
+                    disabled={!selectedSite?.id || isSavingContact}
+                    onClick={async () => {
+                      if (!selectedSite?.id) return;
+                      setContactSaveMsg(null);
+
+                      const v = contactNameInput.trim();
+                      setIsSavingContact(true);
+                      try {
+                        const r = await fetch('/api/sites', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({ id: selectedSite.id, contactName: v || null }),
+                        });
+
+                        const json = (await r.json().catch(() => null)) as
+                          | { ok: true }
+                          | { ok: false; error?: string }
+                          | null;
+
+                        if (!r.ok || !json || !json.ok) {
+                          setContactSaveMsg((json && !json.ok ? json.error : undefined) || `HTTP ${r.status}`);
+                          return;
+                        }
+
+                        setContactSaveMsg('保存しました');
+                      } catch {
+                        setContactSaveMsg('保存に失敗しました');
+                      } finally {
+                        setIsSavingContact(false);
+                      }
+                    }}
+                    className="shrink-0 rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  >
+                    {isSavingContact ? '保存中…' : '保存'}
+                  </button>
+                </div>
+
+                {contactSaveMsg ? (
+                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{contactSaveMsg}</div>
+                ) : null}
               </div>
 
               <div className="mt-4 rounded-md border border-zinc-200 bg-white px-3 py-3 text-xs dark:border-zinc-800 dark:bg-black">
@@ -2818,12 +3094,14 @@ function WeekGrid({
   selectedSite,
   onEnsureSite,
   cellClickAction,
+  cellTextColor,
   isEditable,
   selectedUserId,
   onSelectUser,
   onNotify,
   onCellHistory,
   onAssigned,
+  historyHover,
   userOrder,
   reorderMode,
   onMoveUser,
@@ -2847,12 +3125,14 @@ function WeekGrid({
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
   isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  historyHover: { userId: string; day: string } | null;
   userOrder: string[];
   reorderMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
@@ -2941,7 +3221,7 @@ function WeekGrid({
       {/* Week switch tabs: sticky at the top (viewport) */}
       <div
         ref={weekTabsRef}
-        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-200 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-800 dark:bg-black/90"
+        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
@@ -2999,7 +3279,7 @@ function WeekGrid({
       </div>
 
       {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
-      <div className="sticky z-30 border-b border-zinc-200 dark:border-zinc-800" style={{ top: headerTop }}>
+      <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
         <div
           ref={headerScrollRef}
           className="overflow-x-auto"
@@ -3012,11 +3292,11 @@ function WeekGrid({
               gridTemplateColumns: `minmax(120px, 180px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300" />
             {dayLabels.map((d) => (
               <div
                 key={d.key}
-                className={`pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
+                className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
                   d.isSun
                     ? 'text-red-600 dark:text-red-400'
                     : d.isSat
@@ -3068,6 +3348,7 @@ function WeekGrid({
                   onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
@@ -3075,6 +3356,7 @@ function WeekGrid({
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
                   onAssigned={onAssigned}
+                  historyHover={historyHover}
                   reorderMode={reorderMode}
                   moveUpDisabled={idx === 0}
                   moveDownDisabled={idx === users.length - 1}
@@ -3110,12 +3392,14 @@ function MonthGrid({
   selectedSite,
   onEnsureSite,
   cellClickAction,
+  cellTextColor,
   isEditable,
   selectedUserId,
   onSelectUser,
   onNotify,
   onCellHistory,
   onAssigned,
+  historyHover,
   userOrder,
   reorderMode,
   onMoveUser,
@@ -3137,12 +3421,14 @@ function MonthGrid({
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
   isEditable: boolean;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  historyHover: { userId: string; day: string } | null;
   userOrder: string[];
   reorderMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
@@ -3230,7 +3516,7 @@ function MonthGrid({
       {/* Month switch: sticky at the top (viewport) */}
       <div
         ref={monthTabsRef}
-        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-200 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-800 dark:bg-black/90"
+        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
@@ -3264,7 +3550,7 @@ function MonthGrid({
       </div>
 
       {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
-      <div className="sticky z-30 border-b border-zinc-200 dark:border-zinc-800" style={{ top: headerTop }}>
+      <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
         <div
           ref={headerScrollRef}
           className="overflow-x-auto"
@@ -3277,11 +3563,11 @@ function MonthGrid({
               gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300" />
             {dayLabels.map((d) => (
               <div
                 key={d.key}
-                className={`pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-black ${
+                className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
                   d.isSun
                     ? 'text-red-600 dark:text-red-400'
                     : d.isSat
@@ -3336,6 +3622,7 @@ function MonthGrid({
                   onEnsureSite={onEnsureSite}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
+                  cellTextColor={cellTextColor}
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
@@ -3343,6 +3630,7 @@ function MonthGrid({
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
                   onAssigned={onAssigned}
+                  historyHover={historyHover}
                   reorderMode={reorderMode}
                   moveUpDisabled={idx === 0}
                   moveDownDisabled={idx === users.length - 1}
@@ -3380,7 +3668,7 @@ function AddUserRow({
   return (
     <>
       <div
-        className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-2 py-2 text-left text-[12px] dark:border-zinc-800 dark:bg-black"
+        className="sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[12px] dark:border-zinc-600 dark:bg-black"
         style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
       >
         <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">従業員追加</div>
@@ -3682,6 +3970,7 @@ function Row({
   onEnsureSite,
   selectedUserId,
   cellClickAction,
+  cellTextColor,
   gridLayout,
   cellMinH,
   isEditable,
@@ -3689,6 +3978,7 @@ function Row({
   onNotify,
   onCellHistory,
   onAssigned,
+  historyHover,
   reorderMode,
   moveUpDisabled,
   moveDownDisabled,
@@ -3705,6 +3995,7 @@ function Row({
   onEnsureSite?: () => Promise<SiteItem | null>;
   selectedUserId: string | null;
   cellClickAction: CellClickAction;
+  cellTextColor: CellTextColor;
   gridLayout: GridLayout;
   cellMinH: number;
   isEditable: boolean;
@@ -3712,6 +4003,7 @@ function Row({
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
+  historyHover: { userId: string; day: string } | null;
   reorderMode?: boolean;
   moveUpDisabled?: boolean;
   moveDownDisabled?: boolean;
@@ -3720,68 +4012,6 @@ function Row({
   rowCellClassName?: string;
 }) {
   const isSelectedUser = selectedUserId === user.id;
-  const [cellMenu, setCellMenu] = useState<
-    | null
-    | {
-        day: string;
-        left: number;
-        top: number;
-        slot1: string | null;
-        slot2: string | null;
-      }
-  >(null);
-  const cellMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!cellMenu) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = cellMenuRef.current;
-      if (!el) {
-        setCellMenu(null);
-        return;
-      }
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setCellMenu(null);
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCellMenu(null);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [cellMenu]);
-
-  useEffect(() => {
-    if (!cellMenu) return;
-    const el = cellMenuRef.current;
-    if (!el) return;
-
-    const raf = window.requestAnimationFrame(() => {
-      const menuRect = el.getBoundingClientRect();
-      const vw = window.innerWidth || 0;
-      const vh = window.innerHeight || 0;
-      const pad = 8;
-
-      const nextLeft = Math.max(pad, Math.min(cellMenu.left, Math.max(pad, vw - menuRect.width - pad)));
-      const nextTop = Math.max(pad, Math.min(cellMenu.top, Math.max(pad, vh - menuRect.height - pad)));
-
-      if (Math.abs(nextLeft - cellMenu.left) >= 1 || Math.abs(nextTop - cellMenu.top) >= 1) {
-        setCellMenu((cur) => {
-          if (!cur) return cur;
-          if (cur.day !== cellMenu.day) return cur;
-          return { ...cur, left: nextLeft, top: nextTop };
-        });
-      }
-    });
-
-    return () => window.cancelAnimationFrame(raf);
-  }, [cellMenu]);
 
   const formatCellActionReason = (
     reason: unknown,
@@ -3900,6 +4130,7 @@ function Row({
           day: input.day,
           before,
           after,
+          // eslint-disable-next-line react-hooks/purity -- executed from an event-triggered async action
           at: Date.now(),
         });
       }
@@ -3925,7 +4156,7 @@ function Row({
         data-user-row={user.id}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
-        className={`sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-800 dark:bg-black ${
+        className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black ${
           isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : ''
         }`}
       >
@@ -3972,6 +4203,7 @@ function Row({
         const slot2 = cell?.slot2 ?? null;
         const c1 = cell?.color1 ?? 'default';
         const c2 = cell?.color2 ?? 'default';
+        const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
 
         return (
           <button
@@ -3983,12 +4215,18 @@ function Row({
                 return;
               }
 
-              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-              setCellMenu({ day: d.key, left: rect.left, top: rect.bottom, slot1, slot2 });
+              e.preventDefault();
+              const beforeFallback: CellSlots = [slot1, slot2];
+              void runCellAction({
+                day: d.key,
+                action: cellClickAction,
+                color: cellTextColor,
+                beforeFallback,
+              });
             }}
-            className={`border-b border-l border-zinc-200 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 ${
-              rowCellClassName ?? ''
-            }`}
+            className={`border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
+              isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
+            } ${rowCellClassName ?? ''}`}
           >
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {/* Two-slot compact layout (no extra controls yet) */}
@@ -4010,86 +4248,6 @@ function Row({
           </button>
         );
       })}
-
-      {cellMenu ? (
-        <div
-          ref={cellMenuRef}
-          className="fixed z-50 w-[160px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-          style={{ left: Math.max(8, Math.round(cellMenu.left)), top: Math.max(8, Math.round(cellMenu.top)) }}
-        >
-          <button
-            type="button"
-            className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-            onClick={() => {
-              const day = cellMenu.day;
-              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
-              setCellMenu(null);
-              void runCellAction({
-                day,
-                action: cellClickAction,
-                color: 'default',
-                beforeFallback,
-              });
-            }}
-          >
-            反映（黒）
-          </button>
-          <button
-            type="button"
-            className="block w-full border-t border-zinc-200 px-3 py-2 text-left text-[11px] text-red-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-red-300 dark:hover:bg-zinc-900"
-            onClick={() => {
-              const day = cellMenu.day;
-              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
-              setCellMenu(null);
-              void runCellAction({
-                day,
-                action: cellClickAction,
-                color: 'red',
-                beforeFallback,
-              });
-            }}
-          >
-            反映（赤）
-          </button>
-
-          <div className="border-t border-zinc-200 dark:border-zinc-800" />
-
-          <button
-            type="button"
-            className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-            onClick={() => {
-              const day = cellMenu.day;
-              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
-              setCellMenu(null);
-              void runCellAction({
-                day,
-                action: 'recolor',
-                color: 'default',
-                beforeFallback,
-              });
-            }}
-          >
-            色変更（黒）
-          </button>
-          <button
-            type="button"
-            className="block w-full border-t border-zinc-200 px-3 py-2 text-left text-[11px] text-red-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-red-300 dark:hover:bg-zinc-900"
-            onClick={() => {
-              const day = cellMenu.day;
-              const beforeFallback: CellSlots = [cellMenu.slot1, cellMenu.slot2];
-              setCellMenu(null);
-              void runCellAction({
-                day,
-                action: 'recolor',
-                color: 'red',
-                beforeFallback,
-              });
-            }}
-          >
-            色変更（赤）
-          </button>
-        </div>
-      ) : null}
     </>
   );
 }

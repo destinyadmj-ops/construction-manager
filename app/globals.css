@@ -5,6 +5,11 @@
   --foreground: #171717;
   --app-header-h: 56px;
   --mode-tabs-h: 0px;
+  --masterhub-font-size: 16px;
+}
+
+html {
+  font-size: var(--masterhub-font-size);
 }
 
 @theme inline {
@@ -25,4 +30,3101 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  /* Full-screen color edit mode (UI helper) */
+  body.mh-color-edit-mode {
+    cursor: crosshair;
+  }
+
+  /* Shared buttons (opt-in via className) */
+  .mh-btn,
+  .mh-btn-primary,
+  .mh-btn-danger {
+    @apply rounded-md border px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60;
+    @apply border-zinc-600 bg-white/60 text-zinc-700;
+    @apply dark:border-zinc-400 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black;
+  }
+
+  /* Theme-controlled button colors: Primary */
+  .mh-btn-primary-default .mh-btn-primary {
+    @apply border-zinc-400 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200;
+  }
+  .mh-btn-primary-red .mh-btn-primary {
+    @apply border-red-500 text-red-700 dark:border-red-600 dark:text-red-300;
+  }
+  .mh-btn-primary-orange .mh-btn-primary {
+    @apply border-orange-500 text-orange-700 dark:border-orange-600 dark:text-orange-300;
+  }
+  .mh-btn-primary-yellow .mh-btn-primary {
+    @apply border-yellow-500 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300;
+  }
+  .mh-btn-primary-green .mh-btn-primary {
+    @apply border-green-500 text-green-700 dark:border-green-600 dark:text-green-300;
+  }
+  .mh-btn-primary-blue .mh-btn-primary {
+    @apply border-blue-500 text-blue-700 dark:border-blue-600 dark:text-blue-300;
+  }
+  .mh-btn-primary-purple .mh-btn-primary {
+    @apply border-purple-500 text-purple-700 dark:border-purple-600 dark:text-purple-300;
+  }
+  .mh-btn-primary-pink .mh-btn-primary {
+    @apply border-pink-500 text-pink-700 dark:border-pink-600 dark:text-pink-300;
+  }
+
+  /* Theme-controlled button colors: Danger */
+  .mh-btn-danger-default .mh-btn-danger {
+    @apply border-zinc-400 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200;
+  }
+  .mh-btn-danger-red .mh-btn-danger {
+    @apply border-red-500 text-red-700 dark:border-red-600 dark:text-red-300;
+  }
+  .mh-btn-danger-orange .mh-btn-danger {
+    @apply border-orange-500 text-orange-700 dark:border-orange-600 dark:text-orange-300;
+  }
+  .mh-btn-danger-yellow .mh-btn-danger {
+    @apply border-yellow-500 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300;
+  }
+  .mh-btn-danger-green .mh-btn-danger {
+    @apply border-green-500 text-green-700 dark:border-green-600 dark:text-green-300;
+  }
+  .mh-btn-danger-blue .mh-btn-danger {
+    @apply border-blue-500 text-blue-700 dark:border-blue-600 dark:text-blue-300;
+  }
+  .mh-btn-danger-purple .mh-btn-danger {
+    @apply border-purple-500 text-purple-700 dark:border-purple-600 dark:text-purple-300;
+  }
+  .mh-btn-danger-pink .mh-btn-danger {
+    @apply border-pink-500 text-pink-700 dark:border-pink-600 dark:text-pink-300;
+  }
+
+  /* Page background tone */
+  .mh-surface-soft body {
+    @apply bg-zinc-50;
+  }
+  .dark .mh-surface-soft body {
+    @apply bg-zinc-950;
+  }
+
+  /* v2: Page background (color + shade stop) */
+  .mh-surface-default-25 body {
+    @apply bg-zinc-50;
+  }
+  .mh-surface-default-50 body {
+    @apply bg-zinc-100;
+  }
+  .mh-surface-default-75 body {
+    @apply bg-zinc-200;
+  }
+  .mh-surface-default-100 body {
+    @apply bg-zinc-300;
+  }
+  .dark .mh-surface-default-25 body {
+    @apply bg-zinc-950;
+  }
+  .dark .mh-surface-default-50 body {
+    @apply bg-zinc-900;
+  }
+  .dark .mh-surface-default-75 body {
+    @apply bg-zinc-800;
+  }
+  .dark .mh-surface-default-100 body {
+    @apply bg-zinc-700;
+  }
+
+  .mh-surface-red-25 body {
+    @apply bg-red-50;
+  }
+  .mh-surface-red-50 body {
+    @apply bg-red-100;
+  }
+  .mh-surface-red-75 body {
+    @apply bg-red-200;
+  }
+  .mh-surface-red-100 body {
+    @apply bg-red-300;
+  }
+  .dark .mh-surface-red-25 body {
+    @apply bg-red-950;
+  }
+  .dark .mh-surface-red-50 body {
+    @apply bg-red-900;
+  }
+  .dark .mh-surface-red-75 body {
+    @apply bg-red-800;
+  }
+  .dark .mh-surface-red-100 body {
+    @apply bg-red-700;
+  }
+
+  .mh-surface-orange-25 body {
+    @apply bg-orange-50;
+  }
+  .mh-surface-orange-50 body {
+    @apply bg-orange-100;
+  }
+  .mh-surface-orange-75 body {
+    @apply bg-orange-200;
+  }
+  .mh-surface-orange-100 body {
+    @apply bg-orange-300;
+  }
+  .dark .mh-surface-orange-25 body {
+    @apply bg-orange-950;
+  }
+  .dark .mh-surface-orange-50 body {
+    @apply bg-orange-900;
+  }
+  .dark .mh-surface-orange-75 body {
+    @apply bg-orange-800;
+  }
+  .dark .mh-surface-orange-100 body {
+    @apply bg-orange-700;
+  }
+
+  .mh-surface-yellow-25 body {
+    @apply bg-yellow-50;
+  }
+  .mh-surface-yellow-50 body {
+    @apply bg-yellow-100;
+  }
+  .mh-surface-yellow-75 body {
+    @apply bg-yellow-200;
+  }
+  .mh-surface-yellow-100 body {
+    @apply bg-yellow-300;
+  }
+  .dark .mh-surface-yellow-25 body {
+    @apply bg-yellow-950;
+  }
+  .dark .mh-surface-yellow-50 body {
+    @apply bg-yellow-900;
+  }
+  .dark .mh-surface-yellow-75 body {
+    @apply bg-yellow-800;
+  }
+  .dark .mh-surface-yellow-100 body {
+    @apply bg-yellow-700;
+  }
+
+  .mh-surface-green-25 body {
+    @apply bg-green-50;
+  }
+  .mh-surface-green-50 body {
+    @apply bg-green-100;
+  }
+  .mh-surface-green-75 body {
+    @apply bg-green-200;
+  }
+  .mh-surface-green-100 body {
+    @apply bg-green-300;
+  }
+  .dark .mh-surface-green-25 body {
+    @apply bg-green-950;
+  }
+  .dark .mh-surface-green-50 body {
+    @apply bg-green-900;
+  }
+  .dark .mh-surface-green-75 body {
+    @apply bg-green-800;
+  }
+  .dark .mh-surface-green-100 body {
+    @apply bg-green-700;
+  }
+
+  .mh-surface-blue-25 body {
+    @apply bg-blue-50;
+  }
+  .mh-surface-blue-50 body {
+    @apply bg-blue-100;
+  }
+  .mh-surface-blue-75 body {
+    @apply bg-blue-200;
+  }
+  .mh-surface-blue-100 body {
+    @apply bg-blue-300;
+  }
+  .dark .mh-surface-blue-25 body {
+    @apply bg-blue-950;
+  }
+  .dark .mh-surface-blue-50 body {
+    @apply bg-blue-900;
+  }
+  .dark .mh-surface-blue-75 body {
+    @apply bg-blue-800;
+  }
+  .dark .mh-surface-blue-100 body {
+    @apply bg-blue-700;
+  }
+
+  .mh-surface-purple-25 body {
+    @apply bg-purple-50;
+  }
+  .mh-surface-purple-50 body {
+    @apply bg-purple-100;
+  }
+  .mh-surface-purple-75 body {
+    @apply bg-purple-200;
+  }
+  .mh-surface-purple-100 body {
+    @apply bg-purple-300;
+  }
+  .dark .mh-surface-purple-25 body {
+    @apply bg-purple-950;
+  }
+  .dark .mh-surface-purple-50 body {
+    @apply bg-purple-900;
+  }
+  .dark .mh-surface-purple-75 body {
+    @apply bg-purple-800;
+  }
+  .dark .mh-surface-purple-100 body {
+    @apply bg-purple-700;
+  }
+
+  .mh-surface-pink-25 body {
+    @apply bg-pink-50;
+  }
+  .mh-surface-pink-50 body {
+    @apply bg-pink-100;
+  }
+  .mh-surface-pink-75 body {
+    @apply bg-pink-200;
+  }
+  .mh-surface-pink-100 body {
+    @apply bg-pink-300;
+  }
+  .dark .mh-surface-pink-25 body {
+    @apply bg-pink-950;
+  }
+  .dark .mh-surface-pink-50 body {
+    @apply bg-pink-900;
+  }
+  .dark .mh-surface-pink-75 body {
+    @apply bg-pink-800;
+  }
+  .dark .mh-surface-pink-100 body {
+    @apply bg-pink-700;
+  }
+
+  /* Panel/card background tone (best-effort, targets common classes) */
+  .mh-panel-soft .bg-white {
+    @apply bg-zinc-50;
+  }
+  .mh-panel-soft .bg-white\/60 {
+    @apply bg-zinc-50/60;
+  }
+  .mh-panel-soft .bg-zinc-50 {
+    @apply bg-zinc-100;
+  }
+  .mh-panel-soft .bg-zinc-50\/60 {
+    @apply bg-zinc-100/60;
+  }
+  .dark .mh-panel-soft .dark\:bg-black {
+    @apply bg-zinc-950;
+  }
+  .dark .mh-panel-soft .dark\:bg-black\/60 {
+    @apply bg-zinc-950/60;
+  }
+  .dark .mh-panel-soft .dark\:bg-black\/40 {
+    @apply bg-zinc-950/40;
+  }
+  .dark .mh-panel-soft .dark\:bg-zinc-900\/40 {
+    @apply bg-zinc-950/40;
+  }
+
+  /* v2: Panel/card background (color + shade stop) */
+  .mh-panel-default-25 .bg-white {
+    @apply bg-zinc-50;
+  }
+  .mh-panel-default-50 .bg-white {
+    @apply bg-zinc-100;
+  }
+  .mh-panel-default-75 .bg-white {
+    @apply bg-zinc-200;
+  }
+  .mh-panel-default-100 .bg-white {
+    @apply bg-zinc-300;
+  }
+  .mh-panel-default-25 .bg-white\/60 {
+    @apply bg-zinc-50/60;
+  }
+  .mh-panel-default-50 .bg-white\/60 {
+    @apply bg-zinc-100/60;
+  }
+  .mh-panel-default-75 .bg-white\/60 {
+    @apply bg-zinc-200/60;
+  }
+  .mh-panel-default-100 .bg-white\/60 {
+    @apply bg-zinc-300/60;
+  }
+  .dark .mh-panel-default-25 .dark\:bg-black {
+    @apply bg-zinc-950;
+  }
+  .dark .mh-panel-default-50 .dark\:bg-black {
+    @apply bg-zinc-900;
+  }
+  .dark .mh-panel-default-75 .dark\:bg-black {
+    @apply bg-zinc-800;
+  }
+  .dark .mh-panel-default-100 .dark\:bg-black {
+    @apply bg-zinc-700;
+  }
+  .dark .mh-panel-default-25 .dark\:bg-black\/60 {
+    @apply bg-zinc-950/60;
+  }
+  .dark .mh-panel-default-50 .dark\:bg-black\/60 {
+    @apply bg-zinc-900/60;
+  }
+  .dark .mh-panel-default-75 .dark\:bg-black\/60 {
+    @apply bg-zinc-800/60;
+  }
+  .dark .mh-panel-default-100 .dark\:bg-black\/60 {
+    @apply bg-zinc-700/60;
+  }
+  .dark .mh-panel-default-25 .dark\:bg-black\/40 {
+    @apply bg-zinc-950/40;
+  }
+  .dark .mh-panel-default-50 .dark\:bg-black\/40 {
+    @apply bg-zinc-900/40;
+  }
+  .dark .mh-panel-default-75 .dark\:bg-black\/40 {
+    @apply bg-zinc-800/40;
+  }
+  .dark .mh-panel-default-100 .dark\:bg-black\/40 {
+    @apply bg-zinc-700/40;
+  }
+  .dark .mh-panel-default-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-zinc-950/40;
+  }
+  .dark .mh-panel-default-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-zinc-900/40;
+  }
+  .dark .mh-panel-default-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-zinc-800/40;
+  }
+  .dark .mh-panel-default-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-zinc-700/40;
+  }
+
+  .mh-panel-red-25 .bg-white {
+    @apply bg-red-50;
+  }
+  .mh-panel-red-50 .bg-white {
+    @apply bg-red-100;
+  }
+  .mh-panel-red-75 .bg-white {
+    @apply bg-red-200;
+  }
+  .mh-panel-red-100 .bg-white {
+    @apply bg-red-300;
+  }
+  .mh-panel-red-25 .bg-white\/60 {
+    @apply bg-red-50/60;
+  }
+  .mh-panel-red-50 .bg-white\/60 {
+    @apply bg-red-100/60;
+  }
+  .mh-panel-red-75 .bg-white\/60 {
+    @apply bg-red-200/60;
+  }
+  .mh-panel-red-100 .bg-white\/60 {
+    @apply bg-red-300/60;
+  }
+  .dark .mh-panel-red-25 .dark\:bg-black {
+    @apply bg-red-950;
+  }
+  .dark .mh-panel-red-50 .dark\:bg-black {
+    @apply bg-red-900;
+  }
+  .dark .mh-panel-red-75 .dark\:bg-black {
+    @apply bg-red-800;
+  }
+  .dark .mh-panel-red-100 .dark\:bg-black {
+    @apply bg-red-700;
+  }
+  .dark .mh-panel-red-25 .dark\:bg-black\/60 {
+    @apply bg-red-950/60;
+  }
+  .dark .mh-panel-red-50 .dark\:bg-black\/60 {
+    @apply bg-red-900/60;
+  }
+  .dark .mh-panel-red-75 .dark\:bg-black\/60 {
+    @apply bg-red-800/60;
+  }
+  .dark .mh-panel-red-100 .dark\:bg-black\/60 {
+    @apply bg-red-700/60;
+  }
+  .dark .mh-panel-red-25 .dark\:bg-black\/40 {
+    @apply bg-red-950/40;
+  }
+  .dark .mh-panel-red-50 .dark\:bg-black\/40 {
+    @apply bg-red-900/40;
+  }
+  .dark .mh-panel-red-75 .dark\:bg-black\/40 {
+    @apply bg-red-800/40;
+  }
+  .dark .mh-panel-red-100 .dark\:bg-black\/40 {
+    @apply bg-red-700/40;
+  }
+  .dark .mh-panel-red-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-red-950/40;
+  }
+  .dark .mh-panel-red-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-red-900/40;
+  }
+  .dark .mh-panel-red-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-red-800/40;
+  }
+  .dark .mh-panel-red-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-red-700/40;
+  }
+
+  .mh-panel-orange-25 .bg-white {
+    @apply bg-orange-50;
+  }
+  .mh-panel-orange-50 .bg-white {
+    @apply bg-orange-100;
+  }
+  .mh-panel-orange-75 .bg-white {
+    @apply bg-orange-200;
+  }
+  .mh-panel-orange-100 .bg-white {
+    @apply bg-orange-300;
+  }
+  .mh-panel-orange-25 .bg-white\/60 {
+    @apply bg-orange-50/60;
+  }
+  .mh-panel-orange-50 .bg-white\/60 {
+    @apply bg-orange-100/60;
+  }
+  .mh-panel-orange-75 .bg-white\/60 {
+    @apply bg-orange-200/60;
+  }
+  .mh-panel-orange-100 .bg-white\/60 {
+    @apply bg-orange-300/60;
+  }
+  .dark .mh-panel-orange-25 .dark\:bg-black {
+    @apply bg-orange-950;
+  }
+  .dark .mh-panel-orange-50 .dark\:bg-black {
+    @apply bg-orange-900;
+  }
+  .dark .mh-panel-orange-75 .dark\:bg-black {
+    @apply bg-orange-800;
+  }
+  .dark .mh-panel-orange-100 .dark\:bg-black {
+    @apply bg-orange-700;
+  }
+  .dark .mh-panel-orange-25 .dark\:bg-black\/60 {
+    @apply bg-orange-950/60;
+  }
+  .dark .mh-panel-orange-50 .dark\:bg-black\/60 {
+    @apply bg-orange-900/60;
+  }
+  .dark .mh-panel-orange-75 .dark\:bg-black\/60 {
+    @apply bg-orange-800/60;
+  }
+  .dark .mh-panel-orange-100 .dark\:bg-black\/60 {
+    @apply bg-orange-700/60;
+  }
+  .dark .mh-panel-orange-25 .dark\:bg-black\/40 {
+    @apply bg-orange-950/40;
+  }
+  .dark .mh-panel-orange-50 .dark\:bg-black\/40 {
+    @apply bg-orange-900/40;
+  }
+  .dark .mh-panel-orange-75 .dark\:bg-black\/40 {
+    @apply bg-orange-800/40;
+  }
+  .dark .mh-panel-orange-100 .dark\:bg-black\/40 {
+    @apply bg-orange-700/40;
+  }
+  .dark .mh-panel-orange-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-orange-950/40;
+  }
+  .dark .mh-panel-orange-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-orange-900/40;
+  }
+  .dark .mh-panel-orange-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-orange-800/40;
+  }
+  .dark .mh-panel-orange-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-orange-700/40;
+  }
+
+  .mh-panel-yellow-25 .bg-white {
+    @apply bg-yellow-50;
+  }
+  .mh-panel-yellow-50 .bg-white {
+    @apply bg-yellow-100;
+  }
+  .mh-panel-yellow-75 .bg-white {
+    @apply bg-yellow-200;
+  }
+  .mh-panel-yellow-100 .bg-white {
+    @apply bg-yellow-300;
+  }
+  .mh-panel-yellow-25 .bg-white\/60 {
+    @apply bg-yellow-50/60;
+  }
+  .mh-panel-yellow-50 .bg-white\/60 {
+    @apply bg-yellow-100/60;
+  }
+  .mh-panel-yellow-75 .bg-white\/60 {
+    @apply bg-yellow-200/60;
+  }
+  .mh-panel-yellow-100 .bg-white\/60 {
+    @apply bg-yellow-300/60;
+  }
+  .dark .mh-panel-yellow-25 .dark\:bg-black {
+    @apply bg-yellow-950;
+  }
+  .dark .mh-panel-yellow-50 .dark\:bg-black {
+    @apply bg-yellow-900;
+  }
+  .dark .mh-panel-yellow-75 .dark\:bg-black {
+    @apply bg-yellow-800;
+  }
+  .dark .mh-panel-yellow-100 .dark\:bg-black {
+    @apply bg-yellow-700;
+  }
+  .dark .mh-panel-yellow-25 .dark\:bg-black\/60 {
+    @apply bg-yellow-950/60;
+  }
+  .dark .mh-panel-yellow-50 .dark\:bg-black\/60 {
+    @apply bg-yellow-900/60;
+  }
+  .dark .mh-panel-yellow-75 .dark\:bg-black\/60 {
+    @apply bg-yellow-800/60;
+  }
+  .dark .mh-panel-yellow-100 .dark\:bg-black\/60 {
+    @apply bg-yellow-700/60;
+  }
+  .dark .mh-panel-yellow-25 .dark\:bg-black\/40 {
+    @apply bg-yellow-950/40;
+  }
+  .dark .mh-panel-yellow-50 .dark\:bg-black\/40 {
+    @apply bg-yellow-900/40;
+  }
+  .dark .mh-panel-yellow-75 .dark\:bg-black\/40 {
+    @apply bg-yellow-800/40;
+  }
+  .dark .mh-panel-yellow-100 .dark\:bg-black\/40 {
+    @apply bg-yellow-700/40;
+  }
+  .dark .mh-panel-yellow-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-yellow-950/40;
+  }
+  .dark .mh-panel-yellow-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-yellow-900/40;
+  }
+  .dark .mh-panel-yellow-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-yellow-800/40;
+  }
+  .dark .mh-panel-yellow-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-yellow-700/40;
+  }
+
+  .mh-panel-green-25 .bg-white {
+    @apply bg-green-50;
+  }
+  .mh-panel-green-50 .bg-white {
+    @apply bg-green-100;
+  }
+  .mh-panel-green-75 .bg-white {
+    @apply bg-green-200;
+  }
+  .mh-panel-green-100 .bg-white {
+    @apply bg-green-300;
+  }
+  .mh-panel-green-25 .bg-white\/60 {
+    @apply bg-green-50/60;
+  }
+  .mh-panel-green-50 .bg-white\/60 {
+    @apply bg-green-100/60;
+  }
+  .mh-panel-green-75 .bg-white\/60 {
+    @apply bg-green-200/60;
+  }
+  .mh-panel-green-100 .bg-white\/60 {
+    @apply bg-green-300/60;
+  }
+  .dark .mh-panel-green-25 .dark\:bg-black {
+    @apply bg-green-950;
+  }
+  .dark .mh-panel-green-50 .dark\:bg-black {
+    @apply bg-green-900;
+  }
+  .dark .mh-panel-green-75 .dark\:bg-black {
+    @apply bg-green-800;
+  }
+  .dark .mh-panel-green-100 .dark\:bg-black {
+    @apply bg-green-700;
+  }
+  .dark .mh-panel-green-25 .dark\:bg-black\/60 {
+    @apply bg-green-950/60;
+  }
+  .dark .mh-panel-green-50 .dark\:bg-black\/60 {
+    @apply bg-green-900/60;
+  }
+  .dark .mh-panel-green-75 .dark\:bg-black\/60 {
+    @apply bg-green-800/60;
+  }
+  .dark .mh-panel-green-100 .dark\:bg-black\/60 {
+    @apply bg-green-700/60;
+  }
+  .dark .mh-panel-green-25 .dark\:bg-black\/40 {
+    @apply bg-green-950/40;
+  }
+  .dark .mh-panel-green-50 .dark\:bg-black\/40 {
+    @apply bg-green-900/40;
+  }
+  .dark .mh-panel-green-75 .dark\:bg-black\/40 {
+    @apply bg-green-800/40;
+  }
+  .dark .mh-panel-green-100 .dark\:bg-black\/40 {
+    @apply bg-green-700/40;
+  }
+  .dark .mh-panel-green-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-green-950/40;
+  }
+  .dark .mh-panel-green-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-green-900/40;
+  }
+  .dark .mh-panel-green-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-green-800/40;
+  }
+  .dark .mh-panel-green-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-green-700/40;
+  }
+
+  .mh-panel-blue-25 .bg-white {
+    @apply bg-blue-50;
+  }
+  .mh-panel-blue-50 .bg-white {
+    @apply bg-blue-100;
+  }
+  .mh-panel-blue-75 .bg-white {
+    @apply bg-blue-200;
+  }
+  .mh-panel-blue-100 .bg-white {
+    @apply bg-blue-300;
+  }
+  .mh-panel-blue-25 .bg-white\/60 {
+    @apply bg-blue-50/60;
+  }
+  .mh-panel-blue-50 .bg-white\/60 {
+    @apply bg-blue-100/60;
+  }
+  .mh-panel-blue-75 .bg-white\/60 {
+    @apply bg-blue-200/60;
+  }
+  .mh-panel-blue-100 .bg-white\/60 {
+    @apply bg-blue-300/60;
+  }
+  .dark .mh-panel-blue-25 .dark\:bg-black {
+    @apply bg-blue-950;
+  }
+  .dark .mh-panel-blue-50 .dark\:bg-black {
+    @apply bg-blue-900;
+  }
+  .dark .mh-panel-blue-75 .dark\:bg-black {
+    @apply bg-blue-800;
+  }
+  .dark .mh-panel-blue-100 .dark\:bg-black {
+    @apply bg-blue-700;
+  }
+  .dark .mh-panel-blue-25 .dark\:bg-black\/60 {
+    @apply bg-blue-950/60;
+  }
+  .dark .mh-panel-blue-50 .dark\:bg-black\/60 {
+    @apply bg-blue-900/60;
+  }
+  .dark .mh-panel-blue-75 .dark\:bg-black\/60 {
+    @apply bg-blue-800/60;
+  }
+  .dark .mh-panel-blue-100 .dark\:bg-black\/60 {
+    @apply bg-blue-700/60;
+  }
+  .dark .mh-panel-blue-25 .dark\:bg-black\/40 {
+    @apply bg-blue-950/40;
+  }
+  .dark .mh-panel-blue-50 .dark\:bg-black\/40 {
+    @apply bg-blue-900/40;
+  }
+  .dark .mh-panel-blue-75 .dark\:bg-black\/40 {
+    @apply bg-blue-800/40;
+  }
+  .dark .mh-panel-blue-100 .dark\:bg-black\/40 {
+    @apply bg-blue-700/40;
+  }
+  .dark .mh-panel-blue-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-blue-950/40;
+  }
+  .dark .mh-panel-blue-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-blue-900/40;
+  }
+  .dark .mh-panel-blue-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-blue-800/40;
+  }
+  .dark .mh-panel-blue-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-blue-700/40;
+  }
+
+  .mh-panel-purple-25 .bg-white {
+    @apply bg-purple-50;
+  }
+  .mh-panel-purple-50 .bg-white {
+    @apply bg-purple-100;
+  }
+  .mh-panel-purple-75 .bg-white {
+    @apply bg-purple-200;
+  }
+  .mh-panel-purple-100 .bg-white {
+    @apply bg-purple-300;
+  }
+  .mh-panel-purple-25 .bg-white\/60 {
+    @apply bg-purple-50/60;
+  }
+  .mh-panel-purple-50 .bg-white\/60 {
+    @apply bg-purple-100/60;
+  }
+  .mh-panel-purple-75 .bg-white\/60 {
+    @apply bg-purple-200/60;
+  }
+  .mh-panel-purple-100 .bg-white\/60 {
+    @apply bg-purple-300/60;
+  }
+  .dark .mh-panel-purple-25 .dark\:bg-black {
+    @apply bg-purple-950;
+  }
+  .dark .mh-panel-purple-50 .dark\:bg-black {
+    @apply bg-purple-900;
+  }
+  .dark .mh-panel-purple-75 .dark\:bg-black {
+    @apply bg-purple-800;
+  }
+  .dark .mh-panel-purple-100 .dark\:bg-black {
+    @apply bg-purple-700;
+  }
+  .dark .mh-panel-purple-25 .dark\:bg-black\/60 {
+    @apply bg-purple-950/60;
+  }
+  .dark .mh-panel-purple-50 .dark\:bg-black\/60 {
+    @apply bg-purple-900/60;
+  }
+  .dark .mh-panel-purple-75 .dark\:bg-black\/60 {
+    @apply bg-purple-800/60;
+  }
+  .dark .mh-panel-purple-100 .dark\:bg-black\/60 {
+    @apply bg-purple-700/60;
+  }
+  .dark .mh-panel-purple-25 .dark\:bg-black\/40 {
+    @apply bg-purple-950/40;
+  }
+  .dark .mh-panel-purple-50 .dark\:bg-black\/40 {
+    @apply bg-purple-900/40;
+  }
+  .dark .mh-panel-purple-75 .dark\:bg-black\/40 {
+    @apply bg-purple-800/40;
+  }
+  .dark .mh-panel-purple-100 .dark\:bg-black\/40 {
+    @apply bg-purple-700/40;
+  }
+  .dark .mh-panel-purple-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-purple-950/40;
+  }
+  .dark .mh-panel-purple-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-purple-900/40;
+  }
+  .dark .mh-panel-purple-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-purple-800/40;
+  }
+  .dark .mh-panel-purple-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-purple-700/40;
+  }
+
+  .mh-panel-pink-25 .bg-white {
+    @apply bg-pink-50;
+  }
+  .mh-panel-pink-50 .bg-white {
+    @apply bg-pink-100;
+  }
+  .mh-panel-pink-75 .bg-white {
+    @apply bg-pink-200;
+  }
+  .mh-panel-pink-100 .bg-white {
+    @apply bg-pink-300;
+  }
+  .mh-panel-pink-25 .bg-white\/60 {
+    @apply bg-pink-50/60;
+  }
+  .mh-panel-pink-50 .bg-white\/60 {
+    @apply bg-pink-100/60;
+  }
+  .mh-panel-pink-75 .bg-white\/60 {
+    @apply bg-pink-200/60;
+  }
+  .mh-panel-pink-100 .bg-white\/60 {
+    @apply bg-pink-300/60;
+  }
+  .dark .mh-panel-pink-25 .dark\:bg-black {
+    @apply bg-pink-950;
+  }
+  .dark .mh-panel-pink-50 .dark\:bg-black {
+    @apply bg-pink-900;
+  }
+  .dark .mh-panel-pink-75 .dark\:bg-black {
+    @apply bg-pink-800;
+  }
+  .dark .mh-panel-pink-100 .dark\:bg-black {
+    @apply bg-pink-700;
+  }
+  .dark .mh-panel-pink-25 .dark\:bg-black\/60 {
+    @apply bg-pink-950/60;
+  }
+  .dark .mh-panel-pink-50 .dark\:bg-black\/60 {
+    @apply bg-pink-900/60;
+  }
+  .dark .mh-panel-pink-75 .dark\:bg-black\/60 {
+    @apply bg-pink-800/60;
+  }
+  .dark .mh-panel-pink-100 .dark\:bg-black\/60 {
+    @apply bg-pink-700/60;
+  }
+  .dark .mh-panel-pink-25 .dark\:bg-black\/40 {
+    @apply bg-pink-950/40;
+  }
+  .dark .mh-panel-pink-50 .dark\:bg-black\/40 {
+    @apply bg-pink-900/40;
+  }
+  .dark .mh-panel-pink-75 .dark\:bg-black\/40 {
+    @apply bg-pink-800/40;
+  }
+  .dark .mh-panel-pink-100 .dark\:bg-black\/40 {
+    @apply bg-pink-700/40;
+  }
+  .dark .mh-panel-pink-25 .dark\:bg-zinc-900\/40 {
+    @apply bg-pink-950/40;
+  }
+  .dark .mh-panel-pink-50 .dark\:bg-zinc-900\/40 {
+    @apply bg-pink-900/40;
+  }
+  .dark .mh-panel-pink-75 .dark\:bg-zinc-900\/40 {
+    @apply bg-pink-800/40;
+  }
+  .dark .mh-panel-pink-100 .dark\:bg-zinc-900\/40 {
+    @apply bg-pink-700/40;
+  }
+
+  /* Button tone (best-effort, targets common button backgrounds) */
+  .mh-button-soft button.bg-white\/60 {
+    @apply bg-zinc-50/60;
+  }
+  .mh-button-soft button.bg-white {
+    @apply bg-zinc-50;
+  }
+  .mh-button-soft button.bg-zinc-50 {
+    @apply bg-zinc-100;
+  }
+  .mh-button-soft button.bg-zinc-50\/60 {
+    @apply bg-zinc-100/60;
+  }
+  .dark .mh-button-soft button.dark\:bg-black\/60 {
+    @apply bg-zinc-950/60;
+  }
+  .dark .mh-button-soft button.dark\:bg-black {
+    @apply bg-zinc-950;
+  }
+
+  /* v2: Button tone (color + shade stop) */
+  .mh-button-default-25 button.bg-white\/60 {
+    @apply bg-zinc-50/60;
+  }
+  .mh-button-default-50 button.bg-white\/60 {
+    @apply bg-zinc-100/60;
+  }
+  .mh-button-default-75 button.bg-white\/60 {
+    @apply bg-zinc-200/60;
+  }
+  .mh-button-default-100 button.bg-white\/60 {
+    @apply bg-zinc-300/60;
+  }
+  .mh-button-default-25 button.bg-white {
+    @apply bg-zinc-50;
+  }
+  .mh-button-default-50 button.bg-white {
+    @apply bg-zinc-100;
+  }
+  .mh-button-default-75 button.bg-white {
+    @apply bg-zinc-200;
+  }
+  .mh-button-default-100 button.bg-white {
+    @apply bg-zinc-300;
+  }
+  .dark .mh-button-default-25 button.dark\:bg-black\/60 {
+    @apply bg-zinc-950/60;
+  }
+  .dark .mh-button-default-50 button.dark\:bg-black\/60 {
+    @apply bg-zinc-900/60;
+  }
+  .dark .mh-button-default-75 button.dark\:bg-black\/60 {
+    @apply bg-zinc-800/60;
+  }
+  .dark .mh-button-default-100 button.dark\:bg-black\/60 {
+    @apply bg-zinc-700/60;
+  }
+  .dark .mh-button-default-25 button.dark\:bg-black {
+    @apply bg-zinc-950;
+  }
+  .dark .mh-button-default-50 button.dark\:bg-black {
+    @apply bg-zinc-900;
+  }
+  .dark .mh-button-default-75 button.dark\:bg-black {
+    @apply bg-zinc-800;
+  }
+  .dark .mh-button-default-100 button.dark\:bg-black {
+    @apply bg-zinc-700;
+  }
+
+  .mh-button-red-25 button.bg-white\/60 {
+    @apply bg-red-50/60;
+  }
+  .mh-button-red-50 button.bg-white\/60 {
+    @apply bg-red-100/60;
+  }
+  .mh-button-red-75 button.bg-white\/60 {
+    @apply bg-red-200/60;
+  }
+  .mh-button-red-100 button.bg-white\/60 {
+    @apply bg-red-300/60;
+  }
+  .mh-button-red-25 button.bg-white {
+    @apply bg-red-50;
+  }
+  .mh-button-red-50 button.bg-white {
+    @apply bg-red-100;
+  }
+  .mh-button-red-75 button.bg-white {
+    @apply bg-red-200;
+  }
+  .mh-button-red-100 button.bg-white {
+    @apply bg-red-300;
+  }
+  .dark .mh-button-red-25 button.dark\:bg-black\/60 {
+    @apply bg-red-950/60;
+  }
+  .dark .mh-button-red-50 button.dark\:bg-black\/60 {
+    @apply bg-red-900/60;
+  }
+  .dark .mh-button-red-75 button.dark\:bg-black\/60 {
+    @apply bg-red-800/60;
+  }
+  .dark .mh-button-red-100 button.dark\:bg-black\/60 {
+    @apply bg-red-700/60;
+  }
+  .dark .mh-button-red-25 button.dark\:bg-black {
+    @apply bg-red-950;
+  }
+  .dark .mh-button-red-50 button.dark\:bg-black {
+    @apply bg-red-900;
+  }
+  .dark .mh-button-red-75 button.dark\:bg-black {
+    @apply bg-red-800;
+  }
+  .dark .mh-button-red-100 button.dark\:bg-black {
+    @apply bg-red-700;
+  }
+
+  .mh-button-orange-25 button.bg-white\/60 {
+    @apply bg-orange-50/60;
+  }
+  .mh-button-orange-50 button.bg-white\/60 {
+    @apply bg-orange-100/60;
+  }
+  .mh-button-orange-75 button.bg-white\/60 {
+    @apply bg-orange-200/60;
+  }
+  .mh-button-orange-100 button.bg-white\/60 {
+    @apply bg-orange-300/60;
+  }
+  .mh-button-orange-25 button.bg-white {
+    @apply bg-orange-50;
+  }
+  .mh-button-orange-50 button.bg-white {
+    @apply bg-orange-100;
+  }
+  .mh-button-orange-75 button.bg-white {
+    @apply bg-orange-200;
+  }
+  .mh-button-orange-100 button.bg-white {
+    @apply bg-orange-300;
+  }
+  .dark .mh-button-orange-25 button.dark\:bg-black\/60 {
+    @apply bg-orange-950/60;
+  }
+  .dark .mh-button-orange-50 button.dark\:bg-black\/60 {
+    @apply bg-orange-900/60;
+  }
+  .dark .mh-button-orange-75 button.dark\:bg-black\/60 {
+    @apply bg-orange-800/60;
+  }
+  .dark .mh-button-orange-100 button.dark\:bg-black\/60 {
+    @apply bg-orange-700/60;
+  }
+  .dark .mh-button-orange-25 button.dark\:bg-black {
+    @apply bg-orange-950;
+  }
+  .dark .mh-button-orange-50 button.dark\:bg-black {
+    @apply bg-orange-900;
+  }
+  .dark .mh-button-orange-75 button.dark\:bg-black {
+    @apply bg-orange-800;
+  }
+  .dark .mh-button-orange-100 button.dark\:bg-black {
+    @apply bg-orange-700;
+  }
+
+  .mh-button-yellow-25 button.bg-white\/60 {
+    @apply bg-yellow-50/60;
+  }
+  .mh-button-yellow-50 button.bg-white\/60 {
+    @apply bg-yellow-100/60;
+  }
+  .mh-button-yellow-75 button.bg-white\/60 {
+    @apply bg-yellow-200/60;
+  }
+  .mh-button-yellow-100 button.bg-white\/60 {
+    @apply bg-yellow-300/60;
+  }
+  .mh-button-yellow-25 button.bg-white {
+    @apply bg-yellow-50;
+  }
+  .mh-button-yellow-50 button.bg-white {
+    @apply bg-yellow-100;
+  }
+  .mh-button-yellow-75 button.bg-white {
+    @apply bg-yellow-200;
+  }
+  .mh-button-yellow-100 button.bg-white {
+    @apply bg-yellow-300;
+  }
+  .dark .mh-button-yellow-25 button.dark\:bg-black\/60 {
+    @apply bg-yellow-950/60;
+  }
+  .dark .mh-button-yellow-50 button.dark\:bg-black\/60 {
+    @apply bg-yellow-900/60;
+  }
+  .dark .mh-button-yellow-75 button.dark\:bg-black\/60 {
+    @apply bg-yellow-800/60;
+  }
+  .dark .mh-button-yellow-100 button.dark\:bg-black\/60 {
+    @apply bg-yellow-700/60;
+  }
+  .dark .mh-button-yellow-25 button.dark\:bg-black {
+    @apply bg-yellow-950;
+  }
+  .dark .mh-button-yellow-50 button.dark\:bg-black {
+    @apply bg-yellow-900;
+  }
+  .dark .mh-button-yellow-75 button.dark\:bg-black {
+    @apply bg-yellow-800;
+  }
+  .dark .mh-button-yellow-100 button.dark\:bg-black {
+    @apply bg-yellow-700;
+  }
+
+  .mh-button-green-25 button.bg-white\/60 {
+    @apply bg-green-50/60;
+  }
+  .mh-button-green-50 button.bg-white\/60 {
+    @apply bg-green-100/60;
+  }
+  .mh-button-green-75 button.bg-white\/60 {
+    @apply bg-green-200/60;
+  }
+  .mh-button-green-100 button.bg-white\/60 {
+    @apply bg-green-300/60;
+  }
+  .mh-button-green-25 button.bg-white {
+    @apply bg-green-50;
+  }
+  .mh-button-green-50 button.bg-white {
+    @apply bg-green-100;
+  }
+  .mh-button-green-75 button.bg-white {
+    @apply bg-green-200;
+  }
+  .mh-button-green-100 button.bg-white {
+    @apply bg-green-300;
+  }
+  .dark .mh-button-green-25 button.dark\:bg-black\/60 {
+    @apply bg-green-950/60;
+  }
+  .dark .mh-button-green-50 button.dark\:bg-black\/60 {
+    @apply bg-green-900/60;
+  }
+  .dark .mh-button-green-75 button.dark\:bg-black\/60 {
+    @apply bg-green-800/60;
+  }
+  .dark .mh-button-green-100 button.dark\:bg-black\/60 {
+    @apply bg-green-700/60;
+  }
+  .dark .mh-button-green-25 button.dark\:bg-black {
+    @apply bg-green-950;
+  }
+  .dark .mh-button-green-50 button.dark\:bg-black {
+    @apply bg-green-900;
+  }
+  .dark .mh-button-green-75 button.dark\:bg-black {
+    @apply bg-green-800;
+  }
+  .dark .mh-button-green-100 button.dark\:bg-black {
+    @apply bg-green-700;
+  }
+
+  .mh-button-blue-25 button.bg-white\/60 {
+    @apply bg-blue-50/60;
+  }
+  .mh-button-blue-50 button.bg-white\/60 {
+    @apply bg-blue-100/60;
+  }
+  .mh-button-blue-75 button.bg-white\/60 {
+    @apply bg-blue-200/60;
+  }
+  .mh-button-blue-100 button.bg-white\/60 {
+    @apply bg-blue-300/60;
+  }
+  .mh-button-blue-25 button.bg-white {
+    @apply bg-blue-50;
+  }
+  .mh-button-blue-50 button.bg-white {
+    @apply bg-blue-100;
+  }
+  .mh-button-blue-75 button.bg-white {
+    @apply bg-blue-200;
+  }
+  .mh-button-blue-100 button.bg-white {
+    @apply bg-blue-300;
+  }
+  .dark .mh-button-blue-25 button.dark\:bg-black\/60 {
+    @apply bg-blue-950/60;
+  }
+  .dark .mh-button-blue-50 button.dark\:bg-black\/60 {
+    @apply bg-blue-900/60;
+  }
+  .dark .mh-button-blue-75 button.dark\:bg-black\/60 {
+    @apply bg-blue-800/60;
+  }
+  .dark .mh-button-blue-100 button.dark\:bg-black\/60 {
+    @apply bg-blue-700/60;
+  }
+  .dark .mh-button-blue-25 button.dark\:bg-black {
+    @apply bg-blue-950;
+  }
+  .dark .mh-button-blue-50 button.dark\:bg-black {
+    @apply bg-blue-900;
+  }
+  .dark .mh-button-blue-75 button.dark\:bg-black {
+    @apply bg-blue-800;
+  }
+  .dark .mh-button-blue-100 button.dark\:bg-black {
+    @apply bg-blue-700;
+  }
+
+  .mh-button-purple-25 button.bg-white\/60 {
+    @apply bg-purple-50/60;
+  }
+  .mh-button-purple-50 button.bg-white\/60 {
+    @apply bg-purple-100/60;
+  }
+  .mh-button-purple-75 button.bg-white\/60 {
+    @apply bg-purple-200/60;
+  }
+  .mh-button-purple-100 button.bg-white\/60 {
+    @apply bg-purple-300/60;
+  }
+  .mh-button-purple-25 button.bg-white {
+    @apply bg-purple-50;
+  }
+  .mh-button-purple-50 button.bg-white {
+    @apply bg-purple-100;
+  }
+  .mh-button-purple-75 button.bg-white {
+    @apply bg-purple-200;
+  }
+  .mh-button-purple-100 button.bg-white {
+    @apply bg-purple-300;
+  }
+  .dark .mh-button-purple-25 button.dark\:bg-black\/60 {
+    @apply bg-purple-950/60;
+  }
+  .dark .mh-button-purple-50 button.dark\:bg-black\/60 {
+    @apply bg-purple-900/60;
+  }
+  .dark .mh-button-purple-75 button.dark\:bg-black\/60 {
+    @apply bg-purple-800/60;
+  }
+  .dark .mh-button-purple-100 button.dark\:bg-black\/60 {
+    @apply bg-purple-700/60;
+  }
+  .dark .mh-button-purple-25 button.dark\:bg-black {
+    @apply bg-purple-950;
+  }
+  .dark .mh-button-purple-50 button.dark\:bg-black {
+    @apply bg-purple-900;
+  }
+  .dark .mh-button-purple-75 button.dark\:bg-black {
+    @apply bg-purple-800;
+  }
+  .dark .mh-button-purple-100 button.dark\:bg-black {
+    @apply bg-purple-700;
+  }
+
+  .mh-button-pink-25 button.bg-white\/60 {
+    @apply bg-pink-50/60;
+  }
+  .mh-button-pink-50 button.bg-white\/60 {
+    @apply bg-pink-100/60;
+  }
+  .mh-button-pink-75 button.bg-white\/60 {
+    @apply bg-pink-200/60;
+  }
+  .mh-button-pink-100 button.bg-white\/60 {
+    @apply bg-pink-300/60;
+  }
+  .mh-button-pink-25 button.bg-white {
+    @apply bg-pink-50;
+  }
+  .mh-button-pink-50 button.bg-white {
+    @apply bg-pink-100;
+  }
+  .mh-button-pink-75 button.bg-white {
+    @apply bg-pink-200;
+  }
+  .mh-button-pink-100 button.bg-white {
+    @apply bg-pink-300;
+  }
+  .dark .mh-button-pink-25 button.dark\:bg-black\/60 {
+    @apply bg-pink-950/60;
+  }
+  .dark .mh-button-pink-50 button.dark\:bg-black\/60 {
+    @apply bg-pink-900/60;
+  }
+  .dark .mh-button-pink-75 button.dark\:bg-black\/60 {
+    @apply bg-pink-800/60;
+  }
+  .dark .mh-button-pink-100 button.dark\:bg-black\/60 {
+    @apply bg-pink-700/60;
+  }
+  .dark .mh-button-pink-25 button.dark\:bg-black {
+    @apply bg-pink-950;
+  }
+  .dark .mh-button-pink-50 button.dark\:bg-black {
+    @apply bg-pink-900;
+  }
+  .dark .mh-button-pink-75 button.dark\:bg-black {
+    @apply bg-pink-800;
+  }
+  .dark .mh-button-pink-100 button.dark\:bg-black {
+    @apply bg-pink-700;
+  }
+
+  /* Shared alert dots (invoice/report/unassigned) */
+  .mh-alert-dot {
+    @apply h-2 w-2 rounded-full border;
+  }
+  .mh-alert-dot-inactive {
+    @apply border-zinc-300 bg-transparent dark:border-zinc-700;
+  }
+
+  /* Invoice */
+  .mh-alert-invoice-red .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-red-500 bg-red-500;
+  }
+  .mh-alert-invoice-orange .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-orange-500 bg-orange-500;
+  }
+  .mh-alert-invoice-yellow .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-yellow-500 bg-yellow-500;
+  }
+  .mh-alert-invoice-green .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-green-500 bg-green-500;
+  }
+  .mh-alert-invoice-blue .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-blue-500 bg-blue-500;
+  }
+  .mh-alert-invoice-purple .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-purple-500 bg-purple-500;
+  }
+  .mh-alert-invoice-pink .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-pink-500 bg-pink-500;
+  }
+  .mh-alert-invoice-default .mh-alert-dot-invoice.mh-alert-dot-active {
+    @apply border-zinc-500 bg-zinc-500 dark:border-zinc-400 dark:bg-zinc-400;
+  }
+
+  /* Report */
+  .mh-alert-report-red .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-red-500 bg-red-500;
+  }
+  .mh-alert-report-orange .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-orange-500 bg-orange-500;
+  }
+  .mh-alert-report-yellow .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-yellow-500 bg-yellow-500;
+  }
+  .mh-alert-report-green .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-green-500 bg-green-500;
+  }
+  .mh-alert-report-blue .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-blue-500 bg-blue-500;
+  }
+  .mh-alert-report-purple .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-purple-500 bg-purple-500;
+  }
+  .mh-alert-report-pink .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-pink-500 bg-pink-500;
+  }
+  .mh-alert-report-default .mh-alert-dot-report.mh-alert-dot-active {
+    @apply border-zinc-500 bg-zinc-500 dark:border-zinc-400 dark:bg-zinc-400;
+  }
+
+  /* Unassigned */
+  .mh-alert-unassigned-red .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-red-500 bg-red-500;
+  }
+  .mh-alert-unassigned-orange .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-orange-500 bg-orange-500;
+  }
+  .mh-alert-unassigned-yellow .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-yellow-500 bg-yellow-500;
+  }
+  .mh-alert-unassigned-green .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-green-500 bg-green-500;
+  }
+  .mh-alert-unassigned-blue .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-blue-500 bg-blue-500;
+  }
+  .mh-alert-unassigned-purple .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-purple-500 bg-purple-500;
+  }
+  .mh-alert-unassigned-pink .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-pink-500 bg-pink-500;
+  }
+  .mh-alert-unassigned-default .mh-alert-dot-unassigned.mh-alert-dot-active {
+    @apply border-zinc-500 bg-zinc-500 dark:border-zinc-400 dark:bg-zinc-400;
+  }
+
+  /* Border contrast toggle (mh-border-strong) is applied to border containers only.
+     The per-color mapping lives near the editable border color section. */
+
+  /* Non-grid neutral borders: make them more visible.
+     This targets the common Tailwind zinc border utilities used across pages.
+     NOTE: This is intentionally neutral (zinc only) and does NOT apply theme colors,
+     so it won't break the slot-based color separation (grid/border/button/etc.). */
+  .mh-border-strong .border-zinc-200 {
+    @apply border-zinc-600;
+  }
+  .mh-border-strong .border-zinc-300 {
+    @apply border-zinc-700;
+  }
+  .mh-border-strong .border-zinc-200\/60 {
+    @apply border-zinc-600;
+  }
+  .dark .mh-border-strong .dark\:border-zinc-800 {
+    @apply border-zinc-400;
+  }
+  .dark .mh-border-strong .dark\:border-zinc-700 {
+    @apply border-zinc-300;
+  }
+  .dark .mh-border-strong .dark\:border-zinc-800\/60 {
+    @apply border-zinc-400;
+  }
+
+  /* Schedule grid lines: keep them high-contrast.
+     This is user-configurable via the root class `mh-grid-strong`.
+     Light: black. Dark: visible (not pure black on black). */
+  .mh-grid-strong .mh-grid .border-zinc-200 {
+    @apply border-black;
+  }
+  .mh-grid-strong .mh-grid .border-zinc-300 {
+    @apply border-black;
+  }
+  .mh-grid-strong .mh-grid .border-zinc-200\/60 {
+    @apply border-black;
+  }
+  .dark .mh-grid-strong .mh-grid .dark\:border-zinc-800 {
+    @apply border-zinc-200;
+  }
+  .dark .mh-grid-strong .mh-grid .dark\:border-zinc-700 {
+    @apply border-zinc-100;
+  }
+  .dark .mh-grid-strong .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-zinc-200;
+  }
+
+  /* Editable cell background (theme): root class `mh-cell-bg-<color>-<stop>` */
+  .mh-cell-bg-default-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-50;
+  }
+  .mh-cell-bg-default-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-100;
+  }
+  .mh-cell-bg-default-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-200;
+  }
+  .mh-cell-bg-default-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-300;
+  }
+  .dark .mh-cell-bg-default-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-950;
+  }
+  .dark .mh-cell-bg-default-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-900;
+  }
+  .dark .mh-cell-bg-default-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-800;
+  }
+  .dark .mh-cell-bg-default-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-zinc-700;
+  }
+
+  .mh-cell-bg-red-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-50;
+  }
+  .mh-cell-bg-red-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-100;
+  }
+  .mh-cell-bg-red-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-200;
+  }
+  .mh-cell-bg-red-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-300;
+  }
+  .dark .mh-cell-bg-red-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-950;
+  }
+  .dark .mh-cell-bg-red-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-900;
+  }
+  .dark .mh-cell-bg-red-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-800;
+  }
+  .dark .mh-cell-bg-red-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-red-700;
+  }
+
+  .mh-cell-bg-orange-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-50;
+  }
+  .mh-cell-bg-orange-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-100;
+  }
+  .mh-cell-bg-orange-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-200;
+  }
+  .mh-cell-bg-orange-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-300;
+  }
+  .dark .mh-cell-bg-orange-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-950;
+  }
+  .dark .mh-cell-bg-orange-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-900;
+  }
+  .dark .mh-cell-bg-orange-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-800;
+  }
+  .dark .mh-cell-bg-orange-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-orange-700;
+  }
+
+  .mh-cell-bg-yellow-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-50;
+  }
+  .mh-cell-bg-yellow-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-100;
+  }
+  .mh-cell-bg-yellow-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-200;
+  }
+  .mh-cell-bg-yellow-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-300;
+  }
+  .dark .mh-cell-bg-yellow-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-950;
+  }
+  .dark .mh-cell-bg-yellow-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-900;
+  }
+  .dark .mh-cell-bg-yellow-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-800;
+  }
+  .dark .mh-cell-bg-yellow-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-yellow-700;
+  }
+
+  .mh-cell-bg-green-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-50;
+  }
+  .mh-cell-bg-green-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-100;
+  }
+  .mh-cell-bg-green-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-200;
+  }
+  .mh-cell-bg-green-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-300;
+  }
+  .dark .mh-cell-bg-green-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-950;
+  }
+  .dark .mh-cell-bg-green-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-900;
+  }
+  .dark .mh-cell-bg-green-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-800;
+  }
+  .dark .mh-cell-bg-green-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-green-700;
+  }
+
+  .mh-cell-bg-blue-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-50;
+  }
+  .mh-cell-bg-blue-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-100;
+  }
+  .mh-cell-bg-blue-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-200;
+  }
+  .mh-cell-bg-blue-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-300;
+  }
+  .dark .mh-cell-bg-blue-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-950;
+  }
+  .dark .mh-cell-bg-blue-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-900;
+  }
+  .dark .mh-cell-bg-blue-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-800;
+  }
+  .dark .mh-cell-bg-blue-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-blue-700;
+  }
+
+  .mh-cell-bg-purple-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-50;
+  }
+  .mh-cell-bg-purple-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-100;
+  }
+  .mh-cell-bg-purple-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-200;
+  }
+  .mh-cell-bg-purple-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-300;
+  }
+  .dark .mh-cell-bg-purple-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-950;
+  }
+  .dark .mh-cell-bg-purple-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-900;
+  }
+  .dark .mh-cell-bg-purple-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-800;
+  }
+  .dark .mh-cell-bg-purple-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-purple-700;
+  }
+
+  .mh-cell-bg-pink-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-50;
+  }
+  .mh-cell-bg-pink-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-100;
+  }
+  .mh-cell-bg-pink-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-200;
+  }
+  .mh-cell-bg-pink-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-300;
+  }
+  .dark .mh-cell-bg-pink-25 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-950;
+  }
+  .dark .mh-cell-bg-pink-50 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-900;
+  }
+  .dark .mh-cell-bg-pink-75 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-800;
+  }
+  .dark .mh-cell-bg-pink-100 [data-color-edit-slot='cellBg'] {
+    @apply bg-pink-700;
+  }
+
+  /* Editable cell text (theme): root class `mh-cell-text-<color>-<stop>` */
+  .mh-cell-text-default-25 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-700;
+  }
+  .mh-cell-text-default-50 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-800;
+  }
+  .mh-cell-text-default-75 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-900;
+  }
+  .mh-cell-text-default-100 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-950;
+  }
+  .dark .mh-cell-text-default-25 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-200;
+  }
+  .dark .mh-cell-text-default-50 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-100;
+  }
+  .dark .mh-cell-text-default-75 [data-color-edit-slot='cellText'] {
+    @apply text-zinc-50;
+  }
+  .dark .mh-cell-text-default-100 [data-color-edit-slot='cellText'] {
+    @apply text-white;
+  }
+
+  .mh-cell-text-red-25 [data-color-edit-slot='cellText'] {
+    @apply text-red-600;
+  }
+  .mh-cell-text-red-50 [data-color-edit-slot='cellText'] {
+    @apply text-red-700;
+  }
+  .mh-cell-text-red-75 [data-color-edit-slot='cellText'] {
+    @apply text-red-800;
+  }
+  .mh-cell-text-red-100 [data-color-edit-slot='cellText'] {
+    @apply text-red-900;
+  }
+  .dark .mh-cell-text-red-25 [data-color-edit-slot='cellText'] {
+    @apply text-red-300;
+  }
+  .dark .mh-cell-text-red-50 [data-color-edit-slot='cellText'] {
+    @apply text-red-300;
+  }
+  .dark .mh-cell-text-red-75 [data-color-edit-slot='cellText'] {
+    @apply text-red-200;
+  }
+  .dark .mh-cell-text-red-100 [data-color-edit-slot='cellText'] {
+    @apply text-red-100;
+  }
+
+  .mh-cell-text-orange-25 [data-color-edit-slot='cellText'] {
+    @apply text-orange-600;
+  }
+  .mh-cell-text-orange-50 [data-color-edit-slot='cellText'] {
+    @apply text-orange-700;
+  }
+  .mh-cell-text-orange-75 [data-color-edit-slot='cellText'] {
+    @apply text-orange-800;
+  }
+  .mh-cell-text-orange-100 [data-color-edit-slot='cellText'] {
+    @apply text-orange-900;
+  }
+  .dark .mh-cell-text-orange-25 [data-color-edit-slot='cellText'] {
+    @apply text-orange-300;
+  }
+  .dark .mh-cell-text-orange-50 [data-color-edit-slot='cellText'] {
+    @apply text-orange-300;
+  }
+  .dark .mh-cell-text-orange-75 [data-color-edit-slot='cellText'] {
+    @apply text-orange-200;
+  }
+  .dark .mh-cell-text-orange-100 [data-color-edit-slot='cellText'] {
+    @apply text-orange-100;
+  }
+
+  .mh-cell-text-yellow-25 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-600;
+  }
+  .mh-cell-text-yellow-50 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-700;
+  }
+  .mh-cell-text-yellow-75 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-800;
+  }
+  .mh-cell-text-yellow-100 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-900;
+  }
+  .dark .mh-cell-text-yellow-25 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-300;
+  }
+  .dark .mh-cell-text-yellow-50 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-300;
+  }
+  .dark .mh-cell-text-yellow-75 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-200;
+  }
+  .dark .mh-cell-text-yellow-100 [data-color-edit-slot='cellText'] {
+    @apply text-yellow-100;
+  }
+
+  .mh-cell-text-green-25 [data-color-edit-slot='cellText'] {
+    @apply text-green-600;
+  }
+  .mh-cell-text-green-50 [data-color-edit-slot='cellText'] {
+    @apply text-green-700;
+  }
+  .mh-cell-text-green-75 [data-color-edit-slot='cellText'] {
+    @apply text-green-800;
+  }
+  .mh-cell-text-green-100 [data-color-edit-slot='cellText'] {
+    @apply text-green-900;
+  }
+  .dark .mh-cell-text-green-25 [data-color-edit-slot='cellText'] {
+    @apply text-green-300;
+  }
+  .dark .mh-cell-text-green-50 [data-color-edit-slot='cellText'] {
+    @apply text-green-300;
+  }
+  .dark .mh-cell-text-green-75 [data-color-edit-slot='cellText'] {
+    @apply text-green-200;
+  }
+  .dark .mh-cell-text-green-100 [data-color-edit-slot='cellText'] {
+    @apply text-green-100;
+  }
+
+  .mh-cell-text-blue-25 [data-color-edit-slot='cellText'] {
+    @apply text-blue-600;
+  }
+  .mh-cell-text-blue-50 [data-color-edit-slot='cellText'] {
+    @apply text-blue-700;
+  }
+  .mh-cell-text-blue-75 [data-color-edit-slot='cellText'] {
+    @apply text-blue-800;
+  }
+  .mh-cell-text-blue-100 [data-color-edit-slot='cellText'] {
+    @apply text-blue-900;
+  }
+  .dark .mh-cell-text-blue-25 [data-color-edit-slot='cellText'] {
+    @apply text-blue-300;
+  }
+  .dark .mh-cell-text-blue-50 [data-color-edit-slot='cellText'] {
+    @apply text-blue-300;
+  }
+  .dark .mh-cell-text-blue-75 [data-color-edit-slot='cellText'] {
+    @apply text-blue-200;
+  }
+  .dark .mh-cell-text-blue-100 [data-color-edit-slot='cellText'] {
+    @apply text-blue-100;
+  }
+
+  .mh-cell-text-purple-25 [data-color-edit-slot='cellText'] {
+    @apply text-purple-600;
+  }
+  .mh-cell-text-purple-50 [data-color-edit-slot='cellText'] {
+    @apply text-purple-700;
+  }
+  .mh-cell-text-purple-75 [data-color-edit-slot='cellText'] {
+    @apply text-purple-800;
+  }
+  .mh-cell-text-purple-100 [data-color-edit-slot='cellText'] {
+    @apply text-purple-900;
+  }
+  .dark .mh-cell-text-purple-25 [data-color-edit-slot='cellText'] {
+    @apply text-purple-300;
+  }
+  .dark .mh-cell-text-purple-50 [data-color-edit-slot='cellText'] {
+    @apply text-purple-300;
+  }
+  .dark .mh-cell-text-purple-75 [data-color-edit-slot='cellText'] {
+    @apply text-purple-200;
+  }
+  .dark .mh-cell-text-purple-100 [data-color-edit-slot='cellText'] {
+    @apply text-purple-100;
+  }
+
+  .mh-cell-text-pink-25 [data-color-edit-slot='cellText'] {
+    @apply text-pink-600;
+  }
+  .mh-cell-text-pink-50 [data-color-edit-slot='cellText'] {
+    @apply text-pink-700;
+  }
+  .mh-cell-text-pink-75 [data-color-edit-slot='cellText'] {
+    @apply text-pink-800;
+  }
+  .mh-cell-text-pink-100 [data-color-edit-slot='cellText'] {
+    @apply text-pink-900;
+  }
+  .dark .mh-cell-text-pink-25 [data-color-edit-slot='cellText'] {
+    @apply text-pink-300;
+  }
+  .dark .mh-cell-text-pink-50 [data-color-edit-slot='cellText'] {
+    @apply text-pink-300;
+  }
+  .dark .mh-cell-text-pink-75 [data-color-edit-slot='cellText'] {
+    @apply text-pink-200;
+  }
+  .dark .mh-cell-text-pink-100 [data-color-edit-slot='cellText'] {
+    @apply text-pink-100;
+  }
+
+  /* Editable border color (theme): root class `mh-border-color-<color>-<stop>`
+     Only affects explicit border containers (item frames). */
+  .mh-border-color-default-25 [data-color-edit-slot='border'] {
+    @apply border-zinc-400;
+  }
+  .mh-border-color-default-50 [data-color-edit-slot='border'] {
+    @apply border-zinc-500;
+  }
+  .mh-border-color-default-75 [data-color-edit-slot='border'] {
+    @apply border-zinc-600;
+  }
+  .mh-border-color-default-100 [data-color-edit-slot='border'] {
+    @apply border-zinc-700;
+  }
+
+  .mh-border-color-red-25 [data-color-edit-slot='border'] {
+    @apply border-red-400;
+  }
+  .mh-border-color-red-50 [data-color-edit-slot='border'] {
+    @apply border-red-500;
+  }
+  .mh-border-color-red-75 [data-color-edit-slot='border'] {
+    @apply border-red-600;
+  }
+  .mh-border-color-red-100 [data-color-edit-slot='border'] {
+    @apply border-red-700;
+  }
+
+  .mh-border-color-orange-25 [data-color-edit-slot='border'] {
+    @apply border-orange-400;
+  }
+  .mh-border-color-orange-50 [data-color-edit-slot='border'] {
+    @apply border-orange-500;
+  }
+  .mh-border-color-orange-75 [data-color-edit-slot='border'] {
+    @apply border-orange-600;
+  }
+  .mh-border-color-orange-100 [data-color-edit-slot='border'] {
+    @apply border-orange-700;
+  }
+
+  .mh-border-color-yellow-25 [data-color-edit-slot='border'] {
+    @apply border-yellow-400;
+  }
+  .mh-border-color-yellow-50 [data-color-edit-slot='border'] {
+    @apply border-yellow-500;
+  }
+  .mh-border-color-yellow-75 [data-color-edit-slot='border'] {
+    @apply border-yellow-600;
+  }
+  .mh-border-color-yellow-100 [data-color-edit-slot='border'] {
+    @apply border-yellow-700;
+  }
+
+  .mh-border-color-green-25 [data-color-edit-slot='border'] {
+    @apply border-green-400;
+  }
+  .mh-border-color-green-50 [data-color-edit-slot='border'] {
+    @apply border-green-500;
+  }
+  .mh-border-color-green-75 [data-color-edit-slot='border'] {
+    @apply border-green-600;
+  }
+  .mh-border-color-green-100 [data-color-edit-slot='border'] {
+    @apply border-green-700;
+  }
+
+  .mh-border-color-blue-25 [data-color-edit-slot='border'] {
+    @apply border-blue-400;
+  }
+  .mh-border-color-blue-50 [data-color-edit-slot='border'] {
+    @apply border-blue-500;
+  }
+  .mh-border-color-blue-75 [data-color-edit-slot='border'] {
+    @apply border-blue-600;
+  }
+  .mh-border-color-blue-100 [data-color-edit-slot='border'] {
+    @apply border-blue-700;
+  }
+
+  .mh-border-color-purple-25 [data-color-edit-slot='border'] {
+    @apply border-purple-400;
+  }
+  .mh-border-color-purple-50 [data-color-edit-slot='border'] {
+    @apply border-purple-500;
+  }
+  .mh-border-color-purple-75 [data-color-edit-slot='border'] {
+    @apply border-purple-600;
+  }
+  .mh-border-color-purple-100 [data-color-edit-slot='border'] {
+    @apply border-purple-700;
+  }
+
+  .mh-border-color-pink-25 [data-color-edit-slot='border'] {
+    @apply border-pink-400;
+  }
+  .mh-border-color-pink-50 [data-color-edit-slot='border'] {
+    @apply border-pink-500;
+  }
+  .mh-border-color-pink-75 [data-color-edit-slot='border'] {
+    @apply border-pink-600;
+  }
+  .mh-border-color-pink-100 [data-color-edit-slot='border'] {
+    @apply border-pink-700;
+  }
+
+  .dark .mh-border-color-default-25 [data-color-edit-slot='border'] {
+    @apply border-zinc-600;
+  }
+  .dark .mh-border-color-default-50 [data-color-edit-slot='border'] {
+    @apply border-zinc-500;
+  }
+  .dark .mh-border-color-default-75 [data-color-edit-slot='border'] {
+    @apply border-zinc-400;
+  }
+  .dark .mh-border-color-default-100 [data-color-edit-slot='border'] {
+    @apply border-zinc-300;
+  }
+
+  .dark .mh-border-color-red-25 [data-color-edit-slot='border'] {
+    @apply border-red-600;
+  }
+  .dark .mh-border-color-red-50 [data-color-edit-slot='border'] {
+    @apply border-red-500;
+  }
+  .dark .mh-border-color-red-75 [data-color-edit-slot='border'] {
+    @apply border-red-400;
+  }
+  .dark .mh-border-color-red-100 [data-color-edit-slot='border'] {
+    @apply border-red-300;
+  }
+
+  .dark .mh-border-color-orange-25 [data-color-edit-slot='border'] {
+    @apply border-orange-600;
+  }
+  .dark .mh-border-color-orange-50 [data-color-edit-slot='border'] {
+    @apply border-orange-500;
+  }
+  .dark .mh-border-color-orange-75 [data-color-edit-slot='border'] {
+    @apply border-orange-400;
+  }
+  .dark .mh-border-color-orange-100 [data-color-edit-slot='border'] {
+    @apply border-orange-300;
+  }
+
+  .dark .mh-border-color-yellow-25 [data-color-edit-slot='border'] {
+    @apply border-yellow-600;
+  }
+  .dark .mh-border-color-yellow-50 [data-color-edit-slot='border'] {
+    @apply border-yellow-500;
+  }
+  .dark .mh-border-color-yellow-75 [data-color-edit-slot='border'] {
+    @apply border-yellow-400;
+  }
+  .dark .mh-border-color-yellow-100 [data-color-edit-slot='border'] {
+    @apply border-yellow-300;
+  }
+
+  .dark .mh-border-color-green-25 [data-color-edit-slot='border'] {
+    @apply border-green-600;
+  }
+  .dark .mh-border-color-green-50 [data-color-edit-slot='border'] {
+    @apply border-green-500;
+  }
+  .dark .mh-border-color-green-75 [data-color-edit-slot='border'] {
+    @apply border-green-400;
+  }
+  .dark .mh-border-color-green-100 [data-color-edit-slot='border'] {
+    @apply border-green-300;
+  }
+
+  .dark .mh-border-color-blue-25 [data-color-edit-slot='border'] {
+    @apply border-blue-600;
+  }
+  .dark .mh-border-color-blue-50 [data-color-edit-slot='border'] {
+    @apply border-blue-500;
+  }
+  .dark .mh-border-color-blue-75 [data-color-edit-slot='border'] {
+    @apply border-blue-400;
+  }
+  .dark .mh-border-color-blue-100 [data-color-edit-slot='border'] {
+    @apply border-blue-300;
+  }
+
+  .dark .mh-border-color-purple-25 [data-color-edit-slot='border'] {
+    @apply border-purple-600;
+  }
+  .dark .mh-border-color-purple-50 [data-color-edit-slot='border'] {
+    @apply border-purple-500;
+  }
+  .dark .mh-border-color-purple-75 [data-color-edit-slot='border'] {
+    @apply border-purple-400;
+  }
+  .dark .mh-border-color-purple-100 [data-color-edit-slot='border'] {
+    @apply border-purple-300;
+  }
+
+  .dark .mh-border-color-pink-25 [data-color-edit-slot='border'] {
+    @apply border-pink-600;
+  }
+  .dark .mh-border-color-pink-50 [data-color-edit-slot='border'] {
+    @apply border-pink-500;
+  }
+  .dark .mh-border-color-pink-75 [data-color-edit-slot='border'] {
+    @apply border-pink-400;
+  }
+  .dark .mh-border-color-pink-100 [data-color-edit-slot='border'] {
+    @apply border-pink-300;
+  }
+
+  /* Border contrast toggle for default frames (zinc). */
+  .mh-border-strong.mh-border-color-default-25 [data-color-edit-slot='border'] {
+    @apply border-zinc-500;
+  }
+  .mh-border-strong.mh-border-color-default-50 [data-color-edit-slot='border'] {
+    @apply border-zinc-600;
+  }
+  .mh-border-strong.mh-border-color-default-75 [data-color-edit-slot='border'] {
+    @apply border-zinc-700;
+  }
+  .mh-border-strong.mh-border-color-default-100 [data-color-edit-slot='border'] {
+    @apply border-zinc-800;
+  }
+
+  .dark .mh-border-strong.mh-border-color-default-25 [data-color-edit-slot='border'] {
+    @apply border-zinc-500;
+  }
+  .dark .mh-border-strong.mh-border-color-default-50 [data-color-edit-slot='border'] {
+    @apply border-zinc-400;
+  }
+  .dark .mh-border-strong.mh-border-color-default-75 [data-color-edit-slot='border'] {
+    @apply border-zinc-300;
+  }
+  .dark .mh-border-strong.mh-border-color-default-100 [data-color-edit-slot='border'] {
+    @apply border-zinc-200;
+  }
+
+  /* Editable grid line color (theme): root class `mh-grid-color-<color>-<stop>` */
+  .mh-grid-color-default-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-default-25 .mh-grid .border-zinc-300 {
+    @apply border-zinc-400;
+  }
+  .mh-grid-color-default-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-zinc-400/60;
+  }
+  .dark .mh-grid-color-default-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-default-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-zinc-600;
+  }
+  .dark .mh-grid-color-default-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-zinc-600/60;
+  }
+
+  .mh-grid-color-default-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-default-50 .mh-grid .border-zinc-300 {
+    @apply border-zinc-500;
+  }
+  .mh-grid-color-default-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-zinc-500/60;
+  }
+  .dark .mh-grid-color-default-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-default-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-zinc-500;
+  }
+  .dark .mh-grid-color-default-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-zinc-500/60;
+  }
+
+  .mh-grid-color-default-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-default-75 .mh-grid .border-zinc-300 {
+    @apply border-zinc-600;
+  }
+  .mh-grid-color-default-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-zinc-600/60;
+  }
+  .dark .mh-grid-color-default-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-default-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-zinc-400;
+  }
+  .dark .mh-grid-color-default-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-zinc-400/60;
+  }
+
+  .mh-grid-color-default-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-default-100 .mh-grid .border-zinc-300 {
+    @apply border-zinc-700;
+  }
+  .mh-grid-color-default-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-zinc-700/60;
+  }
+  .dark .mh-grid-color-default-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-default-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-zinc-300;
+  }
+  .dark .mh-grid-color-default-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-zinc-300/60;
+  }
+
+  .mh-grid-color-red-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-red-25 .mh-grid .border-zinc-300 {
+    @apply border-red-400;
+  }
+  .mh-grid-color-red-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-red-400/60;
+  }
+  .dark .mh-grid-color-red-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-red-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-red-600;
+  }
+  .dark .mh-grid-color-red-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-red-600/60;
+  }
+
+  .mh-grid-color-red-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-red-50 .mh-grid .border-zinc-300 {
+    @apply border-red-500;
+  }
+  .mh-grid-color-red-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-red-500/60;
+  }
+  .dark .mh-grid-color-red-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-red-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-red-500;
+  }
+  .dark .mh-grid-color-red-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-red-500/60;
+  }
+
+  .mh-grid-color-red-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-red-75 .mh-grid .border-zinc-300 {
+    @apply border-red-600;
+  }
+  .mh-grid-color-red-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-red-600/60;
+  }
+  .dark .mh-grid-color-red-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-red-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-red-400;
+  }
+  .dark .mh-grid-color-red-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-red-400/60;
+  }
+
+  .mh-grid-color-red-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-red-100 .mh-grid .border-zinc-300 {
+    @apply border-red-700;
+  }
+  .mh-grid-color-red-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-red-700/60;
+  }
+  .dark .mh-grid-color-red-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-red-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-red-300;
+  }
+  .dark .mh-grid-color-red-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-red-300/60;
+  }
+
+  .mh-grid-color-orange-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-orange-25 .mh-grid .border-zinc-300 {
+    @apply border-orange-400;
+  }
+  .mh-grid-color-orange-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-orange-400/60;
+  }
+  .dark .mh-grid-color-orange-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-orange-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-orange-600;
+  }
+  .dark .mh-grid-color-orange-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-orange-600/60;
+  }
+
+  .mh-grid-color-orange-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-orange-50 .mh-grid .border-zinc-300 {
+    @apply border-orange-500;
+  }
+  .mh-grid-color-orange-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-orange-500/60;
+  }
+  .dark .mh-grid-color-orange-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-orange-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-orange-500;
+  }
+  .dark .mh-grid-color-orange-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-orange-500/60;
+  }
+
+  .mh-grid-color-orange-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-orange-75 .mh-grid .border-zinc-300 {
+    @apply border-orange-600;
+  }
+  .mh-grid-color-orange-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-orange-600/60;
+  }
+  .dark .mh-grid-color-orange-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-orange-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-orange-400;
+  }
+  .dark .mh-grid-color-orange-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-orange-400/60;
+  }
+
+  .mh-grid-color-orange-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-orange-100 .mh-grid .border-zinc-300 {
+    @apply border-orange-700;
+  }
+  .mh-grid-color-orange-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-orange-700/60;
+  }
+  .dark .mh-grid-color-orange-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-orange-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-orange-300;
+  }
+  .dark .mh-grid-color-orange-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-orange-300/60;
+  }
+
+  .mh-grid-color-yellow-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-yellow-25 .mh-grid .border-zinc-300 {
+    @apply border-yellow-400;
+  }
+  .mh-grid-color-yellow-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-yellow-400/60;
+  }
+  .dark .mh-grid-color-yellow-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-yellow-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-yellow-600;
+  }
+  .dark .mh-grid-color-yellow-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-yellow-600/60;
+  }
+
+  .mh-grid-color-yellow-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-yellow-50 .mh-grid .border-zinc-300 {
+    @apply border-yellow-500;
+  }
+  .mh-grid-color-yellow-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-yellow-500/60;
+  }
+  .dark .mh-grid-color-yellow-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-yellow-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-yellow-500;
+  }
+  .dark .mh-grid-color-yellow-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-yellow-500/60;
+  }
+
+  .mh-grid-color-yellow-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-yellow-75 .mh-grid .border-zinc-300 {
+    @apply border-yellow-600;
+  }
+  .mh-grid-color-yellow-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-yellow-600/60;
+  }
+  .dark .mh-grid-color-yellow-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-yellow-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-yellow-400;
+  }
+  .dark .mh-grid-color-yellow-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-yellow-400/60;
+  }
+
+  .mh-grid-color-yellow-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-yellow-100 .mh-grid .border-zinc-300 {
+    @apply border-yellow-700;
+  }
+  .mh-grid-color-yellow-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-yellow-700/60;
+  }
+  .dark .mh-grid-color-yellow-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-yellow-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-yellow-300;
+  }
+  .dark .mh-grid-color-yellow-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-yellow-300/60;
+  }
+
+  .mh-grid-color-green-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-green-25 .mh-grid .border-zinc-300 {
+    @apply border-green-400;
+  }
+  .mh-grid-color-green-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-green-400/60;
+  }
+  .dark .mh-grid-color-green-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-green-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-green-600;
+  }
+  .dark .mh-grid-color-green-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-green-600/60;
+  }
+
+  .mh-grid-color-green-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-green-50 .mh-grid .border-zinc-300 {
+    @apply border-green-500;
+  }
+  .mh-grid-color-green-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-green-500/60;
+  }
+  .dark .mh-grid-color-green-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-green-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-green-500;
+  }
+  .dark .mh-grid-color-green-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-green-500/60;
+  }
+
+  .mh-grid-color-green-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-green-75 .mh-grid .border-zinc-300 {
+    @apply border-green-600;
+  }
+  .mh-grid-color-green-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-green-600/60;
+  }
+  .dark .mh-grid-color-green-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-green-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-green-400;
+  }
+  .dark .mh-grid-color-green-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-green-400/60;
+  }
+
+  .mh-grid-color-green-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-green-100 .mh-grid .border-zinc-300 {
+    @apply border-green-700;
+  }
+  .mh-grid-color-green-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-green-700/60;
+  }
+  .dark .mh-grid-color-green-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-green-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-green-300;
+  }
+  .dark .mh-grid-color-green-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-green-300/60;
+  }
+
+  .mh-grid-color-blue-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-blue-25 .mh-grid .border-zinc-300 {
+    @apply border-blue-400;
+  }
+  .mh-grid-color-blue-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-blue-400/60;
+  }
+  .dark .mh-grid-color-blue-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-blue-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-blue-600;
+  }
+  .dark .mh-grid-color-blue-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-blue-600/60;
+  }
+
+  .mh-grid-color-blue-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-blue-50 .mh-grid .border-zinc-300 {
+    @apply border-blue-500;
+  }
+  .mh-grid-color-blue-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-blue-500/60;
+  }
+  .dark .mh-grid-color-blue-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-blue-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-blue-500;
+  }
+  .dark .mh-grid-color-blue-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-blue-500/60;
+  }
+
+  .mh-grid-color-blue-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-blue-75 .mh-grid .border-zinc-300 {
+    @apply border-blue-600;
+  }
+  .mh-grid-color-blue-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-blue-600/60;
+  }
+  .dark .mh-grid-color-blue-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-blue-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-blue-400;
+  }
+  .dark .mh-grid-color-blue-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-blue-400/60;
+  }
+
+  .mh-grid-color-blue-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-blue-100 .mh-grid .border-zinc-300 {
+    @apply border-blue-700;
+  }
+  .mh-grid-color-blue-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-blue-700/60;
+  }
+  .dark .mh-grid-color-blue-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-blue-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-blue-300;
+  }
+  .dark .mh-grid-color-blue-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-blue-300/60;
+  }
+
+  .mh-grid-color-purple-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-purple-25 .mh-grid .border-zinc-300 {
+    @apply border-purple-400;
+  }
+  .mh-grid-color-purple-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-purple-400/60;
+  }
+  .dark .mh-grid-color-purple-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-purple-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-purple-600;
+  }
+  .dark .mh-grid-color-purple-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-purple-600/60;
+  }
+
+  .mh-grid-color-purple-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-purple-50 .mh-grid .border-zinc-300 {
+    @apply border-purple-500;
+  }
+  .mh-grid-color-purple-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-purple-500/60;
+  }
+  .dark .mh-grid-color-purple-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-purple-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-purple-500;
+  }
+  .dark .mh-grid-color-purple-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-purple-500/60;
+  }
+
+  .mh-grid-color-purple-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-purple-75 .mh-grid .border-zinc-300 {
+    @apply border-purple-600;
+  }
+  .mh-grid-color-purple-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-purple-600/60;
+  }
+  .dark .mh-grid-color-purple-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-purple-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-purple-400;
+  }
+  .dark .mh-grid-color-purple-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-purple-400/60;
+  }
+
+  .mh-grid-color-purple-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-purple-100 .mh-grid .border-zinc-300 {
+    @apply border-purple-700;
+  }
+  .mh-grid-color-purple-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-purple-700/60;
+  }
+  .dark .mh-grid-color-purple-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-purple-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-purple-300;
+  }
+  .dark .mh-grid-color-purple-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-purple-300/60;
+  }
+
+  .mh-grid-color-pink-25 .mh-grid .border-zinc-200,
+  .mh-grid-color-pink-25 .mh-grid .border-zinc-300 {
+    @apply border-pink-400;
+  }
+  .mh-grid-color-pink-25 .mh-grid .border-zinc-200\/60 {
+    @apply border-pink-400/60;
+  }
+  .dark .mh-grid-color-pink-25 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-pink-25 .mh-grid .dark\:border-zinc-700 {
+    @apply border-pink-600;
+  }
+  .dark .mh-grid-color-pink-25 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-pink-600/60;
+  }
+
+  .mh-grid-color-pink-50 .mh-grid .border-zinc-200,
+  .mh-grid-color-pink-50 .mh-grid .border-zinc-300 {
+    @apply border-pink-500;
+  }
+  .mh-grid-color-pink-50 .mh-grid .border-zinc-200\/60 {
+    @apply border-pink-500/60;
+  }
+  .dark .mh-grid-color-pink-50 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-pink-50 .mh-grid .dark\:border-zinc-700 {
+    @apply border-pink-500;
+  }
+  .dark .mh-grid-color-pink-50 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-pink-500/60;
+  }
+
+  .mh-grid-color-pink-75 .mh-grid .border-zinc-200,
+  .mh-grid-color-pink-75 .mh-grid .border-zinc-300 {
+    @apply border-pink-600;
+  }
+  .mh-grid-color-pink-75 .mh-grid .border-zinc-200\/60 {
+    @apply border-pink-600/60;
+  }
+  .dark .mh-grid-color-pink-75 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-pink-75 .mh-grid .dark\:border-zinc-700 {
+    @apply border-pink-400;
+  }
+  .dark .mh-grid-color-pink-75 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-pink-400/60;
+  }
+
+  .mh-grid-color-pink-100 .mh-grid .border-zinc-200,
+  .mh-grid-color-pink-100 .mh-grid .border-zinc-300 {
+    @apply border-pink-700;
+  }
+  .mh-grid-color-pink-100 .mh-grid .border-zinc-200\/60 {
+    @apply border-pink-700/60;
+  }
+  .dark .mh-grid-color-pink-100 .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid-color-pink-100 .mh-grid .dark\:border-zinc-700 {
+    @apply border-pink-300;
+  }
+  .dark .mh-grid-color-pink-100 .mh-grid .dark\:border-zinc-800\/60 {
+    @apply border-pink-300/60;
+  }
+
+  /* Keep the "枠線" (border) slot from recoloring button frames.
+     (Buttons should be themed via the "ボタン" slot, not by generic borders.) */
+  html[class*='mh-border-color-'] button.border-zinc-100 {
+    @apply border-zinc-100;
+  }
+  html[class*='mh-border-color-'] button.border-zinc-200 {
+    @apply border-zinc-200;
+  }
+  html[class*='mh-border-color-'] button.border-zinc-300 {
+    @apply border-zinc-300;
+  }
+  html[class*='mh-border-color-'] button.border-zinc-400 {
+    @apply border-zinc-400;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[class*='mh-border-color-'] button.dark\:border-zinc-900 {
+      @apply border-zinc-900;
+    }
+    html[class*='mh-border-color-'] button.dark\:border-zinc-800 {
+      @apply border-zinc-800;
+    }
+    html[class*='mh-border-color-'] button.dark\:border-zinc-700 {
+      @apply border-zinc-700;
+    }
+  }
+
+  .dark html[class*='mh-border-color-'] button.dark\:border-zinc-900 {
+    @apply border-zinc-900;
+  }
+  .dark html[class*='mh-border-color-'] button.dark\:border-zinc-800 {
+    @apply border-zinc-800;
+  }
+  .dark html[class*='mh-border-color-'] button.dark\:border-zinc-700 {
+    @apply border-zinc-700;
+  }
+
+  /* Button frame color (v2): let the "ボタン" slot control button borders. */
+  .mh-button-red-25 button.border-zinc-200,
+  .mh-button-red-25 button.border-zinc-300,
+  .mh-button-red-25 button.border-zinc-400 {
+    @apply border-red-400;
+  }
+  .mh-button-red-25 button.border-zinc-200\/60 {
+    @apply border-red-400/60;
+  }
+  .dark .mh-button-red-25 button.dark\:border-zinc-800,
+  .dark .mh-button-red-25 button.dark\:border-zinc-700,
+  .dark .mh-button-red-25 button.dark\:border-zinc-600,
+  .dark .mh-button-red-25 button.dark\:border-zinc-500 {
+    @apply border-red-500;
+  }
+  .dark .mh-button-red-25 button.dark\:border-zinc-800\/60 {
+    @apply border-red-500/60;
+  }
+
+  .mh-button-red-50 button.border-zinc-200,
+  .mh-button-red-50 button.border-zinc-300,
+  .mh-button-red-50 button.border-zinc-400 {
+    @apply border-red-500;
+  }
+  .mh-button-red-50 button.border-zinc-200\/60 {
+    @apply border-red-500/60;
+  }
+  .dark .mh-button-red-50 button.dark\:border-zinc-800,
+  .dark .mh-button-red-50 button.dark\:border-zinc-700,
+  .dark .mh-button-red-50 button.dark\:border-zinc-600,
+  .dark .mh-button-red-50 button.dark\:border-zinc-500 {
+    @apply border-red-500;
+  }
+  .dark .mh-button-red-50 button.dark\:border-zinc-800\/60 {
+    @apply border-red-500/60;
+  }
+
+  .mh-button-red-75 button.border-zinc-200,
+  .mh-button-red-75 button.border-zinc-300,
+  .mh-button-red-75 button.border-zinc-400 {
+    @apply border-red-600;
+  }
+  .mh-button-red-75 button.border-zinc-200\/60 {
+    @apply border-red-600/60;
+  }
+  .dark .mh-button-red-75 button.dark\:border-zinc-800,
+  .dark .mh-button-red-75 button.dark\:border-zinc-700,
+  .dark .mh-button-red-75 button.dark\:border-zinc-600,
+  .dark .mh-button-red-75 button.dark\:border-zinc-500 {
+    @apply border-red-400;
+  }
+  .dark .mh-button-red-75 button.dark\:border-zinc-800\/60 {
+    @apply border-red-400/60;
+  }
+
+  .mh-button-red-100 button.border-zinc-200,
+  .mh-button-red-100 button.border-zinc-300,
+  .mh-button-red-100 button.border-zinc-400 {
+    @apply border-red-700;
+  }
+  .mh-button-red-100 button.border-zinc-200\/60 {
+    @apply border-red-700/60;
+  }
+  .dark .mh-button-red-100 button.dark\:border-zinc-800,
+  .dark .mh-button-red-100 button.dark\:border-zinc-700,
+  .dark .mh-button-red-100 button.dark\:border-zinc-600,
+  .dark .mh-button-red-100 button.dark\:border-zinc-500 {
+    @apply border-red-300;
+  }
+  .dark .mh-button-red-100 button.dark\:border-zinc-800\/60 {
+    @apply border-red-300/60;
+  }
+
+  .mh-button-orange-25 button.border-zinc-200,
+  .mh-button-orange-25 button.border-zinc-300,
+  .mh-button-orange-25 button.border-zinc-400 {
+    @apply border-orange-400;
+  }
+  .mh-button-orange-25 button.border-zinc-200\/60 {
+    @apply border-orange-400/60;
+  }
+  .dark .mh-button-orange-25 button.dark\:border-zinc-800,
+  .dark .mh-button-orange-25 button.dark\:border-zinc-700,
+  .dark .mh-button-orange-25 button.dark\:border-zinc-600,
+  .dark .mh-button-orange-25 button.dark\:border-zinc-500 {
+    @apply border-orange-500;
+  }
+  .dark .mh-button-orange-25 button.dark\:border-zinc-800\/60 {
+    @apply border-orange-500/60;
+  }
+
+  .mh-button-orange-50 button.border-zinc-200,
+  .mh-button-orange-50 button.border-zinc-300,
+  .mh-button-orange-50 button.border-zinc-400 {
+    @apply border-orange-500;
+  }
+  .mh-button-orange-50 button.border-zinc-200\/60 {
+    @apply border-orange-500/60;
+  }
+  .dark .mh-button-orange-50 button.dark\:border-zinc-800,
+  .dark .mh-button-orange-50 button.dark\:border-zinc-700,
+  .dark .mh-button-orange-50 button.dark\:border-zinc-600,
+  .dark .mh-button-orange-50 button.dark\:border-zinc-500 {
+    @apply border-orange-500;
+  }
+  .dark .mh-button-orange-50 button.dark\:border-zinc-800\/60 {
+    @apply border-orange-500/60;
+  }
+
+  .mh-button-orange-75 button.border-zinc-200,
+  .mh-button-orange-75 button.border-zinc-300,
+  .mh-button-orange-75 button.border-zinc-400 {
+    @apply border-orange-600;
+  }
+  .mh-button-orange-75 button.border-zinc-200\/60 {
+    @apply border-orange-600/60;
+  }
+  .dark .mh-button-orange-75 button.dark\:border-zinc-800,
+  .dark .mh-button-orange-75 button.dark\:border-zinc-700,
+  .dark .mh-button-orange-75 button.dark\:border-zinc-600,
+  .dark .mh-button-orange-75 button.dark\:border-zinc-500 {
+    @apply border-orange-400;
+  }
+  .dark .mh-button-orange-75 button.dark\:border-zinc-800\/60 {
+    @apply border-orange-400/60;
+  }
+
+  .mh-button-orange-100 button.border-zinc-200,
+  .mh-button-orange-100 button.border-zinc-300,
+  .mh-button-orange-100 button.border-zinc-400 {
+    @apply border-orange-700;
+  }
+  .mh-button-orange-100 button.border-zinc-200\/60 {
+    @apply border-orange-700/60;
+  }
+  .dark .mh-button-orange-100 button.dark\:border-zinc-800,
+  .dark .mh-button-orange-100 button.dark\:border-zinc-700,
+  .dark .mh-button-orange-100 button.dark\:border-zinc-600,
+  .dark .mh-button-orange-100 button.dark\:border-zinc-500 {
+    @apply border-orange-300;
+  }
+  .dark .mh-button-orange-100 button.dark\:border-zinc-800\/60 {
+    @apply border-orange-300/60;
+  }
+
+  .mh-button-yellow-25 button.border-zinc-200,
+  .mh-button-yellow-25 button.border-zinc-300,
+  .mh-button-yellow-25 button.border-zinc-400 {
+    @apply border-amber-400;
+  }
+  .mh-button-yellow-25 button.border-zinc-200\/60 {
+    @apply border-amber-400/60;
+  }
+  .dark .mh-button-yellow-25 button.dark\:border-zinc-800,
+  .dark .mh-button-yellow-25 button.dark\:border-zinc-700,
+  .dark .mh-button-yellow-25 button.dark\:border-zinc-600,
+  .dark .mh-button-yellow-25 button.dark\:border-zinc-500 {
+    @apply border-amber-500;
+  }
+  .dark .mh-button-yellow-25 button.dark\:border-zinc-800\/60 {
+    @apply border-amber-500/60;
+  }
+
+  .mh-button-yellow-50 button.border-zinc-200,
+  .mh-button-yellow-50 button.border-zinc-300,
+  .mh-button-yellow-50 button.border-zinc-400 {
+    @apply border-amber-500;
+  }
+  .mh-button-yellow-50 button.border-zinc-200\/60 {
+    @apply border-amber-500/60;
+  }
+  .dark .mh-button-yellow-50 button.dark\:border-zinc-800,
+  .dark .mh-button-yellow-50 button.dark\:border-zinc-700,
+  .dark .mh-button-yellow-50 button.dark\:border-zinc-600,
+  .dark .mh-button-yellow-50 button.dark\:border-zinc-500 {
+    @apply border-amber-500;
+  }
+  .dark .mh-button-yellow-50 button.dark\:border-zinc-800\/60 {
+    @apply border-amber-500/60;
+  }
+
+  .mh-button-yellow-75 button.border-zinc-200,
+  .mh-button-yellow-75 button.border-zinc-300,
+  .mh-button-yellow-75 button.border-zinc-400 {
+    @apply border-amber-600;
+  }
+  .mh-button-yellow-75 button.border-zinc-200\/60 {
+    @apply border-amber-600/60;
+  }
+  .dark .mh-button-yellow-75 button.dark\:border-zinc-800,
+  .dark .mh-button-yellow-75 button.dark\:border-zinc-700,
+  .dark .mh-button-yellow-75 button.dark\:border-zinc-600,
+  .dark .mh-button-yellow-75 button.dark\:border-zinc-500 {
+    @apply border-amber-400;
+  }
+  .dark .mh-button-yellow-75 button.dark\:border-zinc-800\/60 {
+    @apply border-amber-400/60;
+  }
+
+  .mh-button-yellow-100 button.border-zinc-200,
+  .mh-button-yellow-100 button.border-zinc-300,
+  .mh-button-yellow-100 button.border-zinc-400 {
+    @apply border-amber-700;
+  }
+  .mh-button-yellow-100 button.border-zinc-200\/60 {
+    @apply border-amber-700/60;
+  }
+  .dark .mh-button-yellow-100 button.dark\:border-zinc-800,
+  .dark .mh-button-yellow-100 button.dark\:border-zinc-700,
+  .dark .mh-button-yellow-100 button.dark\:border-zinc-600,
+  .dark .mh-button-yellow-100 button.dark\:border-zinc-500 {
+    @apply border-amber-300;
+  }
+  .dark .mh-button-yellow-100 button.dark\:border-zinc-800\/60 {
+    @apply border-amber-300/60;
+  }
+
+  .mh-button-green-25 button.border-zinc-200,
+  .mh-button-green-25 button.border-zinc-300,
+  .mh-button-green-25 button.border-zinc-400 {
+    @apply border-emerald-400;
+  }
+  .mh-button-green-25 button.border-zinc-200\/60 {
+    @apply border-emerald-400/60;
+  }
+  .dark .mh-button-green-25 button.dark\:border-zinc-800,
+  .dark .mh-button-green-25 button.dark\:border-zinc-700,
+  .dark .mh-button-green-25 button.dark\:border-zinc-600,
+  .dark .mh-button-green-25 button.dark\:border-zinc-500 {
+    @apply border-emerald-500;
+  }
+  .dark .mh-button-green-25 button.dark\:border-zinc-800\/60 {
+    @apply border-emerald-500/60;
+  }
+
+  .mh-button-green-50 button.border-zinc-200,
+  .mh-button-green-50 button.border-zinc-300,
+  .mh-button-green-50 button.border-zinc-400 {
+    @apply border-emerald-500;
+  }
+  .mh-button-green-50 button.border-zinc-200\/60 {
+    @apply border-emerald-500/60;
+  }
+  .dark .mh-button-green-50 button.dark\:border-zinc-800,
+  .dark .mh-button-green-50 button.dark\:border-zinc-700,
+  .dark .mh-button-green-50 button.dark\:border-zinc-600,
+  .dark .mh-button-green-50 button.dark\:border-zinc-500 {
+    @apply border-emerald-500;
+  }
+  .dark .mh-button-green-50 button.dark\:border-zinc-800\/60 {
+    @apply border-emerald-500/60;
+  }
+
+  .mh-button-green-75 button.border-zinc-200,
+  .mh-button-green-75 button.border-zinc-300,
+  .mh-button-green-75 button.border-zinc-400 {
+    @apply border-emerald-600;
+  }
+  .mh-button-green-75 button.border-zinc-200\/60 {
+    @apply border-emerald-600/60;
+  }
+  .dark .mh-button-green-75 button.dark\:border-zinc-800,
+  .dark .mh-button-green-75 button.dark\:border-zinc-700,
+  .dark .mh-button-green-75 button.dark\:border-zinc-600,
+  .dark .mh-button-green-75 button.dark\:border-zinc-500 {
+    @apply border-emerald-400;
+  }
+  .dark .mh-button-green-75 button.dark\:border-zinc-800\/60 {
+    @apply border-emerald-400/60;
+  }
+
+  .mh-button-green-100 button.border-zinc-200,
+  .mh-button-green-100 button.border-zinc-300,
+  .mh-button-green-100 button.border-zinc-400 {
+    @apply border-emerald-700;
+  }
+  .mh-button-green-100 button.border-zinc-200\/60 {
+    @apply border-emerald-700/60;
+  }
+  .dark .mh-button-green-100 button.dark\:border-zinc-800,
+  .dark .mh-button-green-100 button.dark\:border-zinc-700,
+  .dark .mh-button-green-100 button.dark\:border-zinc-600,
+  .dark .mh-button-green-100 button.dark\:border-zinc-500 {
+    @apply border-emerald-300;
+  }
+  .dark .mh-button-green-100 button.dark\:border-zinc-800\/60 {
+    @apply border-emerald-300/60;
+  }
+
+  .mh-button-blue-25 button.border-zinc-200,
+  .mh-button-blue-25 button.border-zinc-300,
+  .mh-button-blue-25 button.border-zinc-400 {
+    @apply border-blue-400;
+  }
+  .mh-button-blue-25 button.border-zinc-200\/60 {
+    @apply border-blue-400/60;
+  }
+  .dark .mh-button-blue-25 button.dark\:border-zinc-800,
+  .dark .mh-button-blue-25 button.dark\:border-zinc-700,
+  .dark .mh-button-blue-25 button.dark\:border-zinc-600,
+  .dark .mh-button-blue-25 button.dark\:border-zinc-500 {
+    @apply border-blue-500;
+  }
+  .dark .mh-button-blue-25 button.dark\:border-zinc-800\/60 {
+    @apply border-blue-500/60;
+  }
+
+  .mh-button-blue-50 button.border-zinc-200,
+  .mh-button-blue-50 button.border-zinc-300,
+  .mh-button-blue-50 button.border-zinc-400 {
+    @apply border-blue-500;
+  }
+  .mh-button-blue-50 button.border-zinc-200\/60 {
+    @apply border-blue-500/60;
+  }
+  .dark .mh-button-blue-50 button.dark\:border-zinc-800,
+  .dark .mh-button-blue-50 button.dark\:border-zinc-700,
+  .dark .mh-button-blue-50 button.dark\:border-zinc-600,
+  .dark .mh-button-blue-50 button.dark\:border-zinc-500 {
+    @apply border-blue-500;
+  }
+  .dark .mh-button-blue-50 button.dark\:border-zinc-800\/60 {
+    @apply border-blue-500/60;
+  }
+
+  .mh-button-blue-75 button.border-zinc-200,
+  .mh-button-blue-75 button.border-zinc-300,
+  .mh-button-blue-75 button.border-zinc-400 {
+    @apply border-blue-600;
+  }
+  .mh-button-blue-75 button.border-zinc-200\/60 {
+    @apply border-blue-600/60;
+  }
+  .dark .mh-button-blue-75 button.dark\:border-zinc-800,
+  .dark .mh-button-blue-75 button.dark\:border-zinc-700,
+  .dark .mh-button-blue-75 button.dark\:border-zinc-600,
+  .dark .mh-button-blue-75 button.dark\:border-zinc-500 {
+    @apply border-blue-400;
+  }
+  .dark .mh-button-blue-75 button.dark\:border-zinc-800\/60 {
+    @apply border-blue-400/60;
+  }
+
+  .mh-button-blue-100 button.border-zinc-200,
+  .mh-button-blue-100 button.border-zinc-300,
+  .mh-button-blue-100 button.border-zinc-400 {
+    @apply border-blue-700;
+  }
+  .mh-button-blue-100 button.border-zinc-200\/60 {
+    @apply border-blue-700/60;
+  }
+  .dark .mh-button-blue-100 button.dark\:border-zinc-800,
+  .dark .mh-button-blue-100 button.dark\:border-zinc-700,
+  .dark .mh-button-blue-100 button.dark\:border-zinc-600,
+  .dark .mh-button-blue-100 button.dark\:border-zinc-500 {
+    @apply border-blue-300;
+  }
+  .dark .mh-button-blue-100 button.dark\:border-zinc-800\/60 {
+    @apply border-blue-300/60;
+  }
+
+  .mh-button-purple-25 button.border-zinc-200,
+  .mh-button-purple-25 button.border-zinc-300,
+  .mh-button-purple-25 button.border-zinc-400 {
+    @apply border-violet-400;
+  }
+  .mh-button-purple-25 button.border-zinc-200\/60 {
+    @apply border-violet-400/60;
+  }
+  .dark .mh-button-purple-25 button.dark\:border-zinc-800,
+  .dark .mh-button-purple-25 button.dark\:border-zinc-700,
+  .dark .mh-button-purple-25 button.dark\:border-zinc-600,
+  .dark .mh-button-purple-25 button.dark\:border-zinc-500 {
+    @apply border-violet-500;
+  }
+  .dark .mh-button-purple-25 button.dark\:border-zinc-800\/60 {
+    @apply border-violet-500/60;
+  }
+
+  .mh-button-purple-50 button.border-zinc-200,
+  .mh-button-purple-50 button.border-zinc-300,
+  .mh-button-purple-50 button.border-zinc-400 {
+    @apply border-violet-500;
+  }
+  .mh-button-purple-50 button.border-zinc-200\/60 {
+    @apply border-violet-500/60;
+  }
+  .dark .mh-button-purple-50 button.dark\:border-zinc-800,
+  .dark .mh-button-purple-50 button.dark\:border-zinc-700,
+  .dark .mh-button-purple-50 button.dark\:border-zinc-600,
+  .dark .mh-button-purple-50 button.dark\:border-zinc-500 {
+    @apply border-violet-500;
+  }
+  .dark .mh-button-purple-50 button.dark\:border-zinc-800\/60 {
+    @apply border-violet-500/60;
+  }
+
+  .mh-button-purple-75 button.border-zinc-200,
+  .mh-button-purple-75 button.border-zinc-300,
+  .mh-button-purple-75 button.border-zinc-400 {
+    @apply border-violet-600;
+  }
+  .mh-button-purple-75 button.border-zinc-200\/60 {
+    @apply border-violet-600/60;
+  }
+  .dark .mh-button-purple-75 button.dark\:border-zinc-800,
+  .dark .mh-button-purple-75 button.dark\:border-zinc-700,
+  .dark .mh-button-purple-75 button.dark\:border-zinc-600,
+  .dark .mh-button-purple-75 button.dark\:border-zinc-500 {
+    @apply border-violet-400;
+  }
+  .dark .mh-button-purple-75 button.dark\:border-zinc-800\/60 {
+    @apply border-violet-400/60;
+  }
+
+  .mh-button-purple-100 button.border-zinc-200,
+  .mh-button-purple-100 button.border-zinc-300,
+  .mh-button-purple-100 button.border-zinc-400 {
+    @apply border-violet-700;
+  }
+  .mh-button-purple-100 button.border-zinc-200\/60 {
+    @apply border-violet-700/60;
+  }
+  .dark .mh-button-purple-100 button.dark\:border-zinc-800,
+  .dark .mh-button-purple-100 button.dark\:border-zinc-700,
+  .dark .mh-button-purple-100 button.dark\:border-zinc-600,
+  .dark .mh-button-purple-100 button.dark\:border-zinc-500 {
+    @apply border-violet-300;
+  }
+  .dark .mh-button-purple-100 button.dark\:border-zinc-800\/60 {
+    @apply border-violet-300/60;
+  }
+
+  .mh-button-pink-25 button.border-zinc-200,
+  .mh-button-pink-25 button.border-zinc-300,
+  .mh-button-pink-25 button.border-zinc-400 {
+    @apply border-pink-400;
+  }
+  .mh-button-pink-25 button.border-zinc-200\/60 {
+    @apply border-pink-400/60;
+  }
+  .dark .mh-button-pink-25 button.dark\:border-zinc-800,
+  .dark .mh-button-pink-25 button.dark\:border-zinc-700,
+  .dark .mh-button-pink-25 button.dark\:border-zinc-600,
+  .dark .mh-button-pink-25 button.dark\:border-zinc-500 {
+    @apply border-pink-500;
+  }
+  .dark .mh-button-pink-25 button.dark\:border-zinc-800\/60 {
+    @apply border-pink-500/60;
+  }
+
+  .mh-button-pink-50 button.border-zinc-200,
+  .mh-button-pink-50 button.border-zinc-300,
+  .mh-button-pink-50 button.border-zinc-400 {
+    @apply border-pink-500;
+  }
+  .mh-button-pink-50 button.border-zinc-200\/60 {
+    @apply border-pink-500/60;
+  }
+  .dark .mh-button-pink-50 button.dark\:border-zinc-800,
+  .dark .mh-button-pink-50 button.dark\:border-zinc-700,
+  .dark .mh-button-pink-50 button.dark\:border-zinc-600,
+  .dark .mh-button-pink-50 button.dark\:border-zinc-500 {
+    @apply border-pink-500;
+  }
+  .dark .mh-button-pink-50 button.dark\:border-zinc-800\/60 {
+    @apply border-pink-500/60;
+  }
+
+  .mh-button-pink-75 button.border-zinc-200,
+  .mh-button-pink-75 button.border-zinc-300,
+  .mh-button-pink-75 button.border-zinc-400 {
+    @apply border-pink-600;
+  }
+  .mh-button-pink-75 button.border-zinc-200\/60 {
+    @apply border-pink-600/60;
+  }
+  .dark .mh-button-pink-75 button.dark\:border-zinc-800,
+  .dark .mh-button-pink-75 button.dark\:border-zinc-700,
+  .dark .mh-button-pink-75 button.dark\:border-zinc-600,
+  .dark .mh-button-pink-75 button.dark\:border-zinc-500 {
+    @apply border-pink-400;
+  }
+  .dark .mh-button-pink-75 button.dark\:border-zinc-800\/60 {
+    @apply border-pink-400/60;
+  }
+
+  .mh-button-pink-100 button.border-zinc-200,
+  .mh-button-pink-100 button.border-zinc-300,
+  .mh-button-pink-100 button.border-zinc-400 {
+    @apply border-pink-700;
+  }
+  .mh-button-pink-100 button.border-zinc-200\/60 {
+    @apply border-pink-700/60;
+  }
+  .dark .mh-button-pink-100 button.dark\:border-zinc-800,
+  .dark .mh-button-pink-100 button.dark\:border-zinc-700,
+  .dark .mh-button-pink-100 button.dark\:border-zinc-600,
+  .dark .mh-button-pink-100 button.dark\:border-zinc-500 {
+    @apply border-pink-300;
+  }
+  .dark .mh-button-pink-100 button.dark\:border-zinc-800\/60 {
+    @apply border-pink-300/60;
+  }
 }

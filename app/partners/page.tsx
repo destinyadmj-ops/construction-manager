@@ -9,6 +9,7 @@ type ApiPartner = {
   id: string;
   name: string;
   email: string | null;
+  fax: string | null;
   notes: string | null;
   outlookToEmailDefault: string | null;
   outlookSubjectReportDefault: string | null;
@@ -50,6 +51,7 @@ export default function PartnersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftNotes, setDraftNotes] = useState<string>('');
   const [draftEmail, setDraftEmail] = useState<string>('');
+  const [draftFax, setDraftFax] = useState<string>('');
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -72,6 +74,7 @@ export default function PartnersPage() {
           const id = typeof o?.id === 'string' ? o.id : null;
           const name = typeof o?.name === 'string' ? o.name : null;
           const email = typeof o?.email === 'string' ? o.email : o?.email === null ? null : null;
+          const fax = typeof o?.fax === 'string' ? o.fax : o?.fax === null ? null : null;
           const notes = typeof o?.notes === 'string' ? o.notes : o?.notes === null ? null : null;
           const outlookToEmailDefault =
             typeof o?.outlookToEmailDefault === 'string' ? o.outlookToEmailDefault : null;
@@ -85,6 +88,7 @@ export default function PartnersPage() {
             id,
             name,
             email,
+            fax,
             notes,
             outlookToEmailDefault,
             outlookSubjectReportDefault,
@@ -113,8 +117,9 @@ export default function PartnersPage() {
   const canAdd = useMemo(() => {
     const v = draftName.trim();
     if (!v) return false;
-    return !partners.some((p) => p === v);
-  }, [draftName, partners]);
+    const existing = source === 'server' ? serverPartners.map((p) => p.name) : partners;
+    return !existing.some((p) => p === v);
+  }, [draftName, partners, serverPartners, source]);
 
   const visiblePartners = useMemo(() => {
     if (source === 'server') return serverPartners.map((p) => p.name);
@@ -163,7 +168,7 @@ export default function PartnersPage() {
       const r = await fetch('/api/partners', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, notes: draftNotes }),
+        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, fax: draftFax, notes: draftNotes }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
@@ -172,10 +177,11 @@ export default function PartnersPage() {
       setEditingId(null);
       setDraftNotes('');
       setDraftEmail('');
+      setDraftFax('');
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
-  }, [draftEmail, draftNotes, editingPartner, loadFromServer]);
+  }, [draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
 
   useEffect(() => {
     setAddAction({ onClick: addPartner, disabled: !canAdd, title: '追加（会社名）' });
@@ -260,7 +266,7 @@ export default function PartnersPage() {
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
       <div
         ref={rootRef}
-        className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-black"
+        className="space-y-4"
       >
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">関係会社</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -292,29 +298,40 @@ export default function PartnersPage() {
             {source === 'server'
               ? serverPartners.map((p) => {
                   const isEditing = editingId === p.id;
+                  const toggleDetail = () => {
+                    if (isEditing) {
+                      setEditingId(null);
+                      setDraftNotes('');
+                      setDraftEmail('');
+                      setDraftFax('');
+                    } else {
+                      setEditingId(p.id);
+                      setDraftNotes(p.notes ?? '');
+                      setDraftEmail(p.email ?? '');
+                      setDraftFax(p.fax ?? '');
+                    }
+                  };
                   return (
                     <div
                       key={p.id}
+                      data-color-edit-slot="border"
                       className="rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1 truncate text-xs text-zinc-800 dark:text-zinc-200">
+                        <button
+                          type="button"
+                          onClick={toggleDetail}
+                          className="min-w-0 flex-1 truncate text-left text-xs text-zinc-800 hover:underline dark:text-zinc-200"
+                          title="詳細（メモ）"
+                        >
                           {p.name}
-                        </div>
+                        </button>
 
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
-                              if (isEditing) {
-                                setEditingId(null);
-                                setDraftNotes('');
-                                setDraftEmail('');
-                              } else {
-                                setEditingId(p.id);
-                                setDraftNotes(p.notes ?? '');
-                                setDraftEmail(p.email ?? '');
-                              }
+                              toggleDetail();
                             }}
                             className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                           >
@@ -340,6 +357,8 @@ export default function PartnersPage() {
                                   if (editingId === p.id) {
                                     setEditingId(null);
                                     setDraftNotes('');
+                                    setDraftEmail('');
+                                    setDraftFax('');
                                   }
                                   await loadFromServer();
                                 } catch (e) {
@@ -353,7 +372,7 @@ export default function PartnersPage() {
                                 }
                               })();
                             }}
-                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            className="mh-btn-danger"
                           >
                             削除
                           </button>
@@ -374,6 +393,12 @@ export default function PartnersPage() {
                             placeholder="送信先メール（例: example@contoso.com）"
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                           />
+                          <input
+                            value={draftFax}
+                            onChange={(e) => setDraftFax(e.target.value)}
+                            placeholder="FAX（例: 03-1234-5678）"
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                          />
                           <textarea
                             value={draftNotes}
                             onChange={(e) => setDraftNotes(e.target.value)}
@@ -388,15 +413,16 @@ export default function PartnersPage() {
                                 setEditingId(null);
                                 setDraftNotes('');
                                 setDraftEmail('');
+                                setDraftFax('');
                               }}
-                              className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                              className="mh-btn px-3 py-2 text-xs"
                             >
                               キャンセル
                             </button>
                             <button
                               type="button"
                               onClick={() => void saveNotes()}
-                              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                              className="mh-btn-primary px-3 py-2 text-xs"
                             >
                               保存
                             </button>
@@ -409,6 +435,7 @@ export default function PartnersPage() {
               : visiblePartners.map((p) => (
                   <div
                     key={p}
+                    data-color-edit-slot="border"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
                   >
                     <div className="min-w-0 flex-1 truncate text-xs text-zinc-800 dark:text-zinc-200">{p}</div>
@@ -420,7 +447,7 @@ export default function PartnersPage() {
                         if (!ok) return;
                         setPartners((cur) => cur.filter((x) => x !== p));
                       }}
-                      className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      className="mh-btn-danger"
                     >
                       削除
                     </button>

@@ -1,10 +1,15 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
 import { z } from 'zod';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
 export const runtime = 'nodejs';
 
 type CellAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
+
+const LabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
+type LabelColor = z.infer<typeof LabelColorSchema>;
 
 const BodySchema = z
   .object({
@@ -14,7 +19,7 @@ const BodySchema = z
     action: z.enum(['toggle', 'add', 'remove', 'replace2', 'swap', 'recolor']),
     siteId: z.string().min(1).optional().nullable(),
     siteName: z.string().min(1).max(200).optional().nullable(),
-    color: z.enum(['default', 'red']).optional().nullable(),
+    color: LabelColorSchema.optional().nullable(),
   })
   .strict();
 
@@ -44,6 +49,26 @@ function addMinutes(d: Date, minutes: number) {
   const x = new Date(d);
   x.setMinutes(x.getMinutes() + minutes);
   return x;
+}
+
+function safePathSegment(name: string) {
+  const base = name.trim() || 'untitled';
+  return base
+    .replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_')
+    .replace(/[\s.]+$/g, '')
+    .slice(0, 80);
+}
+
+async function ensureSiteDayFolders(input: { siteId: string; siteName: string; dayYmd: string }) {
+  const baseDir = process.env.MASTER_HUB_STORAGE_DIR
+    ? path.resolve(process.env.MASTER_HUB_STORAGE_DIR)
+    : path.join(process.cwd(), '.storage');
+
+  const siteFolderBase = safePathSegment(input.siteName) || input.siteId;
+  const siteFolder = `${siteFolderBase}__${input.siteId.slice(0, 8)}`;
+  const folderRoot = path.join(baseDir, 'sites', siteFolder, input.dayYmd);
+  await mkdir(path.join(folderRoot, 'photos'), { recursive: true });
+  await mkdir(path.join(folderRoot, 'reports'), { recursive: true });
 }
 
 async function resolveSite(input: {
@@ -99,7 +124,7 @@ export async function POST(request: Request) {
     action: CellAction;
     siteId?: string | null;
     siteName?: string | null;
-    color?: 'default' | 'red' | null;
+    color?: LabelColor | null;
   };
 
   const kind = parsed.data.kind ?? 'NORMAL';
@@ -151,16 +176,23 @@ export async function POST(request: Request) {
   }
 
   const site = resolvedSite.site;
-  const desiredColor: 'default' | 'red' = parsed.data.color ?? 'default';
+  const requestedColor = parsed.data.color;
+  const metaPatch: Record<string, unknown> = {
+    siteName: site.name,
+    ...(typeof requestedColor === 'string' ? { labelColor: requestedColor } : {}),
+  };
 
   const hit = existing.find((e) => (e.siteId ?? null) === site.id);
 
   if (action === 'recolor') {
+    if (typeof requestedColor !== 'string') {
+      return Response.json({ ok: false, error: 'color is required for recolor' }, { status: 400 });
+    }
     if (!hit) return Response.json({ ok: true, action, changed: false, reason: 'not-found' });
     await prisma.workEntry.update({
       where: { id: hit.id },
       data: {
-        accountingMeta: mergeMeta(hit.accountingMeta, { siteName: site.name, labelColor: desiredColor }),
+        accountingMeta: mergeMeta(hit.accountingMeta, metaPatch),
       },
       select: { id: true },
     });
@@ -187,10 +219,17 @@ export async function POST(request: Request) {
           data: {
             summary: site.name,
             siteId: site.id,
-            accountingMeta: mergeMeta(second.accountingMeta, { siteName: site.name, labelColor: desiredColor }),
+            accountingMeta: mergeMeta(second.accountingMeta, metaPatch),
           },
           select: { id: true },
         });
+
+        // Create per-site per-day folder (best effort)
+        try {
+          await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+        } catch {
+          // ignore
+        }
 
         return Response.json({ ok: true, action, changed: true, replaced: 'slot2', entry: updated });
       }
@@ -211,10 +250,17 @@ export async function POST(request: Request) {
         startAt: addMinutes(startAt, existing.length),
         summary: site.name,
         siteId: site.id,
-        accountingMeta: { siteName: site.name, labelColor: desiredColor },
+        accountingMeta: metaPatch as Prisma.InputJsonValue,
       },
       select: { id: true },
     });
+
+    // Create per-site per-day folder (best effort)
+    try {
+      await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+    } catch {
+      // ignore
+    }
 
     return Response.json({ ok: true, action, changed: true, entry });
   }
@@ -229,7 +275,7 @@ export async function POST(request: Request) {
           startAt: addMinutes(startAt, 1),
           summary: site.name,
           siteId: site.id,
-          accountingMeta: { siteName: site.name, labelColor: desiredColor },
+          accountingMeta: metaPatch as Prisma.InputJsonValue,
         },
         select: { id: true },
       });
@@ -241,10 +287,17 @@ export async function POST(request: Request) {
       data: {
         summary: site.name,
         siteId: site.id,
-        accountingMeta: mergeMeta(second.accountingMeta, { siteName: site.name, labelColor: desiredColor }),
+        accountingMeta: mergeMeta(second.accountingMeta, metaPatch),
       },
       select: { id: true },
     });
+
+    // Create per-site per-day folder (best effort)
+    try {
+      await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+    } catch {
+      // ignore
+    }
 
     return Response.json({ ok: true, action, changed: true, entry: updated });
   }
