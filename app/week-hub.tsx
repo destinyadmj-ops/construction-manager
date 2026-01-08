@@ -228,7 +228,6 @@ function WeekHubInner() {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [draggedCell, setDraggedCell] = useState<{ userId: string; day: string; slots: CellSlots } | null>(null);
@@ -2409,6 +2408,7 @@ function WeekHubInner() {
                     });
                   }}
                   onCreateUser={createUser}
+                  draggedSite={draggedSite}
                 />
               </div>
             </>
@@ -3134,6 +3134,7 @@ function WeekGrid({
   reorderMode,
   onMoveUser,
   onCreateUser,
+  draggedSite,
 }: {
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: ApiResponse | null;
@@ -3167,6 +3168,7 @@ function WeekGrid({
   onCreateUser: (
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
+  draggedSite: SiteItem | null;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
@@ -3391,6 +3393,7 @@ function WeekGrid({
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
+                  draggedSite={draggedSite}
                 />
               );
             })
@@ -3665,6 +3668,7 @@ function MonthGrid({
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
+                  draggedSite={null}
                 />
               );
             })
@@ -4013,6 +4017,7 @@ function Row({
   onMoveUp,
   onMoveDown,
   rowCellClassName,
+  draggedSite,
 }: {
   user: ApiUser;
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
@@ -4038,6 +4043,7 @@ function Row({
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   rowCellClassName?: string;
+  draggedSite: SiteItem | null;
 }) {
   const isSelectedUser = selectedUserId === user.id;
 
@@ -4237,6 +4243,24 @@ function Row({
           <button
             key={d.key}
             type="button"
+            onDragOver={(e) => {
+              if (!isEditable || !draggedSite) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={(e) => {
+              if (!isEditable || !draggedSite) return;
+              e.preventDefault();
+              const beforeFallback: CellSlots = [slot1, slot2];
+              void runCellAction({
+                day: d.key,
+                action: 'toggle',
+                color: cellTextColor,
+                siteId: draggedSite.id,
+                siteName: draggedSite.label,
+                beforeFallback,
+              });
+            }}
             onClick={(e) => {
               if (!isEditable) {
                 onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
