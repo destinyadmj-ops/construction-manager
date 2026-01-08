@@ -226,6 +226,13 @@ function WeekHubInner() {
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
   const [isUndoRedoBusy, setIsUndoRedoBusy] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [draggedCell, setDraggedCell] = useState<{ userId: string; day: string; slots: CellSlots } | null>(null);
+
   useEffect(() => {
     const m = searchParams.get('mode');
     if (m === 'week' || m === 'month' || m === 'year') {
@@ -1827,6 +1834,13 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              draggable={editConfigured}
+                              onDragStart={(e) => {
+                                if (!editConfigured) return;
+                                setDraggedSite(s);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              onDragEnd={() => setDraggedSite(null)}
                               onClick={() => {
                                 if (active && s.id) {
                                   const sp = new URLSearchParams({ kind: scheduleKind });
@@ -1840,7 +1854,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              }`}
+                              } ${editConfigured ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
@@ -2476,6 +2490,13 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              draggable={editConfigured}
+                              onDragStart={(e) => {
+                                if (!editConfigured) return;
+                                setDraggedSite(s);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              onDragEnd={() => setDraggedSite(null)}
                               onClick={() => {
                                 if (active && s.id) {
                                   const sp = new URLSearchParams({ kind: scheduleKind });
@@ -2489,7 +2510,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              }`}
+                              } ${editConfigured ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
@@ -2729,6 +2750,13 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              draggable={editConfigured}
+                              onDragStart={(e) => {
+                                if (!editConfigured) return;
+                                setDraggedSite(s);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              onDragEnd={() => setDraggedSite(null)}
                               onClick={() => {
                                 if (active && s.id) {
                                   const sp = new URLSearchParams({ kind: scheduleKind });
@@ -2742,7 +2770,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              }`}
+                              } ${editConfigured ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
