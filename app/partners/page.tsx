@@ -58,6 +58,8 @@ export default function PartnersPage() {
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState<string | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState<string | null>(null);
   const [sites, setSites] = useState<Array<{ id: string; name: string; companyName: string | null }>>([]);
+  const [selectedInvoiceSites, setSelectedInvoiceSites] = useState<Set<string>>(new Set());
+  const [selectedReportSite, setSelectedReportSite] = useState<string | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -212,10 +214,48 @@ export default function PartnersPage() {
       setDraftNotes('');
       setDraftEmail('');
       setDraftFax('');
+      setDraftAddress('');
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
   }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
+
+  const openInvoiceDialog = useCallback((partnerId: string) => {
+    setInvoiceDialogOpen(partnerId);
+    setSelectedInvoiceSites(new Set());
+  }, []);
+
+  const toggleInvoiceSite = useCallback((siteId: string) => {
+    setSelectedInvoiceSites(prev => {
+      const next = new Set(prev);
+      if (next.has(siteId)) {
+        next.delete(siteId);
+      } else {
+        next.add(siteId);
+      }
+      return next;
+    });
+  }, []);
+
+  const generateInvoices = useCallback(() => {
+    if (selectedInvoiceSites.size === 0) return;
+    const siteIds = Array.from(selectedInvoiceSites);
+    // 請求書一括発行: 会計画面へパラメータ付きで遷移
+    const params = new URLSearchParams();
+    siteIds.forEach(id => params.append('siteId', id));
+    window.location.href = `/accounting?${params.toString()}`;
+  }, [selectedInvoiceSites]);
+
+  const openReportDialog = useCallback((partnerId: string) => {
+    setReportDialogOpen(partnerId);
+    setSelectedReportSite(null);
+  }, []);
+
+  const goToReport = useCallback(() => {
+    if (!selectedReportSite) return;
+    // 報告書作成画面へ遷移
+    window.location.href = `/accounting?siteId=${encodeURIComponent(selectedReportSite)}`;
+  }, [selectedReportSite]);
 
   useEffect(() => {
     setAddAction({ onClick: addPartner, disabled: !canAdd, title: '追加（会社名）' });
@@ -400,6 +440,7 @@ export default function PartnersPage() {
                         </div>
                       </div>
 
+                      {/* 現場リストドロップダウン */}
                       {siteListOpen === p.id ? (
                         <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
                           <div className="font-medium text-zinc-700 dark:text-zinc-300">会社属性の現場リスト</div>
@@ -415,6 +456,96 @@ export default function PartnersPage() {
                         </div>
                       ) : null}
 
+                      {/* 請求書ダイアログ */}
+                      {invoiceDialogOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">請求書発行（複数選択）</div>
+                          <div className="mt-2 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <label key={s.id} className="flex items-center gap-2 text-[11px] text-zinc-700 hover:bg-zinc-100 px-1 py-1 rounded dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedInvoiceSites.has(s.id)}
+                                    onChange={() => toggleInvoiceSite(s.id)}
+                                    className="rounded"
+                                  />
+                                  {s.name}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInvoiceDialogOpen(null);
+                                setSelectedInvoiceSites(new Set());
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                            >
+                              キャンセル
+                            </button>
+                            <button
+                              type="button"
+                              onClick={generateInvoices}
+                              disabled={selectedInvoiceSites.size === 0}
+                              className="rounded-md border border-blue-500 bg-blue-500 px-2 py-1 text-[11px] text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              一括発行 ({selectedInvoiceSites.size})
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* 報告書ダイアログ */}
+                      {reportDialogOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">報告書作成</div>
+                          <div className="mt-2 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <label key={s.id} className="flex items-center gap-2 text-[11px] text-zinc-700 hover:bg-zinc-100 px-1 py-1 rounded dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                  <input
+                                    type="radio"
+                                    name={`report-site-${p.id}`}
+                                    checked={selectedReportSite === s.id}
+                                    onChange={() => setSelectedReportSite(s.id)}
+                                    className="rounded-full"
+                                  />
+                                  {s.name}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReportDialogOpen(null);
+                                setSelectedReportSite(null);
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                            >
+                              キャンセル
+                            </button>
+                            <button
+                              type="button"
+                              onClick={goToReport}
+                              disabled={!selectedReportSite}
+                              className="rounded-md border border-blue-500 bg-blue-500 px-2 py-1 text-[11px] text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              作成画面へ
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* 編集フォーム */}
                       {isEditing ? (
                         <div className="mt-2 space-y-2">
                           <input
