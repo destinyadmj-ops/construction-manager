@@ -531,3 +531,47 @@ npm run e2e:log
 ## プロンプト管理
 
 プロンプトは `prompts/` に分割して管理。
+## Git自動同期
+
+自宅と会社で同じGitHubアカウントを使用する場合、自動同期スクリプトで変更を自動的にpull/push/commitできます。
+
+### 使い方
+
+**1回だけ実行（手動同期）:**
+```bash
+npm run git:sync
+```
+
+**5分ごとに自動同期（バックグラウンド）:**
+```bash
+npm run git:sync:5min
+```
+
+**10分ごとに自動同期（バックグラウンド）:**
+```bash
+npm run git:sync:10min
+```
+
+**VS Code Tasksから実行:**
+- `Ctrl+Shift+P` → "Tasks: Run Task" → "git: auto-sync (once)" or "git: auto-sync (continuous 5min)"
+
+### 動作
+
+1. リモートから最新取得（`git fetch`）
+2. リモートに新しいコミットがあれば `git pull --rebase`
+3. ローカルに変更があれば自動コミット（タイムスタンプ付き）
+4. リモートへプッシュ（`git push`）
+
+### 注意
+
+- ⚠️ コンフリクトが発生した場合は自動では解決できません（手動解決が必要）
+- ⚠️ `.zip` / `.log` / `node_modules/` / `.next/` / `*-err.txt` / `*-out.txt` は自動コミットから除外
+- ⚠️ 自宅と会社で同じファイルを同時編集すると競合が発生しやすくなります
+- ✅ 作業開始前に一度手動で `git pull` することを推奨
+
+### カスタマイズ
+
+[scripts/git-auto-sync.ps1](scripts/git-auto-sync.ps1) でパラメータ変更可能：
+- `-IntervalMinutes`: 同期間隔（デフォルト5分）
+- `-Branch`: 対象ブランチ（デフォルトは現在のブランチ）
+- `-CommitPrefix`: コミットメッセージのプレフィックス（デフォルト "Auto-sync"）
