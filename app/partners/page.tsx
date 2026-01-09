@@ -258,12 +258,12 @@ export default function PartnersPage() {
     window.location.href = `/accounting?siteId=${encodeURIComponent(selectedReportSite)}`;
   }, [selectedReportSite]);
 
-  const handleFileImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const text = e.target?.result as string;
         if (!text) return;
@@ -281,7 +281,42 @@ export default function PartnersPage() {
         
         // 2行目以降をデータとして解析
         const dataLines = lines.slice(1);
-        let imported = 0;
+        
+        // 編集中の場合は1件のみ取り込み
+        if (editingId) {
+          if (dataLines.length === 0) {
+            setStatusMsg('取り込み可能なデータが見つかりませんでした');
+            return;
+          }
+
+          const line = dataLines[0];
+          const values = line.split(delimiter).map(v => v.trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+
+          const email = row['email'] || row['メール'] || row['mail'] || '';
+          const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
+          const address = row['住所'] || row['address'] || row['所在地'] || '';
+          const notes = row['メモ'] || row['notes'] || row['備考'] || '';
+
+          setDraftEmail(email);
+          setDraftFax(fax);
+          setDraftAddress(address);
+          setDraftNotes(notes);
+          setStatusMsg('ファイルから1件の情報を取り込みました');
+          return;
+        }
+
+        // 編集中でない場合は全件を一括登録
+        const companies: Array<{
+          name: string;
+          email: string;
+          fax: string;
+          address: string;
+          notes: string;
+        }> = [];
 
         for (const line of dataLines) {
           const values = line.split(delimiter).map(v => v.trim());
@@ -294,31 +329,62 @@ export default function PartnersPage() {
           const name = row['会社名'] || row['name'] || row['名前'] || row['company'];
           if (!name) continue;
 
-          // 編集中の会社情報に自動入力
-          if (editingId) {
-            const email = row['email'] || row['メール'] || row['mail'] || '';
-            const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
-            const address = row['住所'] || row['address'] || row['所在地'] || '';
-            const notes = row['メモ'] || row['notes'] || row['備考'] || '';
+          const email = row['email'] || row['メール'] || row['mail'] || '';
+          const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
+          const address = row['住所'] || row['address'] || row['所在地'] || '';
+          const notes = row['メモ'] || row['notes'] || row['備考'] || '';
 
-            setDraftEmail(email);
-            setDraftFax(fax);
-            setDraftAddress(address);
-            setDraftNotes(notes);
-            imported++;
-            break; // 1件目のみ
-          } else {
-            // 新規追加として会社名をセット
-            setDraftName(name);
-            imported++;
-            break; // 1件目のみ
+          companies.push({ name, email, fax, address, notes });
+        }
+
+        if (companies.length === 0) {
+          setStatusMsg('取り込み可能なデータが見つかりませんでした');
+          return;
+        }
+
+        // 一括登録処理
+        setStatusMsg(`${companies.length}件の会社情報を登録中...`);
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const company of companies) {
+          try {
+            const r = await fetch('/api/partners', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                name: company.name,
+                email: company.email || null,
+                fax: company.fax || null,
+                address: company.address || null,
+                notes: company.notes || null,
+              }),
+            });
+            const j = (await r.json().catch(() => null)) as unknown;
+            const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+            
+            if (r.ok && obj?.ok === true) {
+              successCount++;
+            } else {
+              failCount++;
+              console.warn(`Failed to create partner: ${company.name}`, obj?.error);
+            }
+          } catch (error) {
+            failCount++;
+            console.error(`Error creating partner: ${company.name}`, error);
           }
         }
 
-        if (imported > 0) {
-          setStatusMsg(`ファイルから${imported}件の情報を取り込みました`);
+        // 結果を表示
+        if (successCount > 0) {
+          await loadFromServer();
+          if (failCount > 0) {
+            setStatusMsg(`${successCount}件登録成功、${failCount}件失敗しました`);
+          } else {
+            setStatusMsg(`${successCount}件の会社情報を登録しました`);
+          }
         } else {
-          setStatusMsg('取り込み可能なデータが見つかりませんでした');
+          setStatusMsg(`登録に失敗しました（${failCount}件）`);
         }
       } catch (error) {
         console.error('File import error:', error);
@@ -334,7 +400,7 @@ export default function PartnersPage() {
     
     // input要素をリセット（同じファイルを再選択可能にする）
     event.target.value = '';
-  }, [editingId]);
+  }, [editingId, loadFromServer]);
 
   const triggerFileImport = useCallback(() => {
     fileInputRef.current?.click();
