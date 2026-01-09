@@ -4348,16 +4348,18 @@ function Row({
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {/* Two-slot compact layout (no extra controls yet) */}
               <div
-                className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'text-xs leading-snug' : 'text-[11px] leading-tight'} ${
+                className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                   c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
                 }`}
+                style={{ fontSize: 'var(--weekhub-cell-font-size, 12px)' }}
               >
                 {slot1 ?? ''}
               </div>
               <div
-                className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'text-[11px] leading-snug' : 'text-[10px] leading-tight'} ${
+                className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                   c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
                 }`}
+                style={{ fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)' }}
               >
                 {slot2 ?? ''}
               </div>
