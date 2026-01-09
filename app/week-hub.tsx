@@ -229,6 +229,10 @@ function WeekHubInner() {
   const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
   const [draggedCell, setDraggedCell] = useState<{ userId: string; day: string; slots: CellSlots } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ userId: string; day: string; slotIndex: number } | null>(null);
+  const [editingInput, setEditingInput] = useState('');
+  const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   useEffect(() => {
     const m = searchParams.get('mode');
@@ -1146,6 +1150,61 @@ function WeekHubInner() {
     setUndoStack((cur) => [...cur, last]);
     showCellActionMsg('やり直しました');
   }, [redoStack, restoreCell, showCellActionMsg]);
+
+  const searchSites = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setSiteSuggestions([]);
+      return;
+    }
+    setSuggestionLoading(true);
+    try {
+      const r = await fetch(`/api/sites?search=${encodeURIComponent(query)}`);
+      const json = (await r.json().catch(() => null)) as unknown;
+      const obj = json && typeof json === 'object' ? (json as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true) {
+        setSiteSuggestions([]);
+        return;
+      }
+      const raw = Array.isArray(obj.sites) ? obj.sites : [];
+      const parsed = raw
+        .map((x) => {
+          const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : null;
+          const id = typeof o?.id === 'string' ? o.id : null;
+          const name = typeof o?.name === 'string' ? o.name : null;
+          if (!id || !name) return null;
+          return { id, label: name } as SiteItem;
+        })
+        .filter((x): x is SiteItem => !!x);
+      setSiteSuggestions(parsed.slice(0, 10));
+    } catch {
+      setSiteSuggestions([]);
+    } finally {
+      setSuggestionLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void searchSites(editingInput);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [editingInput, searchSites]);
+
+  useEffect(() => {
+    if (!editingCell) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // 入力フィールドまたは候補リスト内のクリックは無視
+      if (target.closest('input') || target.closest('[data-suggestion-list]')) return;
+      setEditingCell(null);
+      setEditingInput('');
+      setSiteSuggestions([]);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [editingCell]);
 
   useEffect(() => {
     if (mode !== 'month') return;
@@ -2411,6 +2470,13 @@ function WeekHubInner() {
                   onSetSelectedCell={setSelectedCell}
                   draggedCell={draggedCell}
                   onSetDraggedCell={setDraggedCell}
+                  editingCell={editingCell}
+                  setEditingCell={setEditingCell}
+                  editingInput={editingInput}
+                  setEditingInput={setEditingInput}
+                  siteSuggestions={siteSuggestions}
+                  setSiteSuggestions={setSiteSuggestions}
+                  suggestionLoading={suggestionLoading}
                 />
               </div>
             </>
@@ -3141,6 +3207,13 @@ function WeekGrid({
   onSetSelectedCell,
   draggedCell,
   onSetDraggedCell,
+  editingCell,
+  setEditingCell,
+  editingInput,
+  setEditingInput,
+  siteSuggestions,
+  setSiteSuggestions,
+  suggestionLoading,
 }: {
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: ApiResponse | null;
@@ -3179,6 +3252,13 @@ function WeekGrid({
   onSetSelectedCell: (cell: { userId: string; day: string } | null) => void;
   draggedCell: { userId: string; day: string; slots: CellSlots } | null;
   onSetDraggedCell: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
+  editingCell: { userId: string; day: string; slotIndex: number } | null;
+  setEditingCell: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
+  editingInput: string;
+  setEditingInput: (value: string) => void;
+  siteSuggestions: SiteItem[];
+  setSiteSuggestions: (suggestions: SiteItem[]) => void;
+  suggestionLoading: boolean;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
@@ -3408,6 +3488,13 @@ function WeekGrid({
                   onSetSelectedCell={onSetSelectedCell}
                   draggedCell={draggedCell}
                   onSetDraggedCell={onSetDraggedCell}
+                  editingCell={editingCell}
+                  setEditingCell={setEditingCell}
+                  editingInput={editingInput}
+                  setEditingInput={setEditingInput}
+                  siteSuggestions={siteSuggestions}
+                  setSiteSuggestions={setSiteSuggestions}
+                  suggestionLoading={suggestionLoading}
                 />
               );
             })
@@ -4036,6 +4123,13 @@ function Row({
   onSetSelectedCell,
   draggedCell,
   onSetDraggedCell,
+  editingCell,
+  setEditingCell,
+  editingInput,
+  setEditingInput,
+  siteSuggestions,
+  setSiteSuggestions,
+  suggestionLoading,
 }: {
   user: ApiUser;
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
@@ -4066,6 +4160,13 @@ function Row({
   onSetSelectedCell?: (cell: { userId: string; day: string } | null) => void;
   draggedCell?: { userId: string; day: string; slots: CellSlots } | null;
   onSetDraggedCell?: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
+  editingCell?: { userId: string; day: string; slotIndex: number } | null;
+  setEditingCell?: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
+  editingInput?: string;
+  setEditingInput?: (value: string) => void;
+  siteSuggestions?: SiteItem[];
+  setSiteSuggestions?: (suggestions: SiteItem[]) => void;
+  suggestionLoading?: boolean;
 }) {
   const isSelectedUser = selectedUserId === user.id;
 
@@ -4314,16 +4415,12 @@ function Row({
 
               e.preventDefault();
               
-              // セルが選択されている場合は通常のアクションを実行、そうでなければセルを選択
+              // セルが選択されている場合は入力モードを開始、そうでなければセルを選択
               if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
-                // 同じセルをクリックした場合は通常のアクション
-                const beforeFallback: CellSlots = [slot1, slot2];
-                void runCellAction({
-                  day: d.key,
-                  action: cellClickAction,
-                  color: cellTextColor,
-                  beforeFallback,
-                });
+                // 同じセルを再度クリック -> 入力モードを開始
+                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+                setEditingInput?.(slot1 ?? '');
+                setSiteSuggestions?.([]);
                 onSetSelectedCell?.(null);
               } else if (selectedSite) {
                 // 現場が選択されている場合は通常のアクション
@@ -4335,9 +4432,18 @@ function Row({
                   beforeFallback,
                 });
               } else {
-                // セルを選択状態にする（現場リストをクリックすると入力される）
+                // セルを選択状態にする（もう一度クリックすると入力モードになる）
                 onSetSelectedCell?.({ userId: user.id, day: d.key });
               }
+            }}
+            onDoubleClick={(e) => {
+              if (!isEditable) return;
+              e.preventDefault();
+              e.stopPropagation();
+              // ダブルクリックで入力モードを開始
+              setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+              setEditingInput?.(slot1 ?? '');
+              setSiteSuggestions?.([]);
             }}
             className={`border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
               isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
@@ -4346,23 +4452,116 @@ function Row({
             } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
           >
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
-              {/* Two-slot compact layout (no extra controls yet) */}
-              <div
-                className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                  c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
-                }`}
-                style={{ fontSize: 'var(--weekhub-cell-font-size, 12px)' }}
-              >
-                {slot1 ?? ''}
-              </div>
-              <div
-                className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                  c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
-                }`}
-                style={{ fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)' }}
-              >
-                {slot2 ?? ''}
-              </div>
+              {editingCell?.userId === user.id && editingCell?.day === d.key ? (
+                // 入力モード
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={editingInput ?? ''}
+                    onChange={(e) => setEditingInput?.(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setEditingCell?.(null);
+                        setEditingInput?.('');
+                        setSiteSuggestions?.([]);
+                      } else if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (siteSuggestions && siteSuggestions.length > 0) {
+                          // 最初の候補を選択
+                          const site = siteSuggestions[0];
+                          const beforeFallback: CellSlots = [slot1, slot2];
+                          void runCellAction({
+                            day: d.key,
+                            action: 'toggle',
+                            color: cellTextColor,
+                            siteId: site.id,
+                            siteName: site.label,
+                            beforeFallback,
+                          }).then(() => {
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
+                          });
+                        } else if (editingInput?.trim()) {
+                          // 直接入力
+                          const beforeFallback: CellSlots = [slot1, slot2];
+                          void runCellAction({
+                            day: d.key,
+                            action: 'toggle',
+                            color: cellTextColor,
+                            siteName: editingInput.trim(),
+                            beforeFallback,
+                          }).then(() => {
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
+                          });
+                        }
+                      }
+                    }}
+                    autoFocus
+                    className="w-full rounded border border-blue-500 bg-white px-1 py-0.5 text-xs dark:bg-black"
+                    placeholder="現場名を入力..."
+                  />
+                  {siteSuggestions && siteSuggestions.length > 0 ? (
+                    <div 
+                      data-suggestion-list
+                      className="absolute left-0 top-full z-50 mt-1 max-h-48 w-full min-w-[200px] overflow-auto rounded border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      {siteSuggestions.map((site: SiteItem) => (
+                        <button
+                          key={site.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const beforeFallback: CellSlots = [slot1, slot2];
+                            void runCellAction({
+                              day: d.key,
+                              action: 'toggle',
+                              color: cellTextColor,
+                              siteId: site.id,
+                              siteName: site.label,
+                              beforeFallback,
+                            }).then(() => {
+                              setEditingCell?.(null);
+                              setEditingInput?.('');
+                              setSiteSuggestions?.([]);
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        >
+                          {site.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : suggestionLoading ? (
+                    <div className="absolute left-0 top-full z-50 mt-1 w-full rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-500 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                      検索中...
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                // 通常表示
+                <>
+                  <div
+                    className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                      c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
+                    }`}
+                    style={{ fontSize: 'var(--weekhub-cell-font-size, 12px)' }}
+                  >
+                    {slot1 ?? ''}
+                  </div>
+                  <div
+                    className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                      c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
+                    }`}
+                    style={{ fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)' }}
+                  >
+                    {slot2 ?? ''}
+                  </div>
+                </>
+              )}
             </div>
           </button>
         );
