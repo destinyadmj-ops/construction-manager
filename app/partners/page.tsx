@@ -60,6 +60,7 @@ export default function PartnersPage() {
   const [sites, setSites] = useState<Array<{ id: string; name: string; companyName: string | null }>>([]);
   const [selectedInvoiceSites, setSelectedInvoiceSites] = useState<Set<string>>(new Set());
   const [selectedReportSite, setSelectedReportSite] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -257,6 +258,88 @@ export default function PartnersPage() {
     window.location.href = `/accounting?siteId=${encodeURIComponent(selectedReportSite)}`;
   }, [selectedReportSite]);
 
+  const handleFileImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) return;
+
+        // CSV/TSV形式を解析（カンマまたはタブ区切り）
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length === 0) {
+          setStatusMsg('ファイルが空です');
+          return;
+        }
+
+        // 1行目をヘッダーとして解析
+        const delimiter = lines[0].includes('\t') ? '\t' : ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+        
+        // 2行目以降をデータとして解析
+        const dataLines = lines.slice(1);
+        let imported = 0;
+
+        for (const line of dataLines) {
+          const values = line.split(delimiter).map(v => v.trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+
+          // 会社名が必須
+          const name = row['会社名'] || row['name'] || row['名前'] || row['company'];
+          if (!name) continue;
+
+          // 編集中の会社情報に自動入力
+          if (editingId) {
+            const email = row['email'] || row['メール'] || row['mail'] || '';
+            const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
+            const address = row['住所'] || row['address'] || row['所在地'] || '';
+            const notes = row['メモ'] || row['notes'] || row['備考'] || '';
+
+            setDraftEmail(email);
+            setDraftFax(fax);
+            setDraftAddress(address);
+            setDraftNotes(notes);
+            imported++;
+            break; // 1件目のみ
+          } else {
+            // 新規追加として会社名をセット
+            setDraftName(name);
+            imported++;
+            break; // 1件目のみ
+          }
+        }
+
+        if (imported > 0) {
+          setStatusMsg(`ファイルから${imported}件の情報を取り込みました`);
+        } else {
+          setStatusMsg('取り込み可能なデータが見つかりませんでした');
+        }
+      } catch (error) {
+        console.error('File import error:', error);
+        setStatusMsg('ファイル取り込み中にエラーが発生しました');
+      }
+    };
+
+    reader.onerror = () => {
+      setStatusMsg('ファイル読み込みに失敗しました');
+    };
+
+    reader.readAsText(file, 'UTF-8');
+    
+    // input要素をリセット（同じファイルを再選択可能にする）
+    event.target.value = '';
+  }, [editingId]);
+
+  const triggerFileImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
   useEffect(() => {
     setAddAction({ onClick: addPartner, disabled: !canAdd, title: '追加（会社名）' });
     setSaveAction({
@@ -363,6 +446,21 @@ export default function PartnersPage() {
           >
             追加
           </button>
+          <button
+            type="button"
+            onClick={triggerFileImport}
+            className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60 dark:hover:bg-blue-950"
+            title="CSV/TSVファイルから会社情報を取り込み"
+          >
+            📄 ファイル取込
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt"
+            onChange={handleFileImport}
+            className="hidden"
+          />
         </div>
 
         {visiblePartners.length === 0 ? (
@@ -548,6 +646,17 @@ export default function PartnersPage() {
                       {/* 編集フォーム */}
                       {isEditing ? (
                         <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between pb-1 border-b border-zinc-200 dark:border-zinc-800">
+                            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">会社情報を編集</div>
+                            <button
+                              type="button"
+                              onClick={triggerFileImport}
+                              className="rounded-md border border-blue-200 bg-blue-50/60 px-2 py-1 text-[11px] hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60 dark:hover:bg-blue-950"
+                              title="CSV/TSVファイルから会社情報を取り込み"
+                            >
+                              📄 ファイル取込
+                            </button>
+                          </div>
                           <input
                             value={draftEmail}
                             onChange={(e) => setDraftEmail(e.target.value)}
