@@ -10,6 +10,7 @@ type ApiPartner = {
   name: string;
   email: string | null;
   fax: string | null;
+  address: string | null;
   notes: string | null;
   outlookToEmailDefault: string | null;
   outlookSubjectReportDefault: string | null;
@@ -52,6 +53,11 @@ export default function PartnersPage() {
   const [draftNotes, setDraftNotes] = useState<string>('');
   const [draftEmail, setDraftEmail] = useState<string>('');
   const [draftFax, setDraftFax] = useState<string>('');
+  const [draftAddress, setDraftAddress] = useState<string>('');
+  const [siteListOpen, setSiteListOpen] = useState<string | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState<string | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState<string | null>(null);
+  const [sites, setSites] = useState<Array<{ id: string; name: string; companyName: string | null }>>([]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -75,6 +81,7 @@ export default function PartnersPage() {
           const name = typeof o?.name === 'string' ? o.name : null;
           const email = typeof o?.email === 'string' ? o.email : o?.email === null ? null : null;
           const fax = typeof o?.fax === 'string' ? o.fax : o?.fax === null ? null : null;
+          const address = typeof o?.address === 'string' ? o.address : o?.address === null ? null : null;
           const notes = typeof o?.notes === 'string' ? o.notes : o?.notes === null ? null : null;
           const outlookToEmailDefault =
             typeof o?.outlookToEmailDefault === 'string' ? o.outlookToEmailDefault : null;
@@ -89,6 +96,7 @@ export default function PartnersPage() {
             name,
             email,
             fax,
+            address,
             notes,
             outlookToEmailDefault,
             outlookSubjectReportDefault,
@@ -109,6 +117,32 @@ export default function PartnersPage() {
   useEffect(() => {
     void loadFromServer();
   }, [loadFromServer]);
+
+  useEffect(() => {
+    // 現場リストの読み込み
+    void (async () => {
+      try {
+        const r = await fetch('/api/sites');
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) return;
+        const raw = Array.isArray(obj.sites) ? obj.sites : [];
+        const parsed = raw
+          .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : null))
+          .map((o) => {
+            const id = typeof o?.id === 'string' ? o.id : null;
+            const name = typeof o?.name === 'string' ? o.name : null;
+            const companyName = typeof o?.companyName === 'string' ? o.companyName : o?.companyName === null ? null : null;
+            if (!id || !name) return null;
+            return { id, name, companyName };
+          })
+          .filter((x): x is { id: string; name: string; companyName: string | null } => !!x);
+        setSites(parsed);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     savePartners(partners);
@@ -168,7 +202,7 @@ export default function PartnersPage() {
       const r = await fetch('/api/partners', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, fax: draftFax, notes: draftNotes }),
+        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, fax: draftFax, address: draftAddress, notes: draftNotes }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
@@ -181,7 +215,7 @@ export default function PartnersPage() {
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
-  }, [draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
+  }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
 
   useEffect(() => {
     setAddAction({ onClick: addPartner, disabled: !canAdd, title: '追加（会社名）' });
@@ -304,11 +338,13 @@ export default function PartnersPage() {
                       setDraftNotes('');
                       setDraftEmail('');
                       setDraftFax('');
+                      setDraftAddress('');
                     } else {
                       setEditingId(p.id);
                       setDraftNotes(p.notes ?? '');
                       setDraftEmail(p.email ?? '');
                       setDraftFax(p.fax ?? '');
+                      setDraftAddress(p.address ?? '');
                     }
                   };
                   return (
@@ -335,53 +371,47 @@ export default function PartnersPage() {
                             }}
                             className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                           >
-                            {isEditing ? '閉じる' : 'メモ'}
+                            {isEditing ? '閉じる' : '詳細'}
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => {
-                              const ok = window.confirm(`削除しますか？\n${p.name}`);
-                              if (!ok) return;
-                              void (async () => {
-                                setStatusMsg(null);
-                                try {
-                                  const r = await fetch(`/api/partners/${encodeURIComponent(p.id)}`, {
-                                    method: 'DELETE',
-                                  });
-                                  const j = (await r.json().catch(() => null)) as unknown;
-                                  const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-                                  if (!r.ok || obj?.ok !== true) {
-                                    throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-                                  }
-                                  if (editingId === p.id) {
-                                    setEditingId(null);
-                                    setDraftNotes('');
-                                    setDraftEmail('');
-                                    setDraftFax('');
-                                  }
-                                  await loadFromServer();
-                                } catch (e) {
-                                  setSource('local');
-                                  setPartners((cur) => cur.filter((x) => x !== p.name));
-                                  setStatusMsg(
-                                    e instanceof Error
-                                      ? `DB削除失敗→ローカル削除: ${e.message}`
-                                      : 'DB削除失敗→ローカル削除',
-                                  );
-                                }
-                              })();
-                            }}
-                            className="mh-btn-danger"
+                            onClick={() => setSiteListOpen(siteListOpen === p.id ? null : p.id)}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                           >
-                            削除
+                            現場リスト
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setInvoiceDialogOpen(p.id)}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            請求書
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setReportDialogOpen(p.id)}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            報告書
                           </button>
                         </div>
                       </div>
 
-                      {p.notes ? (
-                        <div className="mt-2 whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">
-                          {p.notes}
+                      {siteListOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">会社属性の現場リスト</div>
+                          <div className="mt-1 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <div key={s.id} className="text-zinc-700 dark:text-zinc-300">• {s.name}</div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       ) : null}
 
@@ -399,6 +429,12 @@ export default function PartnersPage() {
                             placeholder="FAX（例: 03-1234-5678）"
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                           />
+                          <input
+                            value={draftAddress}
+                            onChange={(e) => setDraftAddress(e.target.value)}
+                            placeholder="住所"
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                          />
                           <textarea
                             value={draftNotes}
                             onChange={(e) => setDraftNotes(e.target.value)}
@@ -406,27 +442,75 @@ export default function PartnersPage() {
                             placeholder="メモ"
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                           />
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-between">
                             <button
                               type="button"
                               onClick={() => {
-                                setEditingId(null);
-                                setDraftNotes('');
-                                setDraftEmail('');
-                                setDraftFax('');
+                                const ok = window.confirm(`削除しますか？\n${p.name}`);
+                                if (!ok) return;
+                                void (async () => {
+                                  setStatusMsg(null);
+                                  try {
+                                    const r = await fetch(`/api/partners/${encodeURIComponent(p.id)}`, {
+                                      method: 'DELETE',
+                                    });
+                                    const j = (await r.json().catch(() => null)) as unknown;
+                                    const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+                                    if (!r.ok || obj?.ok !== true) {
+                                      throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+                                    }
+                                    if (editingId === p.id) {
+                                      setEditingId(null);
+                                      setDraftNotes('');
+                                      setDraftEmail('');
+                                      setDraftFax('');
+                                      setDraftAddress('');
+                                    }
+                                    await loadFromServer();
+                                  } catch (e) {
+                                    setSource('local');
+                                    setPartners((cur) => cur.filter((x) => x !== p.name));
+                                    setStatusMsg(
+                                      e instanceof Error
+                                        ? `DB削除失敗→ローカル削除: ${e.message}`
+                                        : 'DB削除失敗→ローカル削除',
+                                    );
+                                  }
+                                })();
                               }}
-                              className="mh-btn px-3 py-2 text-xs"
+                              className="mh-btn-danger px-3 py-2 text-xs"
                             >
-                              キャンセル
+                              削除
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void saveNotes()}
-                              className="mh-btn-primary px-3 py-2 text-xs"
-                            >
-                              保存
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setDraftNotes('');
+                                  setDraftEmail('');
+                                  setDraftFax('');
+                                  setDraftAddress('');
+                                }}
+                                className="mh-btn px-3 py-2 text-xs"
+                              >
+                                キャンセル
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void saveNotes()}
+                                className="mh-btn-primary px-3 py-2 text-xs"
+                              >
+                                保存
+                              </button>
+                            </div>
                           </div>
+                        </div>
+                      ) : null}
+
+                      {p.notes ? (
+                        <div className="mt-2 whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">
+                          {p.notes}
                         </div>
                       ) : null}
                     </div>
