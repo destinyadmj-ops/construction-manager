@@ -162,6 +162,9 @@ export default function AppHeader() {
   const [isUpdateAvailableBySw, setIsUpdateAvailableBySw] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
+  const [alertCount, setAlertCount] = useState<number>(0);
+  const [alertLoading, setAlertLoading] = useState(false);
+
   const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
 
   const isWeek = pathname === '/' && (!mode || mode === 'week');
@@ -494,6 +497,40 @@ export default function AppHeader() {
     };
   }, [isMultiMenuOpen]);
 
+  // アラート数を取得
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchAlertCount = async () => {
+      setAlertLoading(true);
+      try {
+        const res = await fetch('/api/alerts/count');
+        const data = await res.json();
+        if (mounted && data.ok && typeof data.total === 'number') {
+          setAlertCount(data.total);
+        }
+      } catch (error) {
+        console.error('Failed to fetch alert count:', error);
+      } finally {
+        if (mounted) {
+          setAlertLoading(false);
+        }
+      }
+    };
+
+    void fetchAlertCount();
+
+    // 5分ごとに更新
+    const interval = setInterval(() => {
+      void fetchAlertCount();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     // Apply cached theme early (user switch triggers reload, so headerUserId changes are enough).
     const t = readLocalUiTheme(headerUserId);
@@ -818,6 +855,7 @@ export default function AppHeader() {
   const isMulti = pathname === '/multi';
   const isReports = pathname === '/reports';
   const isInvoices = pathname === '/invoices';
+  const isAlerts = pathname === '/alerts';
 
   return (
     <header
@@ -1486,6 +1524,23 @@ export default function AppHeader() {
             aria-current={isPartners ? 'page' : undefined}
           >
             関係会社
+          </Link>
+
+          <Link
+            href="/alerts"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={`${navLinkClass(isAlerts)} relative`}
+            title="アラート（通知/現場単価/送信失敗）へ"
+            aria-current={isAlerts ? 'page' : undefined}
+          >
+            🔔 アラート
+            {!alertLoading && alertCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                {alertCount > 99 ? '99+' : alertCount}
+              </span>
+            )}
           </Link>
 
           <div ref={multiMenuRef} className="relative">
