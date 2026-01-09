@@ -140,6 +140,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   const [mailLogs, setMailLogs] = useState<OutlookSendLogItem[]>([]);
   const [mailLogsError, setMailLogsError] = useState<string | null>(null);
   const [mailLogsLoading, setMailLogsLoading] = useState(false);
+  const [mailLogsLoadingDebounced, setMailLogsLoadingDebounced] = useState(false);
 
   const loadMailLists = useCallback(async () => {
     setMailLoadError(null);
@@ -195,6 +196,14 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   useEffect(() => {
     void loadMailLists();
   }, [loadMailLists]);
+
+  useEffect(() => {
+    // デバウンス処理: loadingが変わってから300ms後に表示用のstateを更新
+    const timer = window.setTimeout(() => {
+      setMailLogsLoadingDebounced(mailLogsLoading);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [mailLogsLoading]);
 
   const loadMailLogs = useCallback(async () => {
     if (!mailSiteId || !mailPartnerId) {
@@ -696,8 +705,8 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">送信履歴（選択中の現場/会社）</div>
-            <button type="button" className={smallBtn} onClick={() => void loadMailLogs()} disabled={mailLogsLoading}>
-              {mailLogsLoading ? '更新中…' : '更新'}
+            <button type="button" className={smallBtn} onClick={() => void loadMailLogs()} disabled={mailLogsLoadingDebounced}>
+              {mailLogsLoadingDebounced ? '更新中…' : '更新'}
             </button>
           </div>
           {mailLogsError ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{mailLogsError}</div> : null}
