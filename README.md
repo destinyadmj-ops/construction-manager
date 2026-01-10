@@ -2,6 +2,29 @@
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
 
+## アプリ配布
+
+Master Hub は以下の形式で配布可能：
+- **Web** - ブラウザアクセス（Docker/Windows Service）→ [DEPLOYMENT.md](DEPLOYMENT.md)
+- **Desktop** - Electron アプリ（Windows/Mac/Linux）
+- **Mobile** - Capacitor アプリ（iOS/Android）
+- **PWA** - Progressive Web App（既に実装済み）
+
+詳細は [APP-PACKAGING.md](APP-PACKAGING.md) を参照。
+
+### クイックパッケージング
+
+```bash
+# デスクトップアプリ（Windows インストーラ）
+npm run package:desktop
+
+# モバイルアプリ（iOS + Android）
+npm run package:mobile
+
+# すべて一括
+npm run package:all
+```
+
 ## 前提
 
 - Node.js / npm
