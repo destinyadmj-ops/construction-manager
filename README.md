@@ -2,6 +2,38 @@
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
 
+## 🏢 会社⇔自宅 データ共有（推奨: Tailscale）
+
+**最も簡単な方法:** Tailscale で会社のDBを自宅から直接使用（リアルタイム同期）
+
+詳細は [TAILSCALE-SETUP.md](TAILSCALE-SETUP.md) を参照。
+
+### クイックセットアップ
+
+```bash
+# 1. 会社・自宅両方で Tailscale インストール
+#    https://tailscale.com/download
+
+# 2. 会社で Tailscale IP 確認
+tailscale ip -4
+# 例: 100.101.102.103
+
+# 3. 自宅の .env.local に設定
+OFFICE_TAILSCALE_IP=100.101.102.103
+DATABASE_URL="postgresql://masterhub:masterhub@100.101.102.103:5432/masterhub?schema=public"
+REDIS_URL="redis://100.101.102.103:6379"
+
+# 4. 自宅で起動
+npm run dev
+```
+
+**これで完了！** 会社のデータが自宅でもリアルタイム使用可能。
+
+### その他の同期方法
+
+- **ファイル共有同期（VPN不要）:** [DB-SYNC.md](DB-SYNC.md)
+- **定期バックアップ:** [scripts/backup/README.md](scripts/backup/README.md)
+
 ## アプリ配布
 
 Master Hub は以下の形式で配布可能：
