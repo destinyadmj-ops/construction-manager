@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: masterhub
       POSTGRES_DB: masterhub
     ports:
-      - "5432:5432"
+      - "0.0.0.0:5432:5432"  # Tailscale経由でアクセス可能
     volumes:
       - masterhub_pgdata:/var/lib/postgresql/data
 
@@ -15,7 +15,7 @@ services:
     image: redis:7
     container_name: masterhub-redis
     ports:
-      - "6379:6379"
+      - "0.0.0.0:6379:6379"  # Tailscale経由でアクセス可能
     volumes:
       - masterhub_redisdata:/data
 
