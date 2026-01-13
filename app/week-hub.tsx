@@ -1197,9 +1197,13 @@ function WeekHubInner() {
       const target = e.target as HTMLElement;
       // 入力フィールドまたは候補リスト内のクリックは無視
       if (target.closest('input') || target.closest('[data-suggestion-list]')) return;
-      setEditingCell(null);
-      setEditingInput('');
-      setSiteSuggestions([]);
+      
+      // Defer state update to avoid DOM manipulation conflicts
+      requestAnimationFrame(() => {
+        setEditingCell(null);
+        setEditingInput('');
+        setSiteSuggestions([]);
+      });
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -4478,9 +4482,11 @@ function Row({
                             siteName: site.label,
                             beforeFallback,
                           }).then(() => {
-                            setEditingCell?.(null);
-                            setEditingInput?.('');
-                            setSiteSuggestions?.([]);
+                            requestAnimationFrame(() => {
+                              setEditingCell?.(null);
+                              setEditingInput?.('');
+                              setSiteSuggestions?.([]);
+                            });
                           });
                         } else if (editingInput?.trim()) {
                           // 直接入力
@@ -4492,9 +4498,11 @@ function Row({
                             siteName: editingInput.trim(),
                             beforeFallback,
                           }).then(() => {
-                            setEditingCell?.(null);
-                            setEditingInput?.('');
-                            setSiteSuggestions?.([]);
+                            requestAnimationFrame(() => {
+                              setEditingCell?.(null);
+                              setEditingInput?.('');
+                              setSiteSuggestions?.([]);
+                            });
                           });
                         }
                       }
@@ -4524,9 +4532,12 @@ function Row({
                               siteName: site.label,
                               beforeFallback,
                             }).then(() => {
-                              setEditingCell?.(null);
-                              setEditingInput?.('');
-                              setSiteSuggestions?.([]);
+                              // Defer state update to avoid DOM conflicts
+                              requestAnimationFrame(() => {
+                                setEditingCell?.(null);
+                                setEditingInput?.('');
+                                setSiteSuggestions?.([]);
+                              });
                             });
                           }}
                           className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
