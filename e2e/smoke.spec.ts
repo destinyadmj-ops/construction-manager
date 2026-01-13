@@ -59,30 +59,196 @@ function getAdminHeaders() {
   return headers;
 }
 
+async function loginAs(page: import('@playwright/test').Page, userId: string) {
+  const res = await page.request.post('/api/auth/me', {
+    headers: { 'content-type': 'application/json' },
+    data: { userId },
+  });
+  expect(res.ok()).toBeTruthy();
+  const json = await res.json();
+  expect(json).toMatchObject({ ok: true });
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+}
+
+async function ensureEditModeEnabled(page: import('@playwright/test').Page) {
+  const status = await page.evaluate(async () => {
+    try {
+      const r = await fetch('/api/auth/edit-mode');
+      const j = await r.json().catch(() => null);
+      return { ok: r.ok, status: r.status, json: j };
+    } catch {
+      return { ok: false, status: 0, json: null };
+    }
+  });
+
+  if (!status.ok || !status.json || typeof status.json !== 'object') {
+    throw new Error(`E2E: /api/auth/edit-mode failed (HTTP ${status.status})`);
+  }
+
+  const statusJson = status.json as Record<string, unknown>;
+  if (statusJson.ok !== true) {
+    throw new Error(`E2E: /api/auth/edit-mode failed (HTTP ${status.status})`);
+  }
+
+  const configured = statusJson.configured === true;
+  const enabled = statusJson.enabled === true;
+  if (enabled) return { configured, enabled: true } as const;
+  if (!configured) return { configured: false, enabled: false } as const;
+
+  const password = (process.env.MASTER_HUB_EDIT_PASSWORD ?? '').trim();
+  if (!password) return { configured: true, enabled: false, needsPassword: true } as const;
+
+  const post = await page.evaluate(async (pw) => {
+    try {
+      const r = await fetch('/api/auth/edit-mode', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      const j = await r.json().catch(() => null);
+      return { ok: r.ok, status: r.status, json: j };
+    } catch {
+      return { ok: false, status: 0, json: null };
+    }
+  }, password);
+
+  if (!post.ok || !post.json || typeof post.json !== 'object') {
+    throw new Error(`E2E: /api/auth/edit-mode POST failed (HTTP ${post.status})`);
+  }
+
+  const postJson = post.json as Record<string, unknown>;
+  if (postJson.ok !== true) {
+    throw new Error(`E2E: /api/auth/edit-mode POST failed (HTTP ${post.status})`);
+  }
+
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  return { configured: true, enabled: true } as const;
+}
+
+async function enterWeekHubEditMode(page: import('@playwright/test').Page, userId: string) {
+  const enabled = await ensureEditModeEnabled(page);
+  if ('needsPassword' in enabled && enabled.needsPassword) {
+    test.skip(true, 'Edit mode is configured; set MASTER_HUB_EDIT_PASSWORD for UI E2E');
+  }
+
+  await expect(page.getByTestId('header-action-add')).toBeEnabled({ timeout: 15_000 });
+  await page.getByTestId('header-action-add').click();
+
+  const anyCell = page.locator(`[data-testid^="cell-${userId}-"]`).first();
+  await expect(anyCell).toHaveAttribute('draggable', 'true', { timeout: 15_000 });
+}
+
+async function dndWithData(
+  page: import('@playwright/test').Page,
+  source: import('@playwright/test').Locator,
+  target: import('@playwright/test').Locator,
+  data: Record<string, string>,
+) {
+  const dt = await page.evaluateHandle((payload) => {
+    const d = new DataTransfer();
+    for (const [k, v] of Object.entries(payload)) d.setData(k, v);
+    return d;
+  }, data);
+
+  await source.dispatchEvent('dragstart', { dataTransfer: dt });
+  await target.dispatchEvent('dragenter', { dataTransfer: dt });
+  await target.dispatchEvent('dragover', { dataTransfer: dt });
+  await target.dispatchEvent('drop', { dataTransfer: dt });
+  await source.dispatchEvent('dragend', { dataTransfer: dt });
+}
+
+async function ensureUserGateCleared(page: import('@playwright/test').Page) {
+  const gateTitle = page.getByText('初回ログイン / ユーザー選択');
+
+  const isGateVisible = async () => {
+    return await gateTitle
+      .isVisible()
+      .then((v) => v)
+      .catch(() => false);
+  };
+
+  // 初期ロード直後はUserGateがまだ描画されていない場合がある。
+  if (!(await isGateVisible())) {
+    await page.waitForTimeout(700);
+    if (!(await isGateVisible())) return;
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const visible = await isGateVisible();
+    if (!visible) return;
+
+    // E2EではUserGateが出たら、DBにユーザーを用意して /api/auth/me に直接POSTしてログイン状態を作る。
+    const existing = await prisma.user.findFirst({ select: { id: true } });
+    const user =
+      existing ??
+      (await prisma.user.create({
+        data: {
+          email: `e2e-gate-${Date.now()}@example.test`,
+          name: 'E2E Gate User',
+        },
+        select: { id: true },
+      }));
+
+    const ok = await page.evaluate(async (userId) => {
+      try {
+        const r = await fetch('/api/auth/me', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!j || typeof j !== 'object') return false;
+        return (j as Record<string, unknown>).ok === true;
+      } catch {
+        return false;
+      }
+    }, user.id);
+
+    if (!ok) {
+      throw new Error('E2E: failed to set user via /api/auth/me');
+    }
+
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    // UserGateはロード完了後に開く場合があるので少し待ってから判定。
+    await page.waitForTimeout(700);
+    if (!(await isGateVisible())) return;
+  }
+
+  throw new Error('E2E: UserGate could not be cleared');
+}
+
 test('home loads', async ({ page }) => {
   await page.goto('/');
+  await ensureUserGateCleared(page);
   await expect(page).toHaveTitle(/Master Hub/i);
 });
 
 test('accounting page loads', async ({ page }) => {
   await page.goto('/accounting');
+  await ensureUserGateCleared(page);
   await expect(page.getByText('会計（請求書/報告書）')).toBeVisible();
   await expect(page.getByRole('button', { name: '会計Ping' })).toBeVisible();
 });
 
 test('management page loads', async ({ page }) => {
   await page.goto('/management');
+  await ensureUserGateCleared(page);
   await expect(page.locator('#management')).toHaveCount(1);
 });
 
 test('site-ledger page loads', async ({ page }) => {
   await page.goto('/site-ledger');
+  await ensureUserGateCleared(page);
   await expect(page.locator('#site-ledger')).toHaveCount(1);
 });
 
 test('multi page loads', async ({ page }) => {
   await page.goto('/multi');
-  await expect(page.locator('#mode-tabs')).toHaveCount(1);
+  await ensureUserGateCleared(page);
+  await expect(page.getByRole('heading', { name: '集計' })).toBeVisible();
 });
 
 test('partners page loads', async ({ page }) => {
@@ -110,9 +276,11 @@ test('templates pdf endpoint returns a PDF', async ({ request }) => {
 
 test('year summary cell drills down to month view', async ({ page }) => {
   await page.goto('/');
+  await ensureUserGateCleared(page);
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
+  await expect(page.getByTestId('year-grid')).toBeVisible();
 
   const anyCell = page.locator('[data-testid^="year-cell-"]').first();
   const emptyState = page.getByText('従業員が未登録、またはデータ取得に失敗しました。');
@@ -145,9 +313,11 @@ test('year summary cell drills down to month view', async ({ page }) => {
 
 test('selected user chip can clear selection', async ({ page }) => {
   await page.goto('/');
+  await ensureUserGateCleared(page);
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
+  await expect(page.getByTestId('year-grid')).toBeVisible();
 
   const anyCell = page.locator('[data-testid^="year-cell-"]').first();
   const emptyState = page.getByText('従業員が未登録、またはデータ取得に失敗しました。');
@@ -362,6 +532,250 @@ test('schedule cell endpoint supports toggle and swap', async ({ request }) => {
   expect(swap.ok()).toBeTruthy();
   const swapJson = await swap.json();
   expect(swapJson).toMatchObject({ ok: true, action: 'swap' });
+});
+
+test('schedule swap-cells endpoint swaps two cells', async ({ request }) => {
+  test.skip(!dbAvailable, 'DB is not available');
+
+  const userA = await prisma.user.create({
+    data: {
+      email: `e2e-swap-a-${Date.now()}@example.test`,
+      name: 'E2E Swap A',
+    },
+    select: { id: true },
+  });
+  const userB = await prisma.user.create({
+    data: {
+      email: `e2e-swap-b-${Date.now()}@example.test`,
+      name: 'E2E Swap B',
+    },
+    select: { id: true },
+  });
+
+  const mkSite = async (name: string) => {
+    const res = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name } });
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json).toMatchObject({ ok: true });
+    return json.site.id as string;
+  };
+
+  const site1 = await mkSite(`e2e-swap-site1-${Date.now()}`);
+  const site2 = await mkSite(`e2e-swap-site2-${Date.now()}`);
+  const site3 = await mkSite(`e2e-swap-site3-${Date.now()}`);
+
+  const dayA = '2025-12-26';
+  const dayB = '2025-12-27';
+  const kind = 'NORMAL';
+
+  // Fill A cell with 2 slots.
+  const a1 = await request.post('/api/schedule/cell', { data: { userId: userA.id, day: dayA, kind, action: 'toggle', siteId: site1 } });
+  expect(a1.ok()).toBeTruthy();
+  const a2 = await request.post('/api/schedule/cell', { data: { userId: userA.id, day: dayA, kind, action: 'add', siteId: site2 } });
+  expect(a2.ok()).toBeTruthy();
+
+  // Fill B cell with 1 slot.
+  const b1 = await request.post('/api/schedule/cell', { data: { userId: userB.id, day: dayB, kind, action: 'toggle', siteId: site3 } });
+  expect(b1.ok()).toBeTruthy();
+
+  const snap = async (userId: string, day: string) => {
+    const res = await request.get(`/api/schedule/cell/snapshot?userId=${encodeURIComponent(userId)}&day=${encodeURIComponent(day)}&kind=${encodeURIComponent(kind)}`);
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json).toMatchObject({ ok: true });
+    return (json.slots ?? [null, null]) as [string | null, string | null];
+  };
+
+  const beforeA = await snap(userA.id, dayA);
+  const beforeB = await snap(userB.id, dayB);
+
+  const swapRes = await request.post('/api/schedule/cell/swap-cells', {
+    data: {
+      kind,
+      from: { userId: userA.id, day: dayA },
+      to: { userId: userB.id, day: dayB },
+    },
+  });
+  expect(swapRes.ok()).toBeTruthy();
+  const swapJson = await swapRes.json();
+  expect(swapJson).toMatchObject({ ok: true });
+
+  const afterA = await snap(userA.id, dayA);
+  const afterB = await snap(userB.id, dayB);
+
+  expect(afterA).toEqual(beforeB);
+  expect(afterB).toEqual(beforeA);
+});
+
+test('weekhub: drag site from list to cell assigns', async ({ page, request }) => {
+  test.skip(!dbAvailable, 'DB is not available');
+
+  const user = await prisma.user.create({
+    data: {
+      email: `e2e-weekhub-dnd-${Date.now()}@example.test`,
+      name: 'E2E WeekHub DnD',
+      kind: 'NORMAL',
+    },
+    select: { id: true },
+  });
+
+  const siteName = `e2e-weekhub-site-${Date.now()}`;
+  const createSiteRes = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name: siteName } });
+  expect(createSiteRes.ok()).toBeTruthy();
+  const siteJson = await createSiteRes.json();
+  expect(siteJson).toMatchObject({ ok: true });
+  const siteId = siteJson.site.id as string;
+
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+  await enterWeekHubEditMode(page, user.id);
+
+  // Wait until the new site is present in the list.
+  const siteBtn = page.locator(`button[data-site-id="${siteId}"]`);
+  await expect(siteBtn).toHaveCount(1, { timeout: 15_000 });
+  await siteBtn.scrollIntoViewIfNeeded();
+
+  const anyCell = page.locator(`[data-testid^="cell-${user.id}-"]`).first();
+  await expect(anyCell).toHaveCount(1, { timeout: 15_000 });
+
+  await dndWithData(page, siteBtn, anyCell, {
+    'application/x-masterhub-site': JSON.stringify({ siteId, label: siteName }),
+    'text/plain': siteName,
+  });
+  await expect(anyCell).toContainText(siteName, { timeout: 15_000 });
+});
+
+test('weekhub: drag cell to cell swaps', async ({ page, request }) => {
+  test.skip(!dbAvailable, 'DB is not available');
+
+  const user = await prisma.user.create({
+    data: {
+      email: `e2e-weekhub-swap-${Date.now()}@example.test`,
+      name: 'E2E WeekHub Swap',
+      kind: 'NORMAL',
+    },
+    select: { id: true },
+  });
+
+  const mkSite = async (name: string) => {
+    const res = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name } });
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json).toMatchObject({ ok: true });
+    return json.site.id as string;
+  };
+
+  const site1Name = `e2e-weekhub-s1-${Date.now()}`;
+  const site2Name = `e2e-weekhub-s2-${Date.now()}`;
+  const site1 = await mkSite(site1Name);
+  const site2 = await mkSite(site2Name);
+
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+  await enterWeekHubEditMode(page, user.id);
+
+  const cells = page.locator(`[data-testid^="cell-${user.id}-"]`);
+  await expect(cells).toHaveCount(7, { timeout: 15_000 });
+  const cellA = cells.nth(0);
+  const cellB = cells.nth(1);
+  const dayA = await cellA.getAttribute('data-cell-day');
+  const dayB = await cellB.getAttribute('data-cell-day');
+  expect(dayA).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(dayB).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  const kind = 'NORMAL';
+  const setA = await request.post('/api/schedule/cell', {
+    data: { userId: user.id, day: dayA, kind, action: 'toggle', siteId: site1 },
+  });
+  expect(setA.ok()).toBeTruthy();
+  const setB = await request.post('/api/schedule/cell', {
+    data: { userId: user.id, day: dayB, kind, action: 'toggle', siteId: site2 },
+  });
+  expect(setB.ok()).toBeTruthy();
+
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await enterWeekHubEditMode(page, user.id);
+  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
+
+  await dndWithData(page, cellA, cellB, {
+    'application/x-masterhub-cell': JSON.stringify({ userId: user.id, day: dayA, kind }),
+    'text/plain': String(dayA),
+  });
+  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
+  await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
+});
+
+test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
+  test.skip(!dbAvailable, 'DB is not available');
+
+  const user = await prisma.user.create({
+    data: {
+      email: `e2e-weekhub-clickswap-${Date.now()}@example.test`,
+      name: 'E2E WeekHub ClickSwap',
+      kind: 'NORMAL',
+    },
+    select: { id: true },
+  });
+
+  const mkSite = async (name: string) => {
+    const res = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name } });
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json).toMatchObject({ ok: true });
+    return json.site.id as string;
+  };
+
+  const site1Name = `e2e-weekhub-cs1-${Date.now()}`;
+  const site2Name = `e2e-weekhub-cs2-${Date.now()}`;
+  const site1 = await mkSite(site1Name);
+  const site2 = await mkSite(site2Name);
+
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+  await enterWeekHubEditMode(page, user.id);
+
+  const cells = page.locator(`[data-testid^="cell-${user.id}-"]`);
+  await expect(cells).toHaveCount(7, { timeout: 15_000 });
+  const cellA = cells.nth(0);
+  const cellB = cells.nth(1);
+  const dayA = await cellA.getAttribute('data-cell-day');
+  const dayB = await cellB.getAttribute('data-cell-day');
+  expect(dayA).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(dayB).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  const kind = 'NORMAL';
+  const setA = await request.post('/api/schedule/cell', {
+    data: { userId: user.id, day: dayA, kind, action: 'toggle', siteId: site1 },
+  });
+  expect(setA.ok()).toBeTruthy();
+  const setB = await request.post('/api/schedule/cell', {
+    data: { userId: user.id, day: dayB, kind, action: 'toggle', siteId: site2 },
+  });
+  expect(setB.ok()).toBeTruthy();
+
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await enterWeekHubEditMode(page, user.id);
+  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
+
+  await page.getByTestId('cell-action-swapCells').click();
+  await cellA.click();
+  await cellB.click();
+
+  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
+  await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
 });
 
 test('sites depreciation-counts endpoint returns ok', async ({ request }) => {

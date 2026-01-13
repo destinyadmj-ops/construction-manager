@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   try {
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      select: { depreciationThreshold: true },
+      select: { depreciationThreshold: true, alertsEnabled: true },
     });
 
     const count = await prisma.workEntry.count({
@@ -39,7 +39,15 @@ export async function GET(request: Request) {
     });
 
     const threshold = site?.depreciationThreshold ?? 10;
-    return Response.json({ ok: true, siteId, month, count, threshold, alert: count >= threshold });
+    const alertsEnabled = site?.alertsEnabled ?? true;
+    return Response.json({
+      ok: true,
+      siteId,
+      month,
+      count,
+      threshold,
+      alert: alertsEnabled ? count >= threshold : false,
+    });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },

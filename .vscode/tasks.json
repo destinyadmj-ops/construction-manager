@@ -275,6 +275,52 @@
 				"reveal": "always",
 				"panel": "shared"
 			}
+		},
+		{
+			"label": "git: auto-sync (once)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-File",
+				"${workspaceFolder}/scripts/git-auto-sync.ps1",
+				"-Once"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "git: auto-sync (continuous 5min)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-File",
+				"${workspaceFolder}/scripts/git-auto-sync.ps1",
+				"-IntervalMinutes",
+				"5"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "git: auto-sync (continuous 10min)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-File",
+				"${workspaceFolder}/scripts/git-auto-sync.ps1",
+				"-IntervalMinutes",
+				"10"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": []
 		}
 	]
 }

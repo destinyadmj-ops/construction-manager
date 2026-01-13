@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+node_modules/
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -62,6 +64,12 @@ next-env.d.ts
 
 # local helper cmd wrappers (optional)
 run-dev*.cmd
+
+# TWA generated Android project
+/apps/twa/android/
+
+# Electron build outputs
+/apps/desktop/dist/
 
 # stray local debug capture
 utputFormat

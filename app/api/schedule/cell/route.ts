@@ -1,19 +1,36 @@
 import { prisma } from '@/server/db/prisma';
+import { Prisma } from '@/generated/prisma';
 import { z } from 'zod';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
 export const runtime = 'nodejs';
 
-type CellAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap';
+type CellAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
+
+const LabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
+type LabelColor = z.infer<typeof LabelColorSchema>;
 
 const BodySchema = z
   .object({
     userId: z.string().min(1),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    action: z.enum(['toggle', 'add', 'remove', 'replace2', 'swap']),
+    kind: z.enum(['NORMAL', 'DAILY']).optional(),
+    action: z.enum(['toggle', 'add', 'remove', 'replace2', 'swap', 'recolor']),
     siteId: z.string().min(1).optional().nullable(),
     siteName: z.string().min(1).max(200).optional().nullable(),
+    color: LabelColorSchema.optional().nullable(),
   })
   .strict();
+
+function asObject(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+function mergeMeta(base: unknown, patch: Record<string, unknown>): Prisma.InputJsonValue {
+  const b = asObject(base) ?? {};
+  return { ...b, ...patch } as Prisma.InputJsonObject;
+}
 
 function startOfDayLocal(ymd: string) {
   // ISO without timezone is treated as local time.
@@ -34,9 +51,30 @@ function addMinutes(d: Date, minutes: number) {
   return x;
 }
 
+function safePathSegment(name: string) {
+  const base = name.trim() || 'untitled';
+  return base
+    .replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_')
+    .replace(/[\s.]+$/g, '')
+    .slice(0, 80);
+}
+
+async function ensureSiteDayFolders(input: { siteId: string; siteName: string; dayYmd: string }) {
+  const baseDir = process.env.MASTER_HUB_STORAGE_DIR
+    ? path.resolve(process.env.MASTER_HUB_STORAGE_DIR)
+    : path.join(process.cwd(), '.storage');
+
+  const siteFolderBase = safePathSegment(input.siteName) || input.siteId;
+  const siteFolder = `${siteFolderBase}__${input.siteId.slice(0, 8)}`;
+  const folderRoot = path.join(baseDir, 'sites', siteFolder, input.dayYmd);
+  await mkdir(path.join(folderRoot, 'photos'), { recursive: true });
+  await mkdir(path.join(folderRoot, 'reports'), { recursive: true });
+}
+
 async function resolveSite(input: {
   siteId?: string | null;
   siteName?: string | null;
+  kind: 'NORMAL' | 'DAILY';
 }): Promise<
   | { ok: true; site: { id: string; name: string } }
   | { ok: false; status: number; error: string; reason?: string }
@@ -56,14 +94,14 @@ async function resolveSite(input: {
   if (!name) return { ok: false, status: 400, error: 'siteId or siteName is required' };
 
   const found = await prisma.site.findFirst({
-    where: { name },
+    where: { name, kind: input.kind },
     select: { id: true, name: true },
   });
 
   if (found) return { ok: true, site: found };
 
   const created = await prisma.site.create({
-    data: { name },
+    data: { name, kind: input.kind },
     select: { id: true, name: true },
   });
   return { ok: true, site: created };
@@ -82,10 +120,14 @@ export async function POST(request: Request) {
   const { userId, day, action } = parsed.data as {
     userId: string;
     day: string;
+    kind?: 'NORMAL' | 'DAILY';
     action: CellAction;
     siteId?: string | null;
     siteName?: string | null;
+    color?: LabelColor | null;
   };
+
+  const kind = parsed.data.kind ?? 'NORMAL';
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
   if (!user) {
@@ -96,9 +138,9 @@ export async function POST(request: Request) {
   const until = addDays(startAt, 1);
 
   const existing = await prisma.workEntry.findMany({
-    where: { userId, startAt: { gte: startAt, lt: until } },
+    where: { userId, kind, startAt: { gte: startAt, lt: until } },
     orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, startAt: true, siteId: true },
+    select: { id: true, startAt: true, siteId: true, accountingMeta: true },
   });
 
   if (action === 'swap') {
@@ -121,7 +163,11 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, action, changed: true });
   }
 
-  const resolvedSite = await resolveSite({ siteId: parsed.data.siteId, siteName: parsed.data.siteName });
+  const resolvedSite = await resolveSite({
+    siteId: parsed.data.siteId,
+    siteName: parsed.data.siteName,
+    kind,
+  });
   if (!resolvedSite.ok) {
     return Response.json(
       { ok: false, error: resolvedSite.error, reason: resolvedSite.reason },
@@ -130,8 +176,28 @@ export async function POST(request: Request) {
   }
 
   const site = resolvedSite.site;
+  const requestedColor = parsed.data.color;
+  const metaPatch: Record<string, unknown> = {
+    siteName: site.name,
+    ...(typeof requestedColor === 'string' ? { labelColor: requestedColor } : {}),
+  };
 
   const hit = existing.find((e) => (e.siteId ?? null) === site.id);
+
+  if (action === 'recolor') {
+    if (typeof requestedColor !== 'string') {
+      return Response.json({ ok: false, error: 'color is required for recolor' }, { status: 400 });
+    }
+    if (!hit) return Response.json({ ok: true, action, changed: false, reason: 'not-found' });
+    await prisma.workEntry.update({
+      where: { id: hit.id },
+      data: {
+        accountingMeta: mergeMeta(hit.accountingMeta, metaPatch),
+      },
+      select: { id: true },
+    });
+    return Response.json({ ok: true, action, changed: true });
+  }
 
   if (action === 'remove') {
     if (!hit) return Response.json({ ok: true, action, changed: false, reason: 'not-found' });
@@ -153,10 +219,17 @@ export async function POST(request: Request) {
           data: {
             summary: site.name,
             siteId: site.id,
-            accountingMeta: { siteName: site.name },
+            accountingMeta: mergeMeta(second.accountingMeta, metaPatch),
           },
           select: { id: true },
         });
+
+        // Create per-site per-day folder (best effort)
+        try {
+          await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+        } catch {
+          // ignore
+        }
 
         return Response.json({ ok: true, action, changed: true, replaced: 'slot2', entry: updated });
       }
@@ -173,13 +246,21 @@ export async function POST(request: Request) {
     const entry = await prisma.workEntry.create({
       data: {
         userId,
+        kind,
         startAt: addMinutes(startAt, existing.length),
         summary: site.name,
         siteId: site.id,
-        accountingMeta: { siteName: site.name },
+        accountingMeta: metaPatch as Prisma.InputJsonValue,
       },
       select: { id: true },
     });
+
+    // Create per-site per-day folder (best effort)
+    try {
+      await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+    } catch {
+      // ignore
+    }
 
     return Response.json({ ok: true, action, changed: true, entry });
   }
@@ -190,10 +271,11 @@ export async function POST(request: Request) {
       const entry = await prisma.workEntry.create({
         data: {
           userId,
+          kind,
           startAt: addMinutes(startAt, 1),
           summary: site.name,
           siteId: site.id,
-          accountingMeta: { siteName: site.name },
+          accountingMeta: metaPatch as Prisma.InputJsonValue,
         },
         select: { id: true },
       });
@@ -205,10 +287,17 @@ export async function POST(request: Request) {
       data: {
         summary: site.name,
         siteId: site.id,
-        accountingMeta: { siteName: site.name },
+        accountingMeta: mergeMeta(second.accountingMeta, metaPatch),
       },
       select: { id: true },
     });
+
+    // Create per-site per-day folder (best effort)
+    try {
+      await ensureSiteDayFolders({ siteId: site.id, siteName: site.name, dayYmd: day });
+    } catch {
+      // ignore
+    }
 
     return Response.json({ ok: true, action, changed: true, entry: updated });
   }

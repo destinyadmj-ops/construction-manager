@@ -2,6 +2,13 @@ import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
 
+const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+type LabelColor = (typeof LABEL_COLORS)[number];
+
+function isLabelColor(v: unknown): v is LabelColor {
+  return typeof v === 'string' && (LABEL_COLORS as readonly string[]).includes(v);
+}
+
 function startOfDayLocal(ymd: string) {
   const d = new Date(`${ymd}T00:00:00`);
   d.setHours(0, 0, 0, 0);
@@ -56,10 +63,21 @@ function labelForEntry(e: {
   return fallback || null;
 }
 
+function colorForEntry(label: string, meta: unknown): LabelColor {
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const m = meta as Record<string, unknown>;
+    const c = m.labelColor;
+    if (isLabelColor(c)) return c;
+  }
+  return label.includes('!') ? 'red' : 'default';
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const userId = (url.searchParams.get('userId') ?? '').trim();
   const day = (url.searchParams.get('day') ?? '').trim();
+  const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
+  const kind = kindParam === 'daily' ? 'DAILY' : 'NORMAL';
 
   if (!userId) return Response.json({ ok: false, error: 'userId is required' }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
@@ -74,7 +92,7 @@ export async function GET(request: Request) {
     const until = addDays(startAt, 1);
 
     const existing = await prisma.workEntry.findMany({
-      where: { userId, startAt: { gte: startAt, lt: until } },
+      where: { userId, kind, startAt: { gte: startAt, lt: until } },
       orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
       take: 2,
       select: {
@@ -88,7 +106,10 @@ export async function GET(request: Request) {
     const slot1 = existing[0] ? labelForEntry(existing[0]) : null;
     const slot2 = existing[1] ? labelForEntry(existing[1]) : null;
 
-    return Response.json({ ok: true, day, slots: [slot1, slot2] });
+    const color1: LabelColor = slot1 && existing[0] ? colorForEntry(slot1, existing[0].accountingMeta) : 'default';
+    const color2: LabelColor = slot2 && existing[1] ? colorForEntry(slot2, existing[1].accountingMeta) : 'default';
+
+    return Response.json({ ok: true, day, slots: [slot1, slot2], colors: [color1, color2] });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed';
     return Response.json({ ok: false, error: msg }, { status: 503 });

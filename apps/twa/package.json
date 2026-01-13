@@ -1,0 +1,16 @@
+{
+  "name": "master-hub-twa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "init": "bubblewrap init --manifest=$MASTER_HUB_MANIFEST_URL --directory=android",
+    "build": "bubblewrap build --directory=android",
+    "install": "bubblewrap install --directory=android",
+    "open": "start .\\android",
+    "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path .\\android) { Remove-Item -Recurse -Force .\\android }\""
+  },
+  "devDependencies": {
+    "@bubblewrap/cli": "^2.3.0"
+  }
+}
