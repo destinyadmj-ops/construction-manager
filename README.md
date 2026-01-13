@@ -108,6 +108,26 @@ npm run db:migrate:raw
 
 - 1時間ごとのPostgreSQLバックアップを SharePoint（OneDrive同期）へ保存する手順は、[scripts/backup/README.md](scripts/backup/README.md) を参照。
 
+## データベース同期（自宅⇔会社）
+
+自宅と会社でデータベースを自動同期する方法は [DB-SYNC.md](DB-SYNC.md) を参照。
+
+### クイック同期
+
+```bash
+# 1回だけ同期（OneDriveの場合）
+npm run db:sync:once -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+
+# 30分ごとに自動同期
+npm run db:sync:30min -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+
+# 1時間ごとに自動同期
+npm run db:sync:60min -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+```
+
+**最も簡単:** VPN/Tailscaleで同じDBを共有（リアルタイム同期）  
+詳細は [DB-SYNC.md](DB-SYNC.md) 参照。
+
 ## 開発起動
 
 ## 開発時のルール（運用）
