@@ -9,8 +9,25 @@ export type HeaderAction = {
   title?: string;
 };
 
+export type HeaderHistoryHover = { userId: string; day: string };
+
+export type HeaderHistoryItem = {
+  key: string;
+  at: number;
+  editorLabel: string;
+  siteLabel: string;
+  hover: HeaderHistoryHover;
+};
+
+export type HeaderHistoryMenu = {
+  items: HeaderHistoryItem[];
+  onHover?: (hover: HeaderHistoryHover | null) => void;
+};
+
 type HeaderActionsState = {
   add?: HeaderAction;
+  history?: HeaderAction;
+  historyMenu?: HeaderHistoryMenu;
   save?: HeaderAction;
   undo?: HeaderAction;
   redo?: HeaderAction;
@@ -19,6 +36,8 @@ type HeaderActionsState = {
 type HeaderActionsContextValue = {
   actions: HeaderActionsState;
   setAddAction: (action: HeaderAction | undefined) => void;
+  setHistoryAction: (action: HeaderAction | undefined) => void;
+  setHistoryMenu: (menu: HeaderHistoryMenu | undefined) => void;
   setSaveAction: (action: HeaderAction | undefined) => void;
   setUndoAction: (action: HeaderAction | undefined) => void;
   setRedoAction: (action: HeaderAction | undefined) => void;
@@ -33,11 +52,21 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   const [actions, setActions] = useState<HeaderActionsState>({});
 
   useEffect(() => {
+    // This intentionally clears header actions on navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActions({});
   }, [pathname, searchKey]);
 
   const setAddAction = useCallback((action: HeaderAction | undefined) => {
     setActions((cur) => ({ ...cur, add: action }));
+  }, []);
+
+  const setHistoryAction = useCallback((action: HeaderAction | undefined) => {
+    setActions((cur) => ({ ...cur, history: action }));
+  }, []);
+
+  const setHistoryMenu = useCallback((menu: HeaderHistoryMenu | undefined) => {
+    setActions((cur) => ({ ...cur, historyMenu: menu }));
   }, []);
 
   const setSaveAction = useCallback((action: HeaderAction | undefined) => {
@@ -53,8 +82,8 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const value = useMemo<HeaderActionsContextValue>(
-    () => ({ actions, setAddAction, setSaveAction, setUndoAction, setRedoAction }),
-    [actions, setAddAction, setRedoAction, setSaveAction, setUndoAction],
+    () => ({ actions, setAddAction, setHistoryAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction }),
+    [actions, setAddAction, setHistoryAction, setHistoryMenu, setRedoAction, setSaveAction, setUndoAction],
   );
 
   return <HeaderActionsContext.Provider value={value}>{children}</HeaderActionsContext.Provider>;

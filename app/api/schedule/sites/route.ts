@@ -32,11 +32,14 @@ function extractSiteNames(meta: unknown): string[] {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '200') || 200, 1), 1000);
+  const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
+  const kind = kindParam === 'daily' ? 'DAILY' : 'NORMAL';
 
   const sites = await prisma.site.findMany({
+    where: { kind },
     orderBy: [{ companyName: 'asc' }, { name: 'asc' }],
     take: 500,
-    select: { id: true, name: true, companyName: true },
+    select: { id: true, name: true, companyName: true, scheduleLabelColor: true },
   });
 
   const ledgerItems = sites
@@ -45,23 +48,38 @@ export async function GET(request: Request) {
       const name = (s.name ?? '').trim();
       if (!name) return null;
       const label = company ? `${company} / ${name}` : name;
-      return { id: s.id, label, name, companyName: company || null };
+      return {
+        id: s.id,
+        label,
+        name,
+        companyName: company || null,
+        scheduleLabelColor: (s.scheduleLabelColor ?? 'default').toString(),
+      };
     })
-    .filter((x): x is { id: string; label: string; name: string; companyName: string | null } =>
-      Boolean(x),
+    .filter(
+      (x): x is {
+        id: string;
+        label: string;
+        name: string;
+        companyName: string | null;
+        scheduleLabelColor: string;
+      } => Boolean(x),
     );
 
   if (ledgerItems.length > 0) {
     return Response.json({
       ok: true,
-      sites: ledgerItems.slice(0, 200),
-      names: ledgerItems.slice(0, 200).map((x) => x.label),
+      // Prefer the ledger list (DB sites) when available.
+      // Return up to the fetched size (take: 500) so newly-created sites show up without relying on sort/first-200.
+      sites: ledgerItems,
+      names: ledgerItems.map((x) => x.label),
     });
   }
 
   const rows = await prisma.workEntry.findMany({
     orderBy: { startAt: 'desc' },
     take: limit,
+    where: { kind },
     select: { accountingMeta: true, summary: true, note: true },
   });
 

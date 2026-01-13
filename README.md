@@ -2,6 +2,29 @@
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
 
+## アプリ配布
+
+Master Hub は以下の形式で配布可能：
+- **Web** - ブラウザアクセス（Docker/Windows Service）→ [DEPLOYMENT.md](DEPLOYMENT.md)
+- **Desktop** - Electron アプリ（Windows/Mac/Linux）
+- **Mobile** - Capacitor アプリ（iOS/Android）
+- **PWA** - Progressive Web App（既に実装済み）
+
+詳細は [APP-PACKAGING.md](APP-PACKAGING.md) を参照。
+
+### クイックパッケージング
+
+```bash
+# デスクトップアプリ（Windows インストーラ）
+npm run package:desktop
+
+# モバイルアプリ（iOS + Android）
+npm run package:mobile
+
+# すべて一括
+npm run package:all
+```
+
 ## 前提
 
 - Node.js / npm
@@ -60,6 +83,12 @@ Prisma Client 生成:
 npm run db:generate
 ```
 
+※ Windows で `EPERM: operation not permitted, rename ... query_engine-windows.dll.node.tmp... -> ...query_engine-windows.dll.node` が出る場合:
+
+- `npm run dev:stop:hard -- -Force`（まず強制停止）
+- まだ残っている場合は `npm run dev:kill:port -- -Port 3000 -Force`（ポートを掴んでいるプロセスを停止）
+- その後に `npm run db:generate` を再実行
+
 マイグレーション適用（推奨: 名前の誤入力防止つき）:
 
 ```bash
@@ -75,7 +104,19 @@ npm run db:migrate
 npm run db:migrate:raw
 ```
 
+## バックアップ（RPO 1時間: SharePoint）
+
+- 1時間ごとのPostgreSQLバックアップを SharePoint（OneDrive同期）へ保存する手順は、[scripts/backup/README.md](scripts/backup/README.md) を参照。
+
 ## 開発起動
+
+## 開発時のルール（運用）
+
+- 変更は小さいパッチに分割し、各パッチ適用後に `npm run lint` と `npm run typecheck` を通してから次へ進む。
+- 大きなパッチ（大きめの置換/移動/構造変更）を入れる前に、必ず WIP チェックポイントをコミットしてから作業する。
+	- 例: `git add -A` → `git commit -m "WIP checkpoint: week-hub scroll"`
+	- ロールバック: `git reset --hard <commit>`
+	- 補足: `git commit -am` は「追跡済みファイル」しか含まれないため、新規ファイルがある場合は `git add -A` を使う。
 
 ※ 親フォルダ（`Master Hub/`）には中継用の `package.json` を置いてあるため、親フォルダから `npm run dev` / `npm run dev:keep` なども実行できます（内部的に `master-hub/` へ転送）。
 
@@ -247,6 +288,31 @@ npm run dev:log
 
 - dev: http://127.0.0.1:3000
 
+## 配布URL（固定HTTPS）
+
+社内配布（PC/Electron・Android/TWA）を安定運用するために、**接続先URL（HTTPS）を1つに決めて固定**するのがおすすめです。
+
+- PC（Electron）: `MASTER_HUB_URL`（末尾 `/` つき）
+- Android（TWA）: `MASTER_HUB_MANIFEST_URL`（`https://YOUR_DOMAIN/manifest.webmanifest`）
+
+例（PowerShell）:
+
+```powershell
+$env:MASTER_HUB_URL='https://YOUR_DOMAIN/'
+$env:MASTER_HUB_MANIFEST_URL='https://YOUR_DOMAIN/manifest.webmanifest'
+```
+
+### Android（TWA）用: assetlinks.json（任意/推奨）
+
+TWAの検証を通したい場合は、Web側で `/.well-known/assetlinks.json` を返せるようにしています。
+
+- ルート: `https://YOUR_DOMAIN/.well-known/assetlinks.json`
+- 必要な環境変数（Webサーバ側）:
+	- `TWA_ASSETLINKS_PACKAGE_NAME`
+	- `TWA_ASSETLINKS_SHA256_CERT_FINGERPRINTS`（SHA-256 フィンガープリントをカンマ区切り）
+
+未設定の場合は 404 を返します。
+
 Worker（リマインド等のジョブ実行）:
 
 ```bash
@@ -263,6 +329,55 @@ npm run start -- -H 127.0.0.1 -p 3001
 ```
 
 - prod: http://127.0.0.1:3001
+
+## 本番（Azure Windows VM + Docker Compose）
+
+前提:
+
+- Azure Database for PostgreSQL（マネージド）を用意し、`DATABASE_URL` を確定
+- Azure Cache for Redis を用意し、`REDIS_URL` を確定
+- Windows VM 上で Docker を使えること（例: WSL2 + Docker Engine / Docker Desktop）
+
+手順（VM 上で実行）:
+
+1) 環境変数ファイルを作成
+
+- `.env.production.example` を参考に `.env.production` を作成（秘密情報は Git に入れない）
+
+2) Web + Worker を起動
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+3) 停止
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production down
+```
+
+## Synology（Container Manager）
+
+- 起動用: [docker-compose.synology.yml](docker-compose.synology.yml)
+- 環境変数例: [.env.synology.example](.env.synology.example)
+- 手順: [deploy/synology/README.md](deploy/synology/README.md)
+
+## アプリ化（Windows / iOS / Android）
+
+目的: 「ブラウザで開く」ではなく、PC/スマホにインストールするアプリとして起動する。
+
+- Windows（Electron最小）: [apps/desktop/README.md](apps/desktop/README.md)
+	- インストーラ生成（社内配布の土台）:
+		- `cd apps/desktop`
+		- `npm install`
+		- `npm run dist`
+		- 出力: `apps/desktop/dist/Master Hub-Setup-<version>.exe`
+	- 更新（最小運用）: 新しい `Setup-<version>.exe` を配布して実行してもらう
+	- 接続先URL（例）: `$env:MASTER_HUB_URL='https://YOUR_URL/'; npm run start`
+- Android（TWA最小 / 推奨）: [apps/twa/README.md](apps/twa/README.md)
+	- 更新をWeb側に寄せたい場合の最小土台（HTTPS + 固定ドメイン前提）
+- iOS/Android（Capacitor最小）: [apps/mobile/README.md](apps/mobile/README.md)
+```
 
 ## PWA（パッケージ版）実機チェックリスト
 
@@ -439,3 +554,47 @@ npm run e2e:log
 ## プロンプト管理
 
 プロンプトは `prompts/` に分割して管理。
+## Git自動同期
+
+自宅と会社で同じGitHubアカウントを使用する場合、自動同期スクリプトで変更を自動的にpull/push/commitできます。
+
+### 使い方
+
+**1回だけ実行（手動同期）:**
+```bash
+npm run git:sync
+```
+
+**5分ごとに自動同期（バックグラウンド）:**
+```bash
+npm run git:sync:5min
+```
+
+**10分ごとに自動同期（バックグラウンド）:**
+```bash
+npm run git:sync:10min
+```
+
+**VS Code Tasksから実行:**
+- `Ctrl+Shift+P` → "Tasks: Run Task" → "git: auto-sync (once)" or "git: auto-sync (continuous 5min)"
+
+### 動作
+
+1. リモートから最新取得（`git fetch`）
+2. リモートに新しいコミットがあれば `git pull --rebase`
+3. ローカルに変更があれば自動コミット（タイムスタンプ付き）
+4. リモートへプッシュ（`git push`）
+
+### 注意
+
+- ⚠️ コンフリクトが発生した場合は自動では解決できません（手動解決が必要）
+- ⚠️ `.zip` / `.log` / `node_modules/` / `.next/` / `*-err.txt` / `*-out.txt` は自動コミットから除外
+- ⚠️ 自宅と会社で同じファイルを同時編集すると競合が発生しやすくなります
+- ✅ 作業開始前に一度手動で `git pull` することを推奨
+
+### カスタマイズ
+
+[scripts/git-auto-sync.ps1](scripts/git-auto-sync.ps1) でパラメータ変更可能：
+- `-IntervalMinutes`: 同期間隔（デフォルト5分）
+- `-Branch`: 対象ブランチ（デフォルトは現在のブランチ）
+- `-CommitPrefix`: コミットメッセージのプレフィックス（デフォルト "Auto-sync"）

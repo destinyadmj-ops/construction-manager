@@ -29,14 +29,15 @@ export async function getGraphAccessToken(): Promise<string> {
     body,
   });
 
-  const json = (await res.json().catch(() => null)) as any;
+  const json = (await res.json().catch(() => null)) as unknown;
+  const obj = json && typeof json === 'object' ? (json as Record<string, unknown>) : null;
   if (!res.ok) {
-    const err = json?.error_description || json?.error || `HTTP ${res.status}`;
+    const err = obj?.error_description ?? obj?.error ?? `HTTP ${res.status}`;
     throw new Error(`Graph token error: ${String(err)}`);
   }
 
-  const accessToken = typeof json?.access_token === 'string' ? json.access_token : null;
-  const expiresIn = typeof json?.expires_in === 'number' ? json.expires_in : 0;
+  const accessToken = typeof obj?.access_token === 'string' ? obj.access_token : null;
+  const expiresIn = typeof obj?.expires_in === 'number' ? obj.expires_in : 0;
   if (!accessToken) throw new Error('Graph token missing access_token');
 
   tokenCache = { accessToken, expiresAtMs: now + Math.max(60, expiresIn) * 1000 };

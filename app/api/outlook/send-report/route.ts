@@ -12,6 +12,8 @@ const BodySchema = z
     kind: z.enum(['report', 'invoice']).optional(),
     toEmail: z.string().email().max(320).optional(),
     subject: z.string().max(200).optional(),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   })
   .strict();
 
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
     bodyLines.push('');
     bodyLines.push(`宛先: ${partner.name}`);
     bodyLines.push(`現場: ${siteLabel}`);
+    if (parsed.data.from && parsed.data.to) bodyLines.push(`期間: ${parsed.data.from}〜${parsed.data.to}`);
+    if (site.amount) bodyLines.push(`金額: ¥${Number(site.amount).toLocaleString('ja-JP')}`);
     if (site.address) bodyLines.push(`住所: ${site.address}`);
     if (site.phone) bodyLines.push(`電話: ${site.phone}`);
     if (site.contactName) bodyLines.push(`担当: ${site.contactName}`);
@@ -105,6 +109,8 @@ export async function POST(request: Request) {
     const pdfLines: string[] = [];
     pdfLines.push(`宛先: ${partner.name}`);
     pdfLines.push(`現場: ${siteLabel}`);
+    if (parsed.data.from && parsed.data.to) pdfLines.push(`期間: ${parsed.data.from}〜${parsed.data.to}`);
+    if (site.amount) pdfLines.push(`金額: ¥${Number(site.amount).toLocaleString('ja-JP')}`);
     if (site.address) pdfLines.push(`住所: ${site.address}`);
     if (site.phone) pdfLines.push(`電話: ${site.phone}`);
     if (site.contactName) pdfLines.push(`担当: ${site.contactName}`);

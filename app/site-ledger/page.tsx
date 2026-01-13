@@ -1,13 +1,36 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useHeaderActions } from '../header-actions';
+
+function scheduleLabelDotClass(color: string | null | undefined): string {
+  const c = (color ?? 'default').toString();
+  if (c === 'default') return 'bg-zinc-300 dark:bg-zinc-700';
+  if (c === 'red') return 'bg-red-500 dark:bg-red-400';
+  if (c === 'orange') return 'bg-orange-500 dark:bg-orange-400';
+  if (c === 'yellow') return 'bg-yellow-400 dark:bg-yellow-300';
+  if (c === 'green') return 'bg-green-500 dark:bg-green-400';
+  if (c === 'blue') return 'bg-blue-500 dark:bg-blue-400';
+  if (c === 'purple') return 'bg-purple-500 dark:bg-purple-400';
+  if (c === 'pink') return 'bg-pink-500 dark:bg-pink-400';
+  return 'bg-zinc-300 dark:bg-zinc-700';
+}
 
 type ApiSite = {
   id: string;
   companyName: string | null;
   name: string;
+  scheduleLabelColor: string;
   depreciationThreshold: number;
+  alertsEnabled: boolean;
+  caution: string | null;
+  invoiceIssuedThisMonth: boolean | undefined;
+  reportIssuedThisMonth: boolean | undefined;
+  paceExpectedThisMonth: number | undefined;
+  paceActualThisMonth: number | undefined;
+  paceNotConsumedAlert: boolean | undefined;
+  unassignedThisMonth: boolean | undefined;
   createdAt: string;
   updatedAt: string;
   repeatRule: unknown;
@@ -16,12 +39,17 @@ type ApiSite = {
 type DeprItem = { siteId: string; count: number; threshold: number; alert: boolean };
 
 export default function SiteLedgerPage() {
-  const { setAddAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const { setAddAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const router = useRouter();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [q, setQ] = useState('');
+
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const [deprMonth, setDeprMonth] = useState<string>(() => {
     const now = new Date();
@@ -29,23 +57,16 @@ export default function SiteLedgerPage() {
   });
   const [deprMap, setDeprMap] = useState<Record<string, DeprItem>>({});
   const [deprStatus, setDeprStatus] = useState<string | null>(null);
-  const [deprDetailSiteId, setDeprDetailSiteId] = useState<string | null>(null);
-  const [deprDetail, setDeprDetail] = useState<DeprItem | null>(null);
 
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newName, setNewName] = useState('');
   const [newThreshold, setNewThreshold] = useState('10');
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editCompanyName, setEditCompanyName] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editThreshold, setEditThreshold] = useState('10');
-
   const loadSites = useCallback(async () => {
     setStatusMsg(null);
     setIsLoading(true);
     try {
-      const r = await fetch('/api/sites');
+      const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}`);
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -53,18 +74,45 @@ export default function SiteLedgerPage() {
       }
 
       const raw = Array.isArray(obj.sites) ? (obj.sites as unknown[]) : [];
-      const parsed: ApiSite[] = raw
+      const parsed = raw
         .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : null))
-        .map((o) => {
+        .map((o): ApiSite | null => {
           const id = typeof o?.id === 'string' ? o.id : null;
           const name = typeof o?.name === 'string' ? o.name : null;
           const companyName = typeof o?.companyName === 'string' ? o.companyName : o?.companyName === null ? null : null;
+          const scheduleLabelColor = typeof o?.scheduleLabelColor === 'string' ? o.scheduleLabelColor : 'default';
           const depreciationThreshold = typeof o?.depreciationThreshold === 'number' ? o.depreciationThreshold : 10;
+          const alertsEnabled = typeof o?.alertsEnabled === 'boolean' ? o.alertsEnabled : true;
+          const caution = typeof o?.caution === 'string' ? o.caution : o?.caution === null ? null : null;
           const createdAt = typeof o?.createdAt === 'string' ? o.createdAt : new Date().toISOString();
           const updatedAt = typeof o?.updatedAt === 'string' ? o.updatedAt : createdAt;
           const repeatRule = o?.repeatRule;
+
+          const invoiceIssuedThisMonth = typeof o?.invoiceIssuedThisMonth === 'boolean' ? o.invoiceIssuedThisMonth : undefined;
+          const reportIssuedThisMonth = typeof o?.reportIssuedThisMonth === 'boolean' ? o.reportIssuedThisMonth : undefined;
+          const paceExpectedThisMonth = typeof o?.paceExpectedThisMonth === 'number' ? o.paceExpectedThisMonth : undefined;
+          const paceActualThisMonth = typeof o?.paceActualThisMonth === 'number' ? o.paceActualThisMonth : undefined;
+          const paceNotConsumedAlert = typeof o?.paceNotConsumedAlert === 'boolean' ? o.paceNotConsumedAlert : undefined;
+          const unassignedThisMonth = typeof o?.unassignedThisMonth === 'boolean' ? o.unassignedThisMonth : undefined;
           if (!id || !name) return null;
-          return { id, companyName, name, depreciationThreshold, createdAt, updatedAt, repeatRule };
+          return {
+            id,
+            companyName,
+            name,
+            scheduleLabelColor,
+            depreciationThreshold,
+            alertsEnabled,
+            caution,
+            invoiceIssuedThisMonth,
+            reportIssuedThisMonth,
+            paceExpectedThisMonth,
+            paceActualThisMonth,
+            paceNotConsumedAlert,
+            unassignedThisMonth,
+            createdAt,
+            updatedAt,
+            repeatRule,
+          };
         })
         .filter((x): x is ApiSite => !!x);
 
@@ -75,7 +123,7 @@ export default function SiteLedgerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [deprMonth]);
 
   const loadDeprCounts = useCallback(async () => {
     setDeprStatus(null);
@@ -86,42 +134,22 @@ export default function SiteLedgerPage() {
       if (!r.ok || obj?.ok !== true) {
         throw new Error((obj?.error as string) || `HTTP ${r.status}`);
       }
-      const raw = Array.isArray(obj.items) ? (obj.items as unknown[]) : [];
+
+      const items = Array.isArray(obj.items) ? (obj.items as unknown[]) : [];
       const next: Record<string, DeprItem> = {};
-      for (const x of raw) {
-        const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : null;
+      for (const it of items) {
+        const o = it && typeof it === 'object' ? (it as Record<string, unknown>) : null;
         const siteId = typeof o?.siteId === 'string' ? o.siteId : null;
-        const count = typeof o?.count === 'number' ? o.count : null;
-        const threshold = typeof o?.threshold === 'number' ? o.threshold : null;
-        const alert = typeof o?.alert === 'boolean' ? o.alert : null;
-        if (!siteId || count === null || threshold === null || alert === null) continue;
+        if (!siteId) continue;
+        const count = typeof o?.count === 'number' ? o.count : 0;
+        const threshold = typeof o?.threshold === 'number' ? o.threshold : 10;
+        const alert = typeof o?.alert === 'boolean' ? o.alert : false;
         next[siteId] = { siteId, count, threshold, alert };
       }
       setDeprMap(next);
     } catch (e) {
       setDeprMap({});
-      setDeprStatus(e instanceof Error ? `償却カウント取得に失敗: ${e.message}` : '償却カウント取得に失敗しました');
-    }
-  }, [deprMonth]);
-
-  const loadDeprDetail = useCallback(async (siteId: string) => {
-    setDeprDetail(null);
-    setDeprStatus(null);
-    try {
-      const r = await fetch(
-        `/api/sites/depreciation-count?siteId=${encodeURIComponent(siteId)}&month=${encodeURIComponent(deprMonth)}`,
-      );
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      if (!r.ok || obj?.ok !== true) {
-        throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-      }
-      const count = typeof obj?.count === 'number' ? (obj.count as number) : 0;
-      const threshold = typeof obj?.threshold === 'number' ? (obj.threshold as number) : 10;
-      const alert = typeof obj?.alert === 'boolean' ? (obj.alert as boolean) : false;
-      setDeprDetail({ siteId, count, threshold, alert });
-    } catch (e) {
-      setDeprStatus(e instanceof Error ? `償却詳細の取得に失敗: ${e.message}` : '償却詳細の取得に失敗しました');
+      setDeprStatus(e instanceof Error ? `取得に失敗: ${e.message}` : '取得に失敗しました');
     }
   }, [deprMonth]);
 
@@ -135,20 +163,13 @@ export default function SiteLedgerPage() {
 
   const visibleSites = useMemo(() => {
     const v = q.trim().toLowerCase();
-    const filtered = !v
+    return !v
       ? sites
       : sites.filter((s) => {
           const a = `${s.companyName ?? ''} ${s.name}`.toLowerCase();
           return a.includes(v);
         });
-
-    // 検索で編集中の行が消えると操作しづらいので、常に先頭に残す
-    if (!editingId) return filtered;
-    const editing = sites.find((s) => s.id === editingId) ?? null;
-    if (!editing) return filtered;
-    if (filtered.some((s) => s.id === editingId)) return filtered;
-    return [editing, ...filtered];
-  }, [editingId, q, sites]);
+  }, [q, sites]);
 
   const addSite = useCallback(async () => {
     const name = newName.trim();
@@ -178,48 +199,37 @@ export default function SiteLedgerPage() {
     }
   }, [loadSites, newCompanyName, newName, newThreshold]);
 
-  const saveEditing = useCallback(async () => {
-    if (!editingId) return;
-    const hit = sites.find((s) => s.id === editingId);
-    if (!hit) return;
-    const name = editName.trim();
-    if (!name) return;
-    const companyName = editCompanyName.trim() || null;
-    const threshold = Number(editThreshold);
-    setStatusMsg(null);
-    try {
-      const r = await fetch('/api/sites', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          id: hit.id,
-          name,
-          companyName,
-          depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
-        }),
-      });
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-      setEditingId(null);
-      await loadSites();
-    } catch (e) {
-      setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
-    }
-  }, [editCompanyName, editName, editThreshold, editingId, loadSites, sites]);
+  const importSchedule = useCallback(
+    async (file: File | null) => {
+      if (!file) return;
+      setImportMsg(null);
+      setIsImporting(true);
+      try {
+        const fd = new FormData();
+        fd.set('file', file);
+        const r = await fetch('/api/sites/import-schedule', { method: 'POST', body: fd });
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+        const created = typeof obj?.created === 'number' ? (obj.created as number) : 0;
+        const total = typeof obj?.total === 'number' ? (obj.total as number) : 0;
+        setImportMsg(`予定取り込み: ${created}件追加 / ${total}件抽出`);
+        await loadSites();
+      } catch (e) {
+        setImportMsg(e instanceof Error ? `予定取り込みに失敗: ${e.message}` : '予定取り込みに失敗しました');
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [loadSites],
+  );
 
   useEffect(() => {
     setAddAction({ onClick: addSite, disabled: !newName.trim(), title: '追加（現場）' });
-    setSaveAction({
-      onClick: saveEditing,
-      disabled: !editingId || !editName.trim(),
-      title: '作業や入力（編集中の現場）',
-    });
     return () => {
       setAddAction(undefined);
-      setSaveAction(undefined);
     };
-  }, [addSite, editName, editingId, newName, saveEditing, setAddAction, setSaveAction]);
+  }, [addSite, newName, setAddAction]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -292,8 +302,48 @@ export default function SiteLedgerPage() {
       <div
         id="site-ledger"
         ref={rootRef}
-        className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-black"
+        className="space-y-4"
       >
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">現場台帳</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">現場名で検索して詳細へ移動できます。</div>
+            {importMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{importMsg}</div> : null}
+          </div>
+
+          <div className="flex w-full max-w-sm flex-col gap-2">
+            <div className="flex items-center justify-end gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0] ?? null;
+                  void importSchedule(f);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={() => importInputRef.current?.click()}
+                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                title="予定表（Excel）から現場名を取り込み"
+              >
+                予定取り込み
+              </button>
+            </div>
+            <div className="text-xs text-zinc-600 dark:text-zinc-400">現場名検索</div>
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="例: ○○マンション"
+              className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+            />
+          </div>
+        </div>
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">現場台帳</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           一覧/追加/編集/削除（devではトークン無しでもOK）。
@@ -301,7 +351,7 @@ export default function SiteLedgerPage() {
 
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
 
-        <div className="mt-5 rounded-lg border border-zinc-200 bg-white/60 p-3 dark:border-zinc-800 dark:bg-black/60">
+        <div className="mt-5 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">償却カウント詳細</div>
@@ -330,39 +380,9 @@ export default function SiteLedgerPage() {
 
           {deprStatus ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{deprStatus}</div> : null}
 
-          {deprDetailSiteId && deprDetail ? (
-            <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-black">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1 truncate text-xs text-zinc-800 dark:text-zinc-200">
-                  対象: {sites.find((s) => s.id === deprDetailSiteId)?.name ?? deprDetailSiteId}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeprDetailSiteId(null);
-                    setDeprDetail(null);
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                >
-                  閉じる
-                </button>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] dark:border-zinc-800">
-                  件数: <span className="tabular-nums">{deprDetail.count}</span>
-                </div>
-                <div
-                  className={`rounded-md border px-2 py-2 text-[11px] ${
-                    deprDetail.alert
-                      ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                      : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                  }`}
-                >
-                  閾値: <span className="tabular-nums">{deprDetail.threshold}</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+            「現場一覧（コンパクト）」で件数バッジ表示します。
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2">
@@ -443,7 +463,10 @@ export default function SiteLedgerPage() {
           className="mt-2 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
         />
 
-        <div className="mt-3 rounded-lg border border-zinc-200 bg-white/60 p-3 dark:border-zinc-800 dark:bg-black/60">
+        <div
+          data-color-edit-slot="border"
+          className="mt-3 rounded-lg border border-zinc-200 bg-white/60 p-3 dark:border-zinc-800 dark:bg-black/60"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場一覧（コンパクト）</div>
@@ -456,188 +479,87 @@ export default function SiteLedgerPage() {
             <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">（データがありません）</div>
           ) : (
             <div className="mt-2 max-h-64 overflow-auto">
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
-                  <div
+                  <button
                     key={`grid-${s.id}`}
-                    className="rounded border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
-                    title={(s.companyName ? `${s.companyName} / ` : '') + s.name}
+                    type="button"
+                    onClick={() =>
+                      router.push(`/site-ledger/${encodeURIComponent(s.id)}?month=${encodeURIComponent(deprMonth)}`)
+                    }
+                    className="relative rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-10 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
+                    title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
+                      deprMap[s.id]
+                        ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
+                        : ''
+                    }`}
                   >
-                    <div className="truncate">{(s.companyName ? `${s.companyName} / ` : '') + s.name}</div>
-                  </div>
+                    <div className="absolute left-1 top-1">
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="absolute right-1 top-1 flex items-center gap-1">
+                      {s.alertsEnabled && s.invoiceIssuedThisMonth === false ? (
+                        <span
+                          className="mh-alert-dot mh-alert-dot-invoice mh-alert-dot-active"
+                          title="請求書未発行（当月）"
+                        />
+                      ) : null}
+                      {s.alertsEnabled && s.reportIssuedThisMonth === false ? (
+                        <span
+                          className="mh-alert-dot mh-alert-dot-report mh-alert-dot-active"
+                          title="報告書未発行（当月）"
+                        />
+                      ) : null}
+                      {s.alertsEnabled && s.unassignedThisMonth ? (
+                        <span
+                          className="mh-alert-dot mh-alert-dot-unassigned mh-alert-dot-active"
+                          title="当月 現場未配置"
+                        />
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="min-w-0 flex-1 truncate">{(s.companyName ? `${s.companyName} / ` : '') + s.name}</div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {s.caution?.trim() ? (
+                          <span className="rounded-md border border-red-200 px-1 py-0.5 text-[9px] text-red-700 dark:border-red-900 dark:text-red-300">
+                            注意
+                          </span>
+                        ) : null}
+
+                        {s.alertsEnabled && s.paceNotConsumedAlert ? (
+                          <span className="rounded-md border border-red-200 px-1 py-0.5 text-[9px] text-red-700 dark:border-red-900 dark:text-red-300">
+                            ペース未
+                          </span>
+                        ) : null}
+
+                        {deprMap[s.id] ? (
+                          <span
+                            className={`rounded-md border px-1 py-0.5 text-[9px] tabular-nums ${
+                              deprMap[s.id].alert
+                                ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
+                                : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
+                            }`}
+                          >
+                            {deprMap[s.id].count}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {isLoading ? (
-          <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
-        ) : visibleSites.length === 0 ? (
-          <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">（データがありません）</div>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {visibleSites.map((s) => {
-              const isEditing = editingId === s.id;
-              const repeatEnabled = !!s.repeatRule;
-              const badge = deprMap[s.id];
-              return (
-                <div
-                  key={s.id}
-                  className="rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs text-zinc-800 dark:text-zinc-200">
-                        {(s.companyName ? `${s.companyName} / ` : '') + s.name}
-                      </div>
-                      <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        閾値: {s.depreciationThreshold} / リピート: {repeatEnabled ? 'あり' : 'なし'}
-                        {badge ? (
-                          <span
-                            className={`ml-2 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                              badge.alert
-                                ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                            }`}
-                            title={`償却カウント(${deprMonth}): ${badge.count}件 / 閾値 ${badge.threshold}`}
-                          >
-                            {badge.count}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeprDetailSiteId(s.id);
-                          void loadDeprDetail(s.id);
-                        }}
-                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                      >
-                        償却
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isEditing) {
-                            setEditingId(null);
-                            return;
-                          }
-                          setEditingId(s.id);
-                          setEditCompanyName(s.companyName ?? '');
-                          setEditName(s.name);
-                          setEditThreshold(String(s.depreciationThreshold));
-                        }}
-                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                      >
-                        {isEditing ? '閉じる' : '編集'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const ok = window.confirm(`削除しますか？\n${(s.companyName ? `${s.companyName} / ` : '') + s.name}`);
-                          if (!ok) return;
-                          void (async () => {
-                            setStatusMsg(null);
-                            try {
-                              const r = await fetch(`/api/sites/${encodeURIComponent(s.id)}`, { method: 'DELETE' });
-                              const j = (await r.json().catch(() => null)) as unknown;
-                              const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-                              if (!r.ok || obj?.ok !== true) {
-                                throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-                              }
-                              if (editingId === s.id) setEditingId(null);
-                              await loadSites();
-                            } catch (e) {
-                              setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
-                            }
-                          })();
-                        }}
-                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </div>
-
-                  {isEditing ? (
-                    <div className="mt-3 space-y-2">
-                      <input
-                        value={editCompanyName}
-                        onChange={(e) => setEditCompanyName(e.target.value)}
-                        placeholder="会社名（任意）"
-                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                      />
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="現場名"
-                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                      />
-                      <input
-                        value={editThreshold}
-                        onChange={(e) => setEditThreshold(e.target.value)}
-                        placeholder="償却閾値"
-                        inputMode="numeric"
-                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                      />
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                        >
-                          キャンセル
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!editName.trim()}
-                          onClick={() => {
-                            const name = editName.trim();
-                            const companyName = editCompanyName.trim() || null;
-                            const threshold = Number(editThreshold);
-                            void (async () => {
-                              setStatusMsg(null);
-                              try {
-                                const r = await fetch('/api/sites', {
-                                  method: 'POST',
-                                  headers: { 'content-type': 'application/json' },
-                                  body: JSON.stringify({
-                                    id: s.id,
-                                    name,
-                                    companyName,
-                                    depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
-                                  }),
-                                });
-                                const j = (await r.json().catch(() => null)) as unknown;
-                                const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-                                if (!r.ok || obj?.ok !== true) {
-                                  throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-                                }
-                                setEditingId(null);
-                                await loadSites();
-                              } catch (e) {
-                                setStatusMsg(
-                                  e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました',
-                                );
-                              }
-                            })();
-                          }}
-                          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                        >
-                          保存
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {isLoading ? <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
+        <div className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+          現場の詳細/編集は「現場一覧（コンパクト）」から開いてください。
+        </div>
       </div>
     </main>
   );

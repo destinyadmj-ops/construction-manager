@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 function isAndroid() {
   if (typeof navigator === 'undefined') return false;
@@ -17,13 +17,6 @@ function isStandalonePwa() {
 
 export default function PwaBackGuard() {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const routeKey = useMemo(() => {
-    const qs = searchParams.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchParams]);
 
   useEffect(() => {
     if (!isStandalonePwa()) return;

@@ -16,6 +16,13 @@ const eslintConfig = defineConfig([
     // App generated artifacts:
     "src/generated/**",
   ]),
+
+  {
+    files: ["apps/desktop/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

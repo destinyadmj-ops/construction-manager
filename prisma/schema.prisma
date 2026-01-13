@@ -28,21 +28,68 @@ enum OutlookMailKind {
   INVOICE
 }
 
+enum StoredDocumentKind {
+  REPORT
+  INVOICE
+  BUSINESS_CARD
+  PHOTO
+}
+
 enum OutlookMailStatus {
   SENT
   FAILED
+}
+
+enum WorkEntryKind {
+  NORMAL
+  DAILY
+}
+
+enum SiteKind {
+  NORMAL
+  DAILY
+}
+
+enum UserKind {
+  NORMAL
+  DAILY
 }
 
 model User {
   id        String   @id @default(cuid())
   email     String?  @unique
   name      String?
+  kind      UserKind @default(NORMAL)
+
+  // Per-user schedule edit permission (granted from admin UI)
+  canEditSchedule Boolean @default(false)
+
+  // Whether the user can grant schedule edit permission to others.
+  canGrantScheduleEdit Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   calendarEvents CalendarEvent[]
   workEntries    WorkEntry[]
   integrations   IntegrationAccount[]
+  uiSettings     UserUiSetting[]
+
+  siteMemberships SiteMember[]
+  timeClocks      TimeClock[]
+}
+
+model UserUiSetting {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId, key])
 }
 
 model CalendarEvent {
@@ -64,22 +111,24 @@ model CalendarEvent {
 }
 
 model WorkEntry {
-  id          String   @id @default(cuid())
-  userId      String
-  startAt     DateTime
-  endAt       DateTime?
-  note        String?
+  id             String    @id @default(cuid())
+  userId         String
+  startAt        DateTime
+  endAt          DateTime?
+  note           String?
   relatedEventId String?
 
+  kind WorkEntryKind @default(NORMAL)
+
   // Site (genba) ledger relation (optional)
-  siteId      String?
-  site        Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   // Accounting (generic; provider-specific mapping happens in provider)
-  amount      Decimal?
-  taxCategory String?
-  summary     String?
-  department  String?
+  amount         Decimal?
+  taxCategory    String?
+  summary        String?
+  department     String?
   accountingType AccountingType?
   accountingMeta Json?
 
@@ -96,25 +145,78 @@ model Site {
   id          String   @id @default(cuid())
   companyName String?
   name        String
+  kind        SiteKind @default(NORMAL)
   address     String?
   phone       String?
   contactName String?
   notes       String?
 
+  // Site detail fields (for ledger detail screen)
+  pace        String?
+  amount      Decimal?
+  detail      String?
+  peopleCount Int?
+  caution     String?
+
+  // Schedule label default color (used for Week/Month schedule rendering)
+  scheduleLabelColor String @default("default")
+
+  // Default work duration in minutes (used as a suggestion on stamping/manual entry)
+  defaultWorkMinutes Int?
+
   // Monthly depreciation count threshold (alert when entries >= threshold)
   depreciationThreshold Int @default(10)
 
+  // Per-site alert switch (used to suppress unintended alerts)
+  alertsEnabled Boolean @default(true)
+
   // Repeat rule (pace) stored as JSON (intervalMonths, weekdays, monthDays)
-  repeatRule  Json?
+  repeatRule Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  workEntries WorkEntry[]
+  workEntries     WorkEntry[]
   outlookSendLogs OutlookSendLog[]
+  storedDocuments StoredDocument[]
+
+  members SiteMember[]
+  timeClocks TimeClock[]
 
   @@index([name])
   @@index([companyName, name])
+}
+
+model SiteMember {
+  id        String   @id @default(cuid())
+  siteId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, userId])
+  @@index([siteId])
+  @@index([userId])
+}
+
+model TimeClock {
+  id        String   @id @default(cuid())
+  userId    String
+  siteId    String?
+  inAt      DateTime
+  outAt     DateTime?
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([userId, inAt])
+  @@index([siteId, inAt])
+  @@index([userId, outAt])
 }
 
 model IntegrationAccount {
@@ -144,23 +246,66 @@ model AccountingExportPreset {
 }
 
 model Partner {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  email     String?
-  notes     String?
+  id     String  @id @default(cuid())
+  name   String  @unique
+  email  String?
+  emails Json?
+  notes  String?
+
+  address     String?
+  phone       String?
+  fax         String?
+  detail      String?
+  caution     String?
+  extraFields Json?
+
   outlookToEmailDefault        String?
   outlookSubjectReportDefault  String?
   outlookSubjectInvoiceDefault String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
-  outlookSendLogs OutlookSendLog[]
+  outlookSendLogs   OutlookSendLog[]
+  storedDocuments   StoredDocument[]
 
   @@index([name])
 }
 
+model StoredDocument {
+  id        String             @id @default(cuid())
+  siteId    String?
+  partnerId String?
+  kind      StoredDocumentKind
+  subject   String?
+
+  // Business date key (YYYY-MM-DD) for day-based foldering/searching (mainly photos)
+  bizDateYmd String?
+
+  // Optional tags for searching / labeling (e.g. photo keywords)
+  tags Json?
+
+  // Original attachment name shown to users
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+
+  // Absolute or workspace-relative path to the stored file (server-side)
+  storedPath String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site    Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, createdAt])
+  @@index([partnerId, createdAt])
+  @@index([kind, createdAt])
+  @@index([kind, bizDateYmd])
+}
+
 model OutlookSendLog {
-  id        String           @id @default(cuid())
+  id        String            @id @default(cuid())
   siteId    String
   partnerId String
   kind      OutlookMailKind
@@ -168,8 +313,8 @@ model OutlookSendLog {
   toEmail   String
   subject   String
   error     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
   site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
   partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)

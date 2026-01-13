@@ -1,4 +1,4 @@
-const CACHE_NAME = 'master-hub-v1';
+const CACHE_NAME = 'master-hub-v2';
 const CORE_ASSETS = ['/', '/?mode=week', '/manifest.webmanifest', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -19,6 +19,14 @@ self.addEventListener('activate', (event) => {
       ),
     ])
   );
+});
+
+self.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (!data || typeof data !== 'object') return;
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

@@ -7,6 +7,7 @@ const CreateSchema = z
   .object({
     name: z.string().min(1).max(200),
     email: z.string().max(320).optional().nullable(),
+    fax: z.string().max(50).optional().nullable(),
     notes: z.string().max(2000).optional().nullable(),
   })
   .strict();
@@ -16,6 +17,7 @@ const UpdateSchema = z
     id: z.string().min(1),
     name: z.string().min(1).max(200).optional(),
     email: z.string().max(320).optional().nullable(),
+    fax: z.string().max(50).optional().nullable(),
     notes: z.string().max(2000).optional().nullable(),
     outlookToEmailDefault: z.string().max(320).optional().nullable(),
     outlookSubjectReportDefault: z.string().max(200).optional().nullable(),
@@ -38,6 +40,7 @@ export async function GET() {
         id: true,
         name: true,
         email: true,
+        fax: true,
         notes: true,
         outlookToEmailDefault: true,
         outlookSubjectReportDefault: true,
@@ -67,6 +70,7 @@ export async function POST(request: Request) {
       const data: {
         name?: string;
         email?: string | null;
+        fax?: string | null;
         notes?: string | null;
         outlookToEmailDefault?: string | null;
         outlookSubjectReportDefault?: string | null;
@@ -75,6 +79,9 @@ export async function POST(request: Request) {
       if (typeof asUpdate.data.name === 'string') data.name = asUpdate.data.name.trim();
       if (asUpdate.data.email !== undefined) {
         data.email = typeof asUpdate.data.email === 'string' ? asUpdate.data.email.trim() || null : null;
+      }
+      if (asUpdate.data.fax !== undefined) {
+        data.fax = typeof asUpdate.data.fax === 'string' ? asUpdate.data.fax.trim() || null : null;
       }
       if (asUpdate.data.notes !== undefined) {
         data.notes = typeof asUpdate.data.notes === 'string' ? asUpdate.data.notes.trim() || null : null;
@@ -126,6 +133,7 @@ export async function POST(request: Request) {
       data: {
         name: asCreate.data.name.trim(),
         email: typeof asCreate.data.email === 'string' ? asCreate.data.email.trim() || null : null,
+        fax: typeof asCreate.data.fax === 'string' ? asCreate.data.fax.trim() || null : null,
         notes: asCreate.data.notes ? asCreate.data.notes.trim() : null,
       },
       select: { id: true, name: true, notes: true },

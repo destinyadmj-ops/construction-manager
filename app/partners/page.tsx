@@ -9,6 +9,8 @@ type ApiPartner = {
   id: string;
   name: string;
   email: string | null;
+  fax: string | null;
+  address: string | null;
   notes: string | null;
   outlookToEmailDefault: string | null;
   outlookSubjectReportDefault: string | null;
@@ -50,6 +52,15 @@ export default function PartnersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftNotes, setDraftNotes] = useState<string>('');
   const [draftEmail, setDraftEmail] = useState<string>('');
+  const [draftFax, setDraftFax] = useState<string>('');
+  const [draftAddress, setDraftAddress] = useState<string>('');
+  const [siteListOpen, setSiteListOpen] = useState<string | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState<string | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState<string | null>(null);
+  const [sites, setSites] = useState<Array<{ id: string; name: string; companyName: string | null }>>([]);
+  const [selectedInvoiceSites, setSelectedInvoiceSites] = useState<Set<string>>(new Set());
+  const [selectedReportSite, setSelectedReportSite] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -72,6 +83,8 @@ export default function PartnersPage() {
           const id = typeof o?.id === 'string' ? o.id : null;
           const name = typeof o?.name === 'string' ? o.name : null;
           const email = typeof o?.email === 'string' ? o.email : o?.email === null ? null : null;
+          const fax = typeof o?.fax === 'string' ? o.fax : o?.fax === null ? null : null;
+          const address = typeof o?.address === 'string' ? o.address : o?.address === null ? null : null;
           const notes = typeof o?.notes === 'string' ? o.notes : o?.notes === null ? null : null;
           const outlookToEmailDefault =
             typeof o?.outlookToEmailDefault === 'string' ? o.outlookToEmailDefault : null;
@@ -85,6 +98,8 @@ export default function PartnersPage() {
             id,
             name,
             email,
+            fax,
+            address,
             notes,
             outlookToEmailDefault,
             outlookSubjectReportDefault,
@@ -107,14 +122,41 @@ export default function PartnersPage() {
   }, [loadFromServer]);
 
   useEffect(() => {
+    // 現場リストの読み込み
+    void (async () => {
+      try {
+        const r = await fetch('/api/sites');
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) return;
+        const raw = Array.isArray(obj.sites) ? obj.sites : [];
+        const parsed = raw
+          .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : null))
+          .map((o) => {
+            const id = typeof o?.id === 'string' ? o.id : null;
+            const name = typeof o?.name === 'string' ? o.name : null;
+            const companyName = typeof o?.companyName === 'string' ? o.companyName : o?.companyName === null ? null : null;
+            if (!id || !name) return null;
+            return { id, name, companyName };
+          })
+          .filter((x): x is { id: string; name: string; companyName: string | null } => !!x);
+        setSites(parsed);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     savePartners(partners);
   }, [partners]);
 
   const canAdd = useMemo(() => {
     const v = draftName.trim();
     if (!v) return false;
-    return !partners.some((p) => p === v);
-  }, [draftName, partners]);
+    const existing = source === 'server' ? serverPartners.map((p) => p.name) : partners;
+    return !existing.some((p) => p === v);
+  }, [draftName, partners, serverPartners, source]);
 
   const visiblePartners = useMemo(() => {
     if (source === 'server') return serverPartners.map((p) => p.name);
@@ -163,7 +205,7 @@ export default function PartnersPage() {
       const r = await fetch('/api/partners', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, notes: draftNotes }),
+        body: JSON.stringify({ id: editingPartner.id, email: draftEmail, fax: draftFax, address: draftAddress, notes: draftNotes }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
@@ -172,10 +214,197 @@ export default function PartnersPage() {
       setEditingId(null);
       setDraftNotes('');
       setDraftEmail('');
+      setDraftFax('');
+      setDraftAddress('');
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
-  }, [draftEmail, draftNotes, editingPartner, loadFromServer]);
+  }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
+
+  const openInvoiceDialog = useCallback((partnerId: string) => {
+    setInvoiceDialogOpen(partnerId);
+    setSelectedInvoiceSites(new Set());
+  }, []);
+
+  const toggleInvoiceSite = useCallback((siteId: string) => {
+    setSelectedInvoiceSites(prev => {
+      const next = new Set(prev);
+      if (next.has(siteId)) {
+        next.delete(siteId);
+      } else {
+        next.add(siteId);
+      }
+      return next;
+    });
+  }, []);
+
+  const generateInvoices = useCallback(() => {
+    if (selectedInvoiceSites.size === 0) return;
+    const siteIds = Array.from(selectedInvoiceSites);
+    // 請求書一括発行: 会計画面へパラメータ付きで遷移
+    const params = new URLSearchParams();
+    siteIds.forEach(id => params.append('siteId', id));
+    window.location.href = `/accounting?${params.toString()}`;
+  }, [selectedInvoiceSites]);
+
+  const openReportDialog = useCallback((partnerId: string) => {
+    setReportDialogOpen(partnerId);
+    setSelectedReportSite(null);
+  }, []);
+
+  const goToReport = useCallback(() => {
+    if (!selectedReportSite) return;
+    // 報告書作成画面へ遷移
+    window.location.href = `/accounting?siteId=${encodeURIComponent(selectedReportSite)}`;
+  }, [selectedReportSite]);
+
+  const handleFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) return;
+
+        // CSV/TSV形式を解析（カンマまたはタブ区切り）
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length === 0) {
+          setStatusMsg('ファイルが空です');
+          return;
+        }
+
+        // 1行目をヘッダーとして解析
+        const delimiter = lines[0].includes('\t') ? '\t' : ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+        
+        // 2行目以降をデータとして解析
+        const dataLines = lines.slice(1);
+        
+        // 編集中の場合は1件のみ取り込み
+        if (editingId) {
+          if (dataLines.length === 0) {
+            setStatusMsg('取り込み可能なデータが見つかりませんでした');
+            return;
+          }
+
+          const line = dataLines[0];
+          const values = line.split(delimiter).map(v => v.trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+
+          const email = row['email'] || row['メール'] || row['mail'] || '';
+          const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
+          const address = row['住所'] || row['address'] || row['所在地'] || '';
+          const notes = row['メモ'] || row['notes'] || row['備考'] || '';
+
+          setDraftEmail(email);
+          setDraftFax(fax);
+          setDraftAddress(address);
+          setDraftNotes(notes);
+          setStatusMsg('ファイルから1件の情報を取り込みました');
+          return;
+        }
+
+        // 編集中でない場合は全件を一括登録
+        const companies: Array<{
+          name: string;
+          email: string;
+          fax: string;
+          address: string;
+          notes: string;
+        }> = [];
+
+        for (const line of dataLines) {
+          const values = line.split(delimiter).map(v => v.trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+
+          // 会社名が必須
+          const name = row['会社名'] || row['name'] || row['名前'] || row['company'];
+          if (!name) continue;
+
+          const email = row['email'] || row['メール'] || row['mail'] || '';
+          const fax = row['fax'] || row['ファックス'] || row['fax番号'] || '';
+          const address = row['住所'] || row['address'] || row['所在地'] || '';
+          const notes = row['メモ'] || row['notes'] || row['備考'] || '';
+
+          companies.push({ name, email, fax, address, notes });
+        }
+
+        if (companies.length === 0) {
+          setStatusMsg('取り込み可能なデータが見つかりませんでした');
+          return;
+        }
+
+        // 一括登録処理
+        setStatusMsg(`${companies.length}件の会社情報を登録中...`);
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const company of companies) {
+          try {
+            const r = await fetch('/api/partners', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                name: company.name,
+                email: company.email || null,
+                fax: company.fax || null,
+                address: company.address || null,
+                notes: company.notes || null,
+              }),
+            });
+            const j = (await r.json().catch(() => null)) as unknown;
+            const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+            
+            if (r.ok && obj?.ok === true) {
+              successCount++;
+            } else {
+              failCount++;
+              console.warn(`Failed to create partner: ${company.name}`, obj?.error);
+            }
+          } catch (error) {
+            failCount++;
+            console.error(`Error creating partner: ${company.name}`, error);
+          }
+        }
+
+        // 結果を表示
+        if (successCount > 0) {
+          await loadFromServer();
+          if (failCount > 0) {
+            setStatusMsg(`${successCount}件登録成功、${failCount}件失敗しました`);
+          } else {
+            setStatusMsg(`${successCount}件の会社情報を登録しました`);
+          }
+        } else {
+          setStatusMsg(`登録に失敗しました（${failCount}件）`);
+        }
+      } catch (error) {
+        console.error('File import error:', error);
+        setStatusMsg('ファイル取り込み中にエラーが発生しました');
+      }
+    };
+
+    reader.onerror = () => {
+      setStatusMsg('ファイル読み込みに失敗しました');
+    };
+
+    reader.readAsText(file, 'UTF-8');
+    
+    // input要素をリセット（同じファイルを再選択可能にする）
+    event.target.value = '';
+  }, [editingId, loadFromServer]);
+
+  const triggerFileImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
   useEffect(() => {
     setAddAction({ onClick: addPartner, disabled: !canAdd, title: '追加（会社名）' });
@@ -260,7 +489,7 @@ export default function PartnersPage() {
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
       <div
         ref={rootRef}
-        className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-black"
+        className="space-y-4"
       >
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">関係会社</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -283,6 +512,21 @@ export default function PartnersPage() {
           >
             追加
           </button>
+          <button
+            type="button"
+            onClick={triggerFileImport}
+            className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60 dark:hover:bg-blue-950"
+            title="CSV/TSVファイルから会社情報を取り込み"
+          >
+            📄 ファイル取込
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt"
+            onChange={handleFileImport}
+            className="hidden"
+          />
         </div>
 
         {visiblePartners.length === 0 ? (
@@ -292,87 +536,209 @@ export default function PartnersPage() {
             {source === 'server'
               ? serverPartners.map((p) => {
                   const isEditing = editingId === p.id;
+                  const toggleDetail = () => {
+                    if (isEditing) {
+                      setEditingId(null);
+                      setDraftNotes('');
+                      setDraftEmail('');
+                      setDraftFax('');
+                      setDraftAddress('');
+                    } else {
+                      setEditingId(p.id);
+                      setDraftNotes(p.notes ?? '');
+                      setDraftEmail(p.email ?? '');
+                      setDraftFax(p.fax ?? '');
+                      setDraftAddress(p.address ?? '');
+                    }
+                  };
                   return (
                     <div
                       key={p.id}
+                      data-color-edit-slot="border"
                       className="rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1 truncate text-xs text-zinc-800 dark:text-zinc-200">
+                        <button
+                          type="button"
+                          onClick={toggleDetail}
+                          className="min-w-0 flex-1 truncate text-left text-xs text-zinc-800 hover:underline dark:text-zinc-200"
+                          title="詳細（メモ）"
+                        >
                           {p.name}
-                        </div>
+                        </button>
 
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
-                              if (isEditing) {
-                                setEditingId(null);
-                                setDraftNotes('');
-                                setDraftEmail('');
-                              } else {
-                                setEditingId(p.id);
-                                setDraftNotes(p.notes ?? '');
-                                setDraftEmail(p.email ?? '');
-                              }
+                              toggleDetail();
                             }}
                             className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                           >
-                            {isEditing ? '閉じる' : 'メモ'}
+                            {isEditing ? '閉じる' : '詳細'}
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => {
-                              const ok = window.confirm(`削除しますか？\n${p.name}`);
-                              if (!ok) return;
-                              void (async () => {
-                                setStatusMsg(null);
-                                try {
-                                  const r = await fetch(`/api/partners/${encodeURIComponent(p.id)}`, {
-                                    method: 'DELETE',
-                                  });
-                                  const j = (await r.json().catch(() => null)) as unknown;
-                                  const obj =
-                                    j && typeof j === 'object' ? (j as Record<string, unknown>) : (null as any);
-                                  if (!r.ok || obj?.ok !== true) {
-                                    throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-                                  }
-                                  if (editingId === p.id) {
-                                    setEditingId(null);
-                                    setDraftNotes('');
-                                  }
-                                  await loadFromServer();
-                                } catch (e) {
-                                  setSource('local');
-                                  setPartners((cur) => cur.filter((x) => x !== p.name));
-                                  setStatusMsg(
-                                    e instanceof Error
-                                      ? `DB削除失敗→ローカル削除: ${e.message}`
-                                      : 'DB削除失敗→ローカル削除',
-                                  );
-                                }
-                              })();
-                            }}
+                            onClick={() => setSiteListOpen(siteListOpen === p.id ? null : p.id)}
                             className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                           >
-                            削除
+                            現場リスト
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setInvoiceDialogOpen(p.id)}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            請求書
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setReportDialogOpen(p.id)}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            報告書
                           </button>
                         </div>
                       </div>
 
-                      {p.notes ? (
-                        <div className="mt-2 whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">
-                          {p.notes}
+                      {/* 現場リストドロップダウン */}
+                      {siteListOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">会社属性の現場リスト</div>
+                          <div className="mt-1 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <div key={s.id} className="text-zinc-700 dark:text-zinc-300">• {s.name}</div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       ) : null}
 
+                      {/* 請求書ダイアログ */}
+                      {invoiceDialogOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">請求書発行（複数選択）</div>
+                          <div className="mt-2 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <label key={s.id} className="flex items-center gap-2 text-[11px] text-zinc-700 hover:bg-zinc-100 px-1 py-1 rounded dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedInvoiceSites.has(s.id)}
+                                    onChange={() => toggleInvoiceSite(s.id)}
+                                    className="rounded"
+                                  />
+                                  {s.name}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInvoiceDialogOpen(null);
+                                setSelectedInvoiceSites(new Set());
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                            >
+                              キャンセル
+                            </button>
+                            <button
+                              type="button"
+                              onClick={generateInvoices}
+                              disabled={selectedInvoiceSites.size === 0}
+                              className="rounded-md border border-blue-500 bg-blue-500 px-2 py-1 text-[11px] text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              一括発行 ({selectedInvoiceSites.size})
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* 報告書ダイアログ */}
+                      {reportDialogOpen === p.id ? (
+                        <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+                          <div className="font-medium text-zinc-700 dark:text-zinc-300">報告書作成</div>
+                          <div className="mt-2 space-y-1">
+                            {sites.filter(s => s.companyName === p.name).length === 0 ? (
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
+                            ) : (
+                              sites.filter(s => s.companyName === p.name).map(s => (
+                                <label key={s.id} className="flex items-center gap-2 text-[11px] text-zinc-700 hover:bg-zinc-100 px-1 py-1 rounded dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                  <input
+                                    type="radio"
+                                    name={`report-site-${p.id}`}
+                                    checked={selectedReportSite === s.id}
+                                    onChange={() => setSelectedReportSite(s.id)}
+                                    className="rounded-full"
+                                  />
+                                  {s.name}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReportDialogOpen(null);
+                                setSelectedReportSite(null);
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                            >
+                              キャンセル
+                            </button>
+                            <button
+                              type="button"
+                              onClick={goToReport}
+                              disabled={!selectedReportSite}
+                              className="rounded-md border border-blue-500 bg-blue-500 px-2 py-1 text-[11px] text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              作成画面へ
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* 編集フォーム */}
                       {isEditing ? (
                         <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between pb-1 border-b border-zinc-200 dark:border-zinc-800">
+                            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">会社情報を編集</div>
+                            <button
+                              type="button"
+                              onClick={triggerFileImport}
+                              className="rounded-md border border-blue-200 bg-blue-50/60 px-2 py-1 text-[11px] hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60 dark:hover:bg-blue-950"
+                              title="CSV/TSVファイルから会社情報を取り込み"
+                            >
+                              📄 ファイル取込
+                            </button>
+                          </div>
                           <input
                             value={draftEmail}
                             onChange={(e) => setDraftEmail(e.target.value)}
                             placeholder="送信先メール（例: example@contoso.com）"
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                          />
+                          <input
+                            value={draftFax}
+                            onChange={(e) => setDraftFax(e.target.value)}
+                            placeholder="FAX（例: 03-1234-5678）"
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                          />
+                          <input
+                            value={draftAddress}
+                            onChange={(e) => setDraftAddress(e.target.value)}
+                            placeholder="住所"
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                           />
                           <textarea
@@ -382,26 +748,75 @@ export default function PartnersPage() {
                             placeholder="メモ"
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                           />
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-between">
                             <button
                               type="button"
                               onClick={() => {
-                                setEditingId(null);
-                                setDraftNotes('');
-                                setDraftEmail('');
+                                const ok = window.confirm(`削除しますか？\n${p.name}`);
+                                if (!ok) return;
+                                void (async () => {
+                                  setStatusMsg(null);
+                                  try {
+                                    const r = await fetch(`/api/partners/${encodeURIComponent(p.id)}`, {
+                                      method: 'DELETE',
+                                    });
+                                    const j = (await r.json().catch(() => null)) as unknown;
+                                    const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+                                    if (!r.ok || obj?.ok !== true) {
+                                      throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+                                    }
+                                    if (editingId === p.id) {
+                                      setEditingId(null);
+                                      setDraftNotes('');
+                                      setDraftEmail('');
+                                      setDraftFax('');
+                                      setDraftAddress('');
+                                    }
+                                    await loadFromServer();
+                                  } catch (e) {
+                                    setSource('local');
+                                    setPartners((cur) => cur.filter((x) => x !== p.name));
+                                    setStatusMsg(
+                                      e instanceof Error
+                                        ? `DB削除失敗→ローカル削除: ${e.message}`
+                                        : 'DB削除失敗→ローカル削除',
+                                    );
+                                  }
+                                })();
                               }}
-                              className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                              className="mh-btn-danger px-3 py-2 text-xs"
                             >
-                              キャンセル
+                              削除
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void saveNotes()}
-                              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                            >
-                              保存
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setDraftNotes('');
+                                  setDraftEmail('');
+                                  setDraftFax('');
+                                  setDraftAddress('');
+                                }}
+                                className="mh-btn px-3 py-2 text-xs"
+                              >
+                                キャンセル
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void saveNotes()}
+                                className="mh-btn-primary px-3 py-2 text-xs"
+                              >
+                                保存
+                              </button>
+                            </div>
                           </div>
+                        </div>
+                      ) : null}
+
+                      {p.notes ? (
+                        <div className="mt-2 whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">
+                          {p.notes}
                         </div>
                       ) : null}
                     </div>
@@ -410,6 +825,7 @@ export default function PartnersPage() {
               : visiblePartners.map((p) => (
                   <div
                     key={p}
+                    data-color-edit-slot="border"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
                   >
                     <div className="min-w-0 flex-1 truncate text-xs text-zinc-800 dark:text-zinc-200">{p}</div>
@@ -421,7 +837,7 @@ export default function PartnersPage() {
                         if (!ok) return;
                         setPartners((cur) => cur.filter((x) => x !== p));
                       }}
-                      className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      className="mh-btn-danger"
                     >
                       削除
                     </button>
