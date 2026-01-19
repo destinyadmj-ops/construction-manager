@@ -26,9 +26,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "apps/**"]
+  "exclude": ["node_modules", "apps/**", ".next", "_restore.disabled"]
 }

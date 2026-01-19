@@ -145,7 +145,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
               for (const userId of Object.keys(gridObj)) {
                 const days = gridObj[userId];
                 for (const dkey of Object.keys(days)) {
-                  const c = days[dkey] as any;
+                  const c = days[dkey] as { slot1?: string | null; slot2?: string | null } | undefined;
                   const s1 = c?.slot1;
                   const s2 = c?.slot2;
                   if (s1 && typeof s1 === 'string' && s1.trim()) namesSet.add(s1.trim());
@@ -241,7 +241,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [open, usersLoading]);
+  }, [open, usersLoading, cellNames]);
 
   // If users and cellNames are both available, pick initial existing user
   useEffect(() => {
