@@ -59,6 +59,11 @@ jobs:
 ```
 - 代替: CI では `process.env` に直接注入してビルドする（ファイル化しない）ことも可。
 
+### GitHub Environments (protection)
+
+For stricter control, use GitHub Environments (Settings → Environments) and create an environment named `production` (or your chosen name). You can require reviewers, set protection rules, and store environment-specific secrets. In workflows, set `environment: production` on the job so environment protection applies.
+
+
 ---
 
 ## 3. 秘密管理サービスへの移行（概要）
