@@ -8,6 +8,225 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                   String               @id @default(cuid())
+  email                String?              @unique
+  name                 String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  canEditSchedule      Boolean              @default(false)
+  kind                 UserKind             @default(NORMAL)
+  canGrantScheduleEdit Boolean              @default(false)
+  calendarEvents       CalendarEvent[]
+  integrations         IntegrationAccount[]
+  siteMemberships      SiteMember[]
+  timeClocks           TimeClock[]
+  uiSettings           UserUiSetting[]
+  workEntries          WorkEntry[]
+}
+
+model UserUiSetting {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId, key])
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean  @default(false)
+  description String?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+}
+
+model WorkEntry {
+  id             String          @id @default(cuid())
+  userId         String
+  startAt        DateTime
+  endAt          DateTime?
+  note           String?
+  relatedEventId String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  accountingMeta Json?
+  accountingType AccountingType?
+  amount         Decimal?
+  department     String?
+  summary        String?
+  taxCategory    String?
+  siteId         String?
+  kind           WorkEntryKind   @default(NORMAL)
+  site           Site?           @relation(fields: [siteId], references: [id])
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+  @@index([siteId, startAt])
+}
+
+model Site {
+  id                    String           @id @default(cuid())
+  companyName           String?
+  name                  String
+  address               String?
+  phone                 String?
+  contactName           String?
+  notes                 String?
+  repeatRule            Json?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  depreciationThreshold Int              @default(10)
+  alertsEnabled         Boolean          @default(true)
+  amount                Decimal?
+  caution               String?
+  defaultWorkMinutes    Int?
+  detail                String?
+  kind                  SiteKind         @default(NORMAL)
+  pace                  String?
+  peopleCount           Int?
+  scheduleLabelColor    String           @default("default")
+  outlookSendLogs       OutlookSendLog[]
+  members               SiteMember[]
+  storedDocuments       StoredDocument[]
+  timeClocks            TimeClock[]
+  workEntries           WorkEntry[]
+
+  @@index([name])
+  @@index([companyName, name])
+}
+
+model SiteMember {
+  id        String   @id @default(cuid())
+  siteId    String
+  userId    String
+  createdAt DateTime @default(now())
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, userId])
+  @@index([siteId])
+  @@index([userId])
+}
+
+model TimeClock {
+  id        String    @id @default(cuid())
+  userId    String
+  siteId    String?
+  inAt      DateTime
+  outAt     DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  site      Site?     @relation(fields: [siteId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, inAt])
+  @@index([siteId, inAt])
+  @@index([userId, outAt])
+}
+
+model IntegrationAccount {
+  id          String              @id @default(cuid())
+  userId      String
+  provider    IntegrationProvider
+  status      IntegrationStatus   @default(ACTIVE)
+  displayName String?
+  credentials Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider])
+}
+
+model AccountingExportPreset {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String?
+  body      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Partner {
+  id                           String           @id @default(cuid())
+  name                         String           @unique
+  email                        String?
+  notes                        String?
+  outlookToEmailDefault        String?
+  outlookSubjectReportDefault  String?
+  outlookSubjectInvoiceDefault String?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
+  fax                          String?
+  address                      String?
+  caution                      String?
+  detail                       String?
+  emails                       Json?
+  extraFields                  Json?
+  phone                        String?
+  outlookSendLogs              OutlookSendLog[]
+  storedDocuments              StoredDocument[]
+
+  @@index([name])
+}
+
+model StoredDocument {
+  id         String             @id @default(cuid())
+  siteId     String?
+  partnerId  String?
+  kind       StoredDocumentKind
+  subject    String?
+  tags       Json?
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storedPath String
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  bizDateYmd String?
+  partner    Partner?           @relation(fields: [partnerId], references: [id])
+  site       Site?              @relation(fields: [siteId], references: [id])
+
+  @@index([siteId, createdAt])
+  @@index([partnerId, createdAt])
+  @@index([kind, createdAt])
+  @@index([kind, bizDateYmd])
+}
+
+model OutlookSendLog {
+  id        String            @id @default(cuid())
+  siteId    String
+  partnerId String
+  kind      OutlookMailKind
+  status    OutlookMailStatus
+  toEmail   String
+  subject   String
+  error     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  partner   Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  site      Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, createdAt])
+  @@index([siteId, createdAt])
+  @@index([createdAt])
+}
+
 enum IntegrationProvider {
   JDL
 }
@@ -53,273 +272,4 @@ enum SiteKind {
 enum UserKind {
   NORMAL
   DAILY
-}
-
-model User {
-  id        String   @id @default(cuid())
-  email     String?  @unique
-  name      String?
-  kind      UserKind @default(NORMAL)
-
-  // Per-user schedule edit permission (granted from admin UI)
-  canEditSchedule Boolean @default(false)
-
-  // Whether the user can grant schedule edit permission to others.
-  canGrantScheduleEdit Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  calendarEvents CalendarEvent[]
-  workEntries    WorkEntry[]
-  integrations   IntegrationAccount[]
-  uiSettings     UserUiSetting[]
-
-  siteMemberships SiteMember[]
-  timeClocks      TimeClock[]
-}
-
-model UserUiSetting {
-  id        String   @id @default(cuid())
-  userId    String
-  key       String
-  value     Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, key])
-  @@index([userId, key])
-}
-
-model CalendarEvent {
-  id          String   @id @default(cuid())
-  userId      String
-  title       String
-  startAt     DateTime
-  endAt       DateTime
-  allDay      Boolean  @default(false)
-  description String?
-  location    String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, startAt])
-}
-
-model WorkEntry {
-  id             String    @id @default(cuid())
-  userId         String
-  startAt        DateTime
-  endAt          DateTime?
-  note           String?
-  relatedEventId String?
-
-  kind WorkEntryKind @default(NORMAL)
-
-  // Site (genba) ledger relation (optional)
-  siteId String?
-  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
-
-  // Accounting (generic; provider-specific mapping happens in provider)
-  amount         Decimal?
-  taxCategory    String?
-  summary        String?
-  department     String?
-  accountingType AccountingType?
-  accountingMeta Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, startAt])
-  @@index([siteId, startAt])
-}
-
-model Site {
-  id          String   @id @default(cuid())
-  companyName String?
-  name        String
-  kind        SiteKind @default(NORMAL)
-  address     String?
-  phone       String?
-  contactName String?
-  notes       String?
-
-  // Site detail fields (for ledger detail screen)
-  pace        String?
-  amount      Decimal?
-  detail      String?
-  peopleCount Int?
-  caution     String?
-
-  // Schedule label default color (used for Week/Month schedule rendering)
-  scheduleLabelColor String @default("default")
-
-  // Default work duration in minutes (used as a suggestion on stamping/manual entry)
-  defaultWorkMinutes Int?
-
-  // Monthly depreciation count threshold (alert when entries >= threshold)
-  depreciationThreshold Int @default(10)
-
-  // Per-site alert switch (used to suppress unintended alerts)
-  alertsEnabled Boolean @default(true)
-
-  // Repeat rule (pace) stored as JSON (intervalMonths, weekdays, monthDays)
-  repeatRule Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  workEntries     WorkEntry[]
-  outlookSendLogs OutlookSendLog[]
-  storedDocuments StoredDocument[]
-
-  members SiteMember[]
-  timeClocks TimeClock[]
-
-  @@index([name])
-  @@index([companyName, name])
-}
-
-model SiteMember {
-  id        String   @id @default(cuid())
-  siteId    String
-  userId    String
-  createdAt DateTime @default(now())
-
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([siteId, userId])
-  @@index([siteId])
-  @@index([userId])
-}
-
-model TimeClock {
-  id        String   @id @default(cuid())
-  userId    String
-  siteId    String?
-  inAt      DateTime
-  outAt     DateTime?
-  note      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  site Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
-
-  @@index([userId, inAt])
-  @@index([siteId, inAt])
-  @@index([userId, outAt])
-}
-
-model IntegrationAccount {
-  id          String              @id @default(cuid())
-  userId      String
-  provider    IntegrationProvider
-  status      IntegrationStatus   @default(ACTIVE)
-  displayName String?
-  credentials Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, provider])
-}
-
-model AccountingExportPreset {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  name      String?
-  // Body object for POST /api/accounting/export and /api/accounting/query
-  body      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Partner {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  email  String?
-  emails Json?
-  notes  String?
-
-  address     String?
-  phone       String?
-  fax         String?
-  detail      String?
-  caution     String?
-  extraFields Json?
-
-  outlookToEmailDefault        String?
-  outlookSubjectReportDefault  String?
-  outlookSubjectInvoiceDefault String?
-  createdAt                    DateTime @default(now())
-  updatedAt                    DateTime @updatedAt
-
-  outlookSendLogs   OutlookSendLog[]
-  storedDocuments   StoredDocument[]
-
-  @@index([name])
-}
-
-model StoredDocument {
-  id        String             @id @default(cuid())
-  siteId    String?
-  partnerId String?
-  kind      StoredDocumentKind
-  subject   String?
-
-  // Business date key (YYYY-MM-DD) for day-based foldering/searching (mainly photos)
-  bizDateYmd String?
-
-  // Optional tags for searching / labeling (e.g. photo keywords)
-  tags Json?
-
-  // Original attachment name shown to users
-  fileName  String
-  mimeType  String
-  sizeBytes Int
-
-  // Absolute or workspace-relative path to the stored file (server-side)
-  storedPath String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  site    Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-
-  @@index([siteId, createdAt])
-  @@index([partnerId, createdAt])
-  @@index([kind, createdAt])
-  @@index([kind, bizDateYmd])
-}
-
-model OutlookSendLog {
-  id        String            @id @default(cuid())
-  siteId    String
-  partnerId String
-  kind      OutlookMailKind
-  status    OutlookMailStatus
-  toEmail   String
-  subject   String
-  error     String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-
-  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  @@index([partnerId, createdAt])
-  @@index([siteId, createdAt])
-  @@index([createdAt])
 }

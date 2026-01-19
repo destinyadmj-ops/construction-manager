@@ -31,6 +31,9 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   const [selectedExistingId, setSelectedExistingId] = useState<string>('');
 
+  const [cellNames, setCellNames] = useState<string[]>([]);
+  const normalize = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/\s+/g, '');
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [registrationPassword, setRegistrationPassword] = useState('');
@@ -120,9 +123,111 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
         setUsers(parsed);
+        // Try to load current week's schedule and collect distinct slot names
+        try {
+          const now = new Date();
+          const d = new Date(now);
+          d.setHours(0, 0, 0, 0);
+          const day = d.getDay();
+          const diff = day === 0 ? -6 : 1 - day;
+          d.setDate(d.getDate() + diff);
+          const yy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const weekStart = `${yy}-${mm}-${dd}`;
+          const r2 = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(weekStart)}&kind=normal`);
+          if (r2.ok) {
+            const j2 = (await r2.json().catch(() => null)) as unknown;
+            const o2 = asObject(j2) as Record<string, unknown> | null;
+            const gridObj = o2?.grid as Record<string, Record<string, { slot1?: string | null; slot2?: string | null }>> | undefined;
+            const namesSet = new Set<string>();
+            if (gridObj) {
+              for (const userId of Object.keys(gridObj)) {
+                const days = gridObj[userId];
+                for (const dkey of Object.keys(days)) {
+                  const c = days[dkey] as any;
+                  const s1 = c?.slot1;
+                  const s2 = c?.slot2;
+                  if (s1 && typeof s1 === 'string' && s1.trim()) namesSet.add(s1.trim());
+                  if (s2 && typeof s2 === 'string' && s2.trim()) namesSet.add(s2.trim());
+                }
+              }
+            }
+            const namesArr = Array.from(namesSet).slice(0, 200);
+            if (!cancelled) setCellNames(namesArr);
+          }
+        } catch {
+          // ignore schedule fetch errors
+        }
+            // Also collect names from management/DOM (left-side employee lists etc.)
+            try {
+              const domNames = new Set<string>();
+              const root = document.body;
+              // common user row markers
+              const byData = Array.from(root.querySelectorAll<HTMLElement>('[data-user-row]'));
+              for (const el of byData) {
+                const t = (el.textContent || '').trim();
+                if (t) domNames.add(t);
+              }
+              const byTestId = Array.from(root.querySelectorAll<HTMLElement>('[data-testid]'));
+              for (const el of byTestId) {
+                const id = el.getAttribute('data-testid') || '';
+                if (id.startsWith('user-row-')) {
+                  const t = (el.textContent || '').trim();
+                  if (t) domNames.add(t);
+                }
+              }
+              // management page user labels use this class
+              const labels = Array.from(root.querySelectorAll<HTMLElement>('.min-w-0.flex-1.truncate'));
+              for (const el of labels) {
+                const t = (el.textContent || '').trim();
+                if (t) domNames.add(t);
+              }
+              // also try elements under data-color-edit-slot containers
+              const slotContainers = Array.from(root.querySelectorAll<HTMLElement>('[data-color-edit-slot]'));
+              for (const c of slotContainers) {
+                const t = (c.textContent || '').trim();
+                if (t) {
+                  // split lines and add plausible short tokens
+                  for (const line of t.split(/[\n\r]+/)) {
+                    const s = line.trim();
+                    if (s && s.length <= 80) domNames.add(s);
+                  }
+                }
+              }
+              const domArr = Array.from(domNames).filter((x) => x.length > 0).slice(0, 200);
+              if (!cancelled) setCellNames((cur) => {
+                const merged = Array.from(new Set([...(cur || []), ...domArr]));
+                return merged.slice(0, 200);
+              });
+            } catch {
+              // ignore DOM errors
+            }
         if (!didInitRef.current) {
           didInitRef.current = true;
-          setSelectedExistingId(parsed[0]?.id ?? '');
+          // Preselect by trying to match any cell name to an existing user
+          let initial = parsed[0]?.id ?? '';
+          for (const name of cellNames) {
+            const nrm = normalize(name);
+            const hit = parsed.find((u) => {
+              const uname = normalize(u.name);
+              const uemail = normalize(u.email);
+              if (!nrm) return false;
+              return (
+                uname === nrm ||
+                uemail === nrm ||
+                uname.includes(nrm) ||
+                nrm.includes(uname) ||
+                uemail.includes(nrm) ||
+                nrm.includes(uemail)
+              );
+            });
+            if (hit) {
+              initial = hit.id;
+              break;
+            }
+          }
+          setSelectedExistingId(initial);
         }
       } catch {
         if (cancelled) return;
@@ -138,6 +243,28 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     };
   }, [open, usersLoading]);
 
+  // If users and cellNames are both available, pick initial existing user
+  useEffect(() => {
+    if (!open) return;
+    if (didInitRef.current) return;
+    if (!users || users.length === 0) return;
+    if (!cellNames || cellNames.length === 0) return;
+
+    // Try to match any cell name to an existing user
+    for (const name of cellNames) {
+      const hit = users.find((u) => (u.name ?? '').trim() === name || (u.email ?? '').trim() === name);
+      if (hit) {
+        setSelectedExistingId(hit.id);
+        didInitRef.current = true;
+        return;
+      }
+    }
+
+    // fallback to first user
+    setSelectedExistingId(users[0].id ?? '');
+    didInitRef.current = true;
+  }, [open, users, cellNames]);
+
   if (loading) return <>{children}</>;
 
   const closeIfPossible = () => {
@@ -152,7 +279,19 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       setError('ユーザーを選択してください');
       return;
     }
+    if (userId.startsWith('__name:')) {
+      // Fill registration name with the selected cell name
+      const nm = userId.substring('__name:'.length);
+      setName(nm);
+      setSelectedExistingId('');
+      return;
+    }
 
+    await loginAs(userId);
+  };
+
+  const loginAs = async (userId: string) => {
+    setError(null);
     try {
       const r = await fetch('/api/auth/me', {
         method: 'POST',
@@ -189,6 +328,19 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     const n = name.trim();
     if (!n) {
       setError('名前を入力してください');
+      return;
+    }
+
+    // If a user with same normalized name/email exists, merge: login as that user instead of creating a duplicate
+    const nrm = normalize(n);
+    const existing = users && users.find((u) => {
+      const uname = normalize(u.name);
+      const uemail = normalize(u.email);
+      return uname === nrm || uemail === nrm || uname.includes(nrm) || nrm.includes(uname) || uemail.includes(nrm) || nrm.includes(uemail);
+    });
+    if (existing) {
+      // Optionally, we could PATCH the existing user to add email if missing. For now, just login as the existing user.
+      await loginAs(existing.id);
       return;
     }
 
@@ -285,14 +437,44 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                   className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                 >
                   {users.length === 0 ? <option value="">（ユーザーなし）</option> : null}
-                  {users.map((u) => {
-                    const label = (u.name ?? u.email ?? u.id).trim();
-                    return (
-                      <option key={u.id} value={u.id}>
-                        {label}
-                      </option>
-                    );
-                  })}
+                    {users.map((u) => {
+                      const label = (u.name ?? u.email ?? u.id).trim();
+                      return (
+                        <option key={u.id} value={u.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                    {cellNames && cellNames.length > 0 ? (
+                      (() => {
+                        const unmatched = cellNames.filter((n) => {
+                          const nn = normalize(n);
+                          return !users.some((u) => {
+                            const uname = normalize(u.name);
+                            const uemail = normalize(u.email);
+                            if (!nn) return false;
+                            return (
+                              uname === nn ||
+                              uemail === nn ||
+                              uname.includes(nn) ||
+                              nn.includes(uname) ||
+                              uemail.includes(nn) ||
+                              nn.includes(uemail)
+                            );
+                          });
+                        });
+                        if (unmatched.length === 0) return null;
+                        return (
+                          <optgroup key="cell-names" label="セルの名前候補">
+                            {unmatched.map((n) => (
+                              <option key={`cell:${n}`} value={`__name:${n}`}>
+                                {`候補: ${n}`}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })()
+                    ) : null}
                 </select>
                 <button
                   type="button"
@@ -300,7 +482,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                   disabled={usersLoading}
                   className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
                 >
-                  切替
+                  ログイン
                 </button>
               </div>
               {usersLoading ? <div className="mt-1 text-[11px] text-zinc-500">読み込み中…</div> : null}

@@ -233,6 +233,7 @@ function WeekHubInner() {
   const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [isLeftPaneOpen, setIsLeftPaneOpen] = useState(true);
 
   useEffect(() => {
     const m = searchParams.get('mode');
@@ -1197,13 +1198,9 @@ function WeekHubInner() {
       const target = e.target as HTMLElement;
       // 入力フィールドまたは候補リスト内のクリックは無視
       if (target.closest('input') || target.closest('[data-suggestion-list]')) return;
-      
-      // Defer state update to avoid DOM manipulation conflicts
-      requestAnimationFrame(() => {
-        setEditingCell(null);
-        setEditingInput('');
-        setSiteSuggestions([]);
-      });
+      setEditingCell(null);
+      setEditingInput('');
+      setSiteSuggestions([]);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -1643,6 +1640,15 @@ function WeekHubInner() {
               {cellActionMsg}
             </div>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setIsLeftPaneOpen((v) => !v)}
+            className="ml-2 rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            title={isLeftPaneOpen ? '左ペインを畳む' : '左ペインを開く'}
+            aria-pressed={isLeftPaneOpen}
+          >
+            {isLeftPaneOpen ? '畳む' : '展開'}
+          </button>
         </div>
       </div>
     </div>
@@ -1815,10 +1821,10 @@ function WeekHubInner() {
           </div>
         ) : null}
         {/* Main content */}
-        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[360px_1fr]">
+        <div className={"mt-3 grid grid-cols-1 gap-3 transition-all duration-150 " + (isLeftPaneOpen ? 'lg:grid-cols-[360px_1fr]' : 'lg:grid-cols-[0px_1fr]')}>
           {mode === 'week' ? (
             <>
-              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
+              <div className={"rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:overflow-clip " + (isLeftPaneOpen ? '' : 'lg:pointer-events-none')}>
                 <div onWheel={onSiteBannerWheel}>
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4482,11 +4488,9 @@ function Row({
                             siteName: site.label,
                             beforeFallback,
                           }).then(() => {
-                            requestAnimationFrame(() => {
-                              setEditingCell?.(null);
-                              setEditingInput?.('');
-                              setSiteSuggestions?.([]);
-                            });
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
                           });
                         } else if (editingInput?.trim()) {
                           // 直接入力
@@ -4498,11 +4502,9 @@ function Row({
                             siteName: editingInput.trim(),
                             beforeFallback,
                           }).then(() => {
-                            requestAnimationFrame(() => {
-                              setEditingCell?.(null);
-                              setEditingInput?.('');
-                              setSiteSuggestions?.([]);
-                            });
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
                           });
                         }
                       }
@@ -4532,12 +4534,9 @@ function Row({
                               siteName: site.label,
                               beforeFallback,
                             }).then(() => {
-                              // Defer state update to avoid DOM conflicts
-                              requestAnimationFrame(() => {
-                                setEditingCell?.(null);
-                                setEditingInput?.('');
-                                setSiteSuggestions?.([]);
-                              });
+                              setEditingCell?.(null);
+                              setEditingInput?.('');
+                              setSiteSuggestions?.([]);
                             });
                           }}
                           className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"

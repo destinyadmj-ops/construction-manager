@@ -1,0 +1,27 @@
+# Line ending normalization
+# Default: keep repo as LF to avoid cross-platform diffs
+* text=auto eol=lf
+
+# Windows scripts / metadata: keep CRLF
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Data / binaries
+*.png  -text
+*.jpg  -text
+*.jpeg -text
+*.gif  -text
+*.ico  -text
+*.pdf  -text
+*.ttf  -text
+*.woff  -text
+*.woff2 -text
+*.wasm -text
+*.dll  -text
+*.node -text
+
+# Lockfiles: keep as-is but treat as text
+package-lock.json text eol=lf

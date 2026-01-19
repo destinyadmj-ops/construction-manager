@@ -1,3 +1,5 @@
+
+export const dynamic = 'force-static';
 import { getAccountingProvider } from '@/server/accounting';
 
 export async function GET() {
