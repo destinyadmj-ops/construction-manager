@@ -1,3 +1,4 @@
+export const dynamic = 'force-static';
 export const runtime = 'nodejs';
 
 function parseFingerprints(raw: string): string[] {

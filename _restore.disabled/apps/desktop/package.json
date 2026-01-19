@@ -1,0 +1,49 @@
+{
+  "name": "master-hub-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Master Hub Desktop (minimal Electron wrapper)",
+  "author": "Master Hub",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "node main.cjs",
+    "start": "node main.cjs",
+    "pack": "node generate-icons.mjs && electron-builder --dir",
+    "dist": "node generate-icons.mjs && electron-builder"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^3.0.1"
+  },
+  "build": {
+    "appId": "jp.masterhub.desktop",
+    "productName": "Master Hub",
+    "directories": {
+      "output": "dist"
+    },
+    "icon": "build/icon",
+    "files": [
+      "main.cjs",
+      "generate-icons.mjs",
+      "build/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  }
+}

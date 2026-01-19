@@ -1,0 +1,8 @@
+- このリポジトリは Next.js(App Router) + TypeScript + Tailwind で構築する。
+- サーバ側の共通ロジックは `src/server/*` に置く（DB/Queue/外部連携）。
+- DB は Prisma + Postgres を前提とし、スキーマは `prisma/schema.prisma` に集約する。
+- ジョブ/リマインド等の非同期処理は BullMQ + Redis を使用する。
+- 会計連携はプロバイダ差し替え方式にし、JDL 固有ロジックは `src/server/accounting/jdl.ts` 以外に漏らさない。
+- 追加機能は最小の差分で実装し、README の手順が壊れないように更新する。
+- 変更は小さいパッチに分割し、各パッチ適用後に `npm run lint` と `npm run typecheck` を通してから次へ進む。
+- 大きなパッチ適用や大規模編集の前に、必ず WIP チェックポイントをコミットしてから作業する（例: `git add -A` → `git commit -m "WIP checkpoint: <topic reminding>"`）。

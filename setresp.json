@@ -1,0 +1,1 @@
+{"ok":false,"error":"Invalid body","issues":[{"expected":"string","code":"invalid_type","path":["userId"],"message":"Invalid input: expected string, received undefined"},{"expected":"string","code":"invalid_type","path":["day"],"message":"Invalid input: expected string, received undefined"}]}
