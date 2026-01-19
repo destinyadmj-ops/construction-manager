@@ -1824,7 +1824,13 @@ function WeekHubInner() {
         <div className={"mt-3 grid grid-cols-1 gap-3 transition-all duration-150 " + (isLeftPaneOpen ? 'lg:grid-cols-[360px_1fr]' : 'lg:grid-cols-[0px_1fr]')}>
           {mode === 'week' ? (
             <>
-              <div className={"rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:overflow-clip " + (isLeftPaneOpen ? '' : 'lg:pointer-events-none')}>
+              <div
+                className={
+                  "rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:overflow-clip " +
+                  (isLeftPaneOpen ? ' lg:opacity-100 lg:scale-100 lg:transition-all lg:duration-150 lg:ease-out' : ' lg:pointer-events-none lg:opacity-0 lg:scale-95 lg:transition-all lg:duration-150 lg:ease-in')
+                }
+                aria-hidden={!isLeftPaneOpen}
+              >
                 <div onWheel={onSiteBannerWheel}>
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
