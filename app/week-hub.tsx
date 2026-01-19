@@ -800,6 +800,7 @@ function WeekHubInner() {
     </div>
   );
   const modeTabsRef = useRef<HTMLDivElement | null>(null);
+  const leftToggleRef = useRef<HTMLButtonElement | null>(null);
   const [selectedSiteCreatedAt, setSelectedSiteCreatedAt] = useState<string | null>(null);
   const [newSiteName, setNewSiteName] = useState('');
   const [siteCreateMsg, setSiteCreateMsg] = useState<string | null>(null);
@@ -1641,11 +1642,15 @@ function WeekHubInner() {
             </div>
           ) : null}
           <button
+            ref={leftToggleRef}
+            id="weekhub-leftpane-toggle"
             type="button"
             onClick={() => setIsLeftPaneOpen((v) => !v)}
             className="ml-2 rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
             title={isLeftPaneOpen ? '左ペインを畳む' : '左ペインを開く'}
             aria-pressed={isLeftPaneOpen}
+            aria-expanded={isLeftPaneOpen}
+            aria-controls="weekhub-leftpane"
           >
             {isLeftPaneOpen ? '畳む' : '展開'}
           </button>
@@ -1670,6 +1675,24 @@ function WeekHubInner() {
       window.removeEventListener('resize', apply);
     };
   }, [mode]);
+
+  useEffect(() => {
+    if (isLeftPaneOpen) {
+      try {
+        // focus the site quick input if opening
+        siteQuickInputRef.current?.focus();
+      } catch {
+        // ignore
+      }
+    } else {
+      try {
+        // return focus to toggle button when collapsed
+        leftToggleRef.current?.focus();
+      } catch {
+        // ignore
+      }
+    }
+  }, [isLeftPaneOpen]);
 
   const beginEdit = useCallback(() => {
     setEditPasswordMsg(null);
@@ -1830,6 +1853,7 @@ function WeekHubInner() {
                   (isLeftPaneOpen ? ' lg:opacity-100 lg:scale-100 lg:transition-all lg:duration-150 lg:ease-out' : ' lg:pointer-events-none lg:opacity-0 lg:scale-95 lg:transition-all lg:duration-150 lg:ease-in')
                 }
                 aria-hidden={!isLeftPaneOpen}
+                id="weekhub-leftpane"
               >
                 <div onWheel={onSiteBannerWheel}>
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
