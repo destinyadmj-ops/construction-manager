@@ -1,8 +1,18 @@
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $scriptPath = Join-Path $repoRoot 'git-auto-sync.ps1'
 $logDir = Join-Path $repoRoot 'logs'
+$retentionDays = 14
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$logFile = Join-Path $logDir ("git-auto-sync-" + (Get-Date -Format 'yyyyMMdd') + ".log")
+# remove old logs
+try {
+  Get-ChildItem -Path $logDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$retentionDays) } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+} catch {
+  # ignore cleanup errors
+}
+
+$logFile = Join-Path $logDir (("git-auto-sync-" + (Get-Date -Format 'yyyyMMdd') + ".log"))
 $ts = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
 "[$ts] === Git Auto Sync Runner Start ===" | Out-File -FilePath $logFile -Append -Encoding UTF8
 try {
