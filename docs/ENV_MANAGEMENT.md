@@ -89,6 +89,35 @@ jobs:
     echo "REDIS_URL=${{ steps.keyvault.outputs.REDIS_URL }}" >> .env.production
 ```
 
+### Concrete: GitHub Actions workflow (example)
+
+You can add the included workflow file `.github/workflows/azure-keyvault-secrets.yml` which:
+- logs into Azure using `AZURE_CREDENTIALS` (Github Secret)
+- fetches secrets from the Key Vault specified by `AZURE_KEYVAULT_NAME` (Github Secret)
+- writes a `.env.production` file and runs `npm run build`.
+
+Set up steps (Azure side):
+1. Create a service principal and store credentials as a GitHub secret `AZURE_CREDENTIALS`:
+
+```bash
+az ad sp create-for-rbac --name "gh-action-keyvault" --role Reader --sdk-auth
+# Copy the JSON output and save to GitHub secret `AZURE_CREDENTIALS`
+```
+
+2. Grant the service principal access to Key Vault secrets (use the appId or objectId):
+
+```bash
+az keyvault set-policy --name <YourKeyVaultName> --spn <appId-or-objectId> --secret-permissions get list
+```
+
+3. In your repository secrets, add:
+- `AZURE_CREDENTIALS` = JSON from `create-for-rbac`
+- `AZURE_KEYVAULT_NAME` = your key vault name
+
+Then the workflow will be able to fetch the secrets and create `.env.production` during CI.
+
+Security note: Use least-privilege role and consider using managed identities if running in Azure-hosted runners.
+
 ### C: AWS Secrets Manager を使う場合
 - 概要手順:
   1. Secrets Manager にシークレット（JSON など）を登録。
