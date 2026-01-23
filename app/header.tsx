@@ -1,3 +1,5 @@
+  // 現場リストの開閉状態
+  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 "use client";
 
 import { useOutsidePointerDown } from './use-outside-pointerdown';
@@ -865,11 +867,27 @@ export default function AppHeader() {
     >
       <div className="bg-white/60 dark:bg-black/60">
         <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
+
           <div className="flex items-center gap-3">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
             </Link>
+
+            {/* 現場リスト三角ボタン */}
+            <button
+              type="button"
+              aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
+              className="ml-2 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              onClick={() => setIsSiteListCollapsed((v) => !v)}
+            >
+              {isSiteListCollapsed ? (
+                <span>&#9654;</span> // ▶ 右向き三角
+              ) : (
+                <span>&#9664;</span> // ◀ 左向き三角
+              )}
+            </button>
 
           <div className="flex items-center gap-2">
             <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
