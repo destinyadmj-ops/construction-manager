@@ -1,4 +1,46 @@
+
 # Master Hub
+
+---
+## 会社・自宅での常時同期セットアップ手順（5ステップ）
+
+このプロジェクトを会社・自宅など複数拠点で「コード・DBを常時同期」しながら運用するための推奨手順です。
+
+### 1. GitHub等のリモートリポジトリを用意し、両拠点でclone
+
+- GitHub（またはBitbucket等）で新規リポジトリを作成
+- 会社・自宅のPC両方で `git clone <リポジトリURL>` を実行
+- push/pull権限があることを確認
+
+### 2. クラウドPostgres（例：Supabase, Neon, AWS RDS等）を作成し、DATABASE_URLを取得
+
+- Supabase: https://supabase.com/ で無料枠からPostgresプロジェクト作成
+- Neon: https://neon.tech/ で無料枠からPostgres作成
+- AWS RDS: AWSコンソールからPostgresインスタンス作成
+- いずれも「接続情報（ホスト名・DB名・ユーザー・パスワード）」を控える
+
+### 3. .env.local（または.env）にクラウドDB/Redisの接続情報を記載
+
+- プロジェクトルートに `.env.local` を作成し、以下のように記載
+	```
+	DATABASE_URL="postgresql://USER:PASSWORD@YOUR_CLOUD_HOST:5432/YOUR_DB?schema=public"
+	REDIS_URL="redis://:PASSWORD@YOUR_CLOUD_REDIS_HOST:6379/0"
+	```
+- 必要に応じて他の環境変数も設定（例: Outlook連携など）
+
+### 4. git-auto-sync.ps1の自動起動設定（タスクスケジューラ等）
+
+- `scripts/git-auto-sync.ps1` をWindowsタスクスケジューラで「5分ごと」や「10分ごと」に自動実行するよう設定
+- 例: タスクスケジューラで「新しいタスクの作成」→「プログラム/スクリプト」に `powershell`、引数に `-File "C:\Users\<ユーザー名>\construction-manager\scripts\git-auto-sync.ps1" -IntervalMinutes 5` を指定
+- またはVS Codeのタスク「git: auto-sync (continuous 5min)」を利用
+
+### 5. 両拠点で「npm run dev」や「npm run docker:up」など通常の開発運用を開始
+
+- どちらの拠点でも `npm install` → `npm run dev` で開発を開始
+- DBマイグレーションやデータ反映も常に同期
+- 以降は自動でコード・DBが同期されるため、どちらでも編集・運用可能
+
+---
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
 
@@ -46,7 +88,6 @@ npm install
 
 ```bash
 npm run docker:up
-```
 
 4) Prisma
 
@@ -57,19 +98,40 @@ npm run docker:up
 	- 既に起動中なら二重起動せず待機
 	- 起動していなければ `npm run dev` を起動
 	- プロセスが落ちたら自動で再起動
-	します。
-
-※ 補足: 同じポート（既定: 3000）に対して `dev:keep` を複数起動すると `next dev` のロック競合になりやすいので、同一ポートは 1 本だけ起動する想定です（後発は「既に起動中」として終了します）。
-
 #### Windows ログオン時に自動起動（任意）
 
 権限（管理者）不要で確実なのは「スタートアップ」方式です。
 
-- インストール: `npm run dev:startup:install`
-- アンインストール: `npm run dev:startup:uninstall`
-
 ※ 現在は bg方式（`dev:keep:bg`）で自動起動するようにしているため、既に設定済みでも `dev:startup:install` を一度実行するとショートカットが更新されます。
+````
 
+## 会社・自宅での常時同期運用（推奨構成）
+
+### コードの自動同期
+
+- GitHub等のリモートリポジトリを利用し、両拠点で同じリポジトリをclone
+- `scripts/git-auto-sync.ps1` をWindowsタスクスケジューラ等で常駐させることで、変更を自動でpush/pull/commit
+	- 例: 5分ごと自動同期 `npm run git:sync:5min`、10分ごと `npm run git:sync:10min`
+- 詳細は上記「Git自動同期」セクション参照
+
+### DBの同期（クラウドDB推奨）
+
+- PostgresはSupabase/Neon/AWS RDS等のクラウドDBを利用し、`.env.local` の `DATABASE_URL` を同じ値に統一
+- どちらの拠点からも同じDBにアクセスすることで、マイグレーションやデータ反映も常に同期
+- Redisも同様にクラウドサービスを利用可能
+
+#### 例: .env.local
+```
+DATABASE_URL="postgresql://USER:PASSWORD@YOUR_CLOUD_HOST:5432/YOUR_DB?schema=public"
+REDIS_URL="redis://:PASSWORD@YOUR_CLOUD_REDIS_HOST:6379/0"
+```
+
+### 注意点
+- DBの同時マイグレーションや同時編集は競合に注意
+- Gitの自動同期はコンフリクト時は手動解決が必要
+- セキュリティのため、DB/Redisのパスワード管理・アクセス制御に注意
+
+---
 ※ スケジュールタスク方式（環境によっては権限で弾かれます）:
 
 - インストール: `npm run dev:autostart:install`

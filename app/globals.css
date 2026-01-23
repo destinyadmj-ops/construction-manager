@@ -19,12 +19,14 @@ html {
   --font-mono: var(--font-geist-mono);
 }
 
+/*
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
 }
+*/
 
 body {
   background: var(--background);
@@ -44,68 +46,68 @@ body {
   .mh-btn-danger {
     @apply rounded-md border px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60;
     @apply border-zinc-600 bg-white/60 text-zinc-700;
-    @apply dark:border-zinc-400 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black;
+    /* @apply dark:border-zinc-400 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black; */
   }
 
   /* Theme-controlled button colors: Primary */
   .mh-btn-primary-default .mh-btn-primary {
-    @apply border-zinc-400 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200;
+    @apply border-zinc-400 text-zinc-700; /* dark:border-zinc-600 dark:text-zinc-200 */
   }
   .mh-btn-primary-red .mh-btn-primary {
-    @apply border-red-500 text-red-700 dark:border-red-600 dark:text-red-300;
+    @apply border-red-500 text-red-700; /* dark:border-red-600 dark:text-red-300 */
   }
   .mh-btn-primary-orange .mh-btn-primary {
-    @apply border-orange-500 text-orange-700 dark:border-orange-600 dark:text-orange-300;
+    @apply border-orange-500 text-orange-700; /* dark:border-orange-600 dark:text-orange-300 */
   }
   .mh-btn-primary-yellow .mh-btn-primary {
-    @apply border-yellow-500 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300;
+    @apply border-yellow-500 text-yellow-700; /* dark:border-yellow-600 dark:text-yellow-300 */
   }
   .mh-btn-primary-green .mh-btn-primary {
-    @apply border-green-500 text-green-700 dark:border-green-600 dark:text-green-300;
+    @apply border-green-500 text-green-700; /* dark:border-green-600 dark:text-green-300 */
   }
   .mh-btn-primary-blue .mh-btn-primary {
-    @apply border-blue-500 text-blue-700 dark:border-blue-600 dark:text-blue-300;
+    @apply border-blue-500 text-blue-700; /* dark:border-blue-600 dark:text-blue-300 */
   }
   .mh-btn-primary-purple .mh-btn-primary {
-    @apply border-purple-500 text-purple-700 dark:border-purple-600 dark:text-purple-300;
+    @apply border-purple-500 text-purple-700; /* dark:border-purple-600 dark:text-purple-300 */
   }
   .mh-btn-primary-pink .mh-btn-primary {
-    @apply border-pink-500 text-pink-700 dark:border-pink-600 dark:text-pink-300;
+    @apply border-pink-500 text-pink-700; /* dark:border-pink-600 dark:text-pink-300 */
   }
 
   /* Theme-controlled button colors: Danger */
   .mh-btn-danger-default .mh-btn-danger {
-    @apply border-zinc-400 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200;
+    @apply border-zinc-400 text-zinc-700; /* dark:border-zinc-600 dark:text-zinc-200 */
   }
   .mh-btn-danger-red .mh-btn-danger {
-    @apply border-red-500 text-red-700 dark:border-red-600 dark:text-red-300;
+    @apply border-red-500 text-red-700; /* dark:border-red-600 dark:text-red-300 */
   }
   .mh-btn-danger-orange .mh-btn-danger {
-    @apply border-orange-500 text-orange-700 dark:border-orange-600 dark:text-orange-300;
+    @apply border-orange-500 text-orange-700; /* dark:border-orange-600 dark:text-orange-300 */
   }
   .mh-btn-danger-yellow .mh-btn-danger {
-    @apply border-yellow-500 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300;
+    @apply border-yellow-500 text-yellow-700; /* dark:border-yellow-600 dark:text-yellow-300 */
   }
   .mh-btn-danger-green .mh-btn-danger {
-    @apply border-green-500 text-green-700 dark:border-green-600 dark:text-green-300;
+    @apply border-green-500 text-green-700; /* dark:border-green-600 dark:text-green-300 */
   }
   .mh-btn-danger-blue .mh-btn-danger {
-    @apply border-blue-500 text-blue-700 dark:border-blue-600 dark:text-blue-300;
+    @apply border-blue-500 text-blue-700; /* dark:border-blue-600 dark:text-blue-300 */
   }
   .mh-btn-danger-purple .mh-btn-danger {
-    @apply border-purple-500 text-purple-700 dark:border-purple-600 dark:text-purple-300;
+    @apply border-purple-500 text-purple-700; /* dark:border-purple-600 dark:text-purple-300 */
   }
   .mh-btn-danger-pink .mh-btn-danger {
-    @apply border-pink-500 text-pink-700 dark:border-pink-600 dark:text-pink-300;
+    @apply border-pink-500 text-pink-700; /* dark:border-pink-600 dark:text-pink-300 */
   }
 
   /* Page background tone */
   .mh-surface-soft body {
     @apply bg-zinc-50;
   }
-  .dark .mh-surface-soft body {
+  /* .dark .mh-surface-soft body {
     @apply bg-zinc-950;
-  }
+  } */
 
   /* v2: Page background (color + shade stop) */
   .mh-surface-default-25 body {

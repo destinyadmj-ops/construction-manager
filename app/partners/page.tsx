@@ -61,6 +61,9 @@ export default function PartnersPage() {
   const [selectedInvoiceSites, setSelectedInvoiceSites] = useState<Set<string>>(new Set());
   const [selectedReportSite, setSelectedReportSite] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // --- state for new site add ---
+  const [newSiteName, setNewSiteName] = useState('');
+  const [addingSite, setAddingSite] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -613,9 +616,55 @@ export default function PartnersPage() {
                               <div className="text-zinc-500 dark:text-zinc-400">（該当する現場はありません）</div>
                             ) : (
                               sites.filter(s => s.companyName === p.name).map(s => (
-                                <div key={s.id} className="text-zinc-700 dark:text-zinc-300">• {s.name}</div>
+                                <button
+                                  key={s.id}
+                                  className="text-zinc-700 dark:text-zinc-300 hover:underline hover:text-blue-600 dark:hover:text-blue-400"
+                                  style={{ textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                                  onClick={() => window.open(`/site-ledger/${encodeURIComponent(s.id)}`, '_blank')}
+                                  title="現場詳細を開く"
+                                >
+                                  • {s.name}
+                                </button>
                               ))
                             )}
+                          </div>
+                          <div className="mt-2 flex gap-1">
+                            <input
+                              type="text"
+                              value={newSiteName}
+                              onChange={e => setNewSiteName(e.target.value)}
+                              placeholder="新規現場名を追加"
+                              className="rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-700"
+                              style={{ minWidth: 0, flex: 1 }}
+                            />
+                            <button
+                              type="button"
+                              className="rounded border border-blue-500 bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
+                              disabled={!newSiteName.trim() || addingSite}
+                              onClick={async () => {
+                                if (!newSiteName.trim()) return;
+                                setAddingSite(true);
+                                try {
+                                  const res = await fetch('/api/sites', {
+                                    method: 'POST',
+                                    headers: { 'content-type': 'application/json' },
+                                    body: JSON.stringify({ name: newSiteName.trim(), companyName: p.name }),
+                                  });
+                                  const j = await res.json().catch(() => null);
+                                  const obj = j && typeof j === 'object' ? j : null;
+                                  if (!res.ok || obj?.ok !== true || !obj?.site?.id) throw new Error(obj?.error || '追加失敗');
+                                  setNewSiteName('');
+                                  setSites(cur => [...cur, { id: obj.site.id, name: obj.site.name, companyName: obj.site.companyName }]);
+                                  window.open(`/site-ledger/${encodeURIComponent(obj.site.id)}`, '_blank');
+                                } catch (e) {
+                                  alert('現場の追加に失敗しました');
+                                } finally {
+                                  setAddingSite(false);
+                                }
+                              }}
+                            >
+                              追加
+                            </button>
                           </div>
                         </div>
                       ) : null}

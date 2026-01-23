@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, clipboard, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -148,6 +148,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // 常にライトモードを強制
+  try {
+    nativeTheme.themeSource = 'light';
+  } catch {}
   // Windows: taskbar grouping / notifications
   try {
     app.setAppUserModelId('jp.masterhub.desktop');
