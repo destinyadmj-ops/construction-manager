@@ -204,7 +204,19 @@ function WeekHubInner() {
     el.scrollTop += e.deltaY;
   }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  // 現場リストたたみ状態
+  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
+  // たたみ時のセル幅
+  const COLLAPSED_CELL_MIN_W = 140;
   const [cellMinW, setCellMinW] = useState<number>(112);
+    // 現場リストたたみ/広げ時にセル幅を自動調整
+    useEffect(() => {
+      if (isSiteListCollapsed) {
+        setCellMinW(COLLAPSED_CELL_MIN_W);
+      } else {
+        setCellMinW(112);
+      }
+    }, [isSiteListCollapsed]);
   const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
   const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(64);
   const [cellBg, setCellBg] = useState<CellBg>('default');
@@ -1027,11 +1039,38 @@ function WeekHubInner() {
       if (!json?.ok) return;
       setSites(json.sites.map((s) => {
         const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
-        return {
-          id: s.id,
-          label,
-          invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
-          reportIssuedThisMonth: s.reportIssuedThisMonth,
+        return (
+          <div className="flex">
+            {/* 左側：現場リスト枠 */}
+            <div className={`relative transition-all duration-300 h-full ${isSiteListCollapsed ? 'w-4' : 'w-56'}`}
+              style={{ minWidth: isSiteListCollapsed ? 16 : 224 }}>
+              {/* 三角ボタンを枠の外・左上に表示 */}
+              <button
+                type="button"
+                aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
+                className="fixed left-2 top-16 z-50 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
+                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                onClick={() => setIsSiteListCollapsed((v) => !v)}
+              >
+                {isSiteListCollapsed ? (
+                  <span>&#9654;</span> // ▶ 右向き三角
+                ) : (
+                  <span>&#9664;</span> // ◀ 左向き三角
+                )}
+              </button>
+              {/* 現場リスト本体（畳み時は非表示） */}
+              {!isSiteListCollapsed && (
+                <div className="pl-6 pr-2 pt-8">
+                  {/* ...現場リスト表示部分... */}
+                </div>
+              )}
+            </div>
+            {/* 右側：週予定グリッド等（セル幅はcellMinWで連動） */}
+            <div className="flex-1">
+              {/* ...既存の週予定グリッド・UI... */}
+            </div>
+          </div>
+        );
           paceNotConsumedAlert: s.paceNotConsumedAlert,
           unassignedThisMonth: s.unassignedThisMonth,
         };
