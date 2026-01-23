@@ -522,7 +522,7 @@ export default function SiteLedgerPage() {
                     </div>
 
                     <div className="flex items-center justify-between gap-1">
-                      <div className="min-w-0 flex-1 truncate">{(s.companyName ? `${s.companyName} / ` : '') + s.name}</div>
+                      <div className="min-w-0 flex-1 truncate">{s.name}</div>
                       <div className="flex shrink-0 items-center gap-1">
                         {s.caution?.trim() ? (
                           <span className="rounded-md border border-red-200 px-1 py-0.5 text-[9px] text-red-700 dark:border-red-900 dark:text-red-300">

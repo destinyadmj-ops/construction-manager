@@ -992,6 +992,15 @@ export default function SiteLedgerDetailPage() {
           </div>
         </div>
 
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-xs text-white hover:bg-blue-600"
+            onClick={() => router.push(`/site-ledger/${encodeURIComponent(siteId)}/folders`)}
+          >
+            フォルダ管理
+          </button>
+        </div>
         <div
           id="photos"
           data-color-edit-slot="border"
