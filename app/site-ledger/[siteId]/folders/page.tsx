@@ -48,10 +48,17 @@ export default function SiteFoldersPage() {
         setPhotos(Array.isArray(j.photos) ? j.photos : []);
         setReports(Array.isArray(j.reports) ? j.reports : []);
       });
-    // 請求書（仮: API設計に応じて調整）
-    // fetch(`/api/invoices/issue/search?from=${selectedDate}&to=${selectedDate}&siteId=${siteId}`)
-    //   .then(r => r.json())
-    //   .then(j => setInvoices(Array.isArray(j.items) ? j.items : []));
+    // 請求書（INVOICE kind）
+    fetch(`/api/invoices/issue/search?from=${selectedDate}&to=${selectedDate}`)
+      .then(r => r.json())
+      .then(j => {
+        if (Array.isArray(j.items)) {
+          // 現場ID一致のみ抽出
+          setInvoices(j.items.filter((i: any) => i.siteId === siteId).map((i: any) => ({ id: i.siteId, fileName: i.siteLabel })));
+        } else {
+          setInvoices([]);
+        }
+      });
   }, [siteId, selectedDate]);
   return (
     <main className="mx-auto w-full max-w-screen-md px-4 py-4">
@@ -142,7 +149,7 @@ export default function SiteFoldersPage() {
             <div className="font-medium text-zinc-700 mb-1">請求書</div>
             <div className="text-xs text-zinc-500 mb-2">（請求書ファイル管理・API連携は要調整）</div>
             <div className="bg-white rounded p-2 border border-zinc-200">
-              {invoices.length === 0 ? '請求書API未連携' : invoices.map(i => (
+              {invoices.length === 0 ? '請求書なし' : invoices.map(i => (
                 <div key={i.id}>{i.fileName}</div>
               ))}
             </div>
