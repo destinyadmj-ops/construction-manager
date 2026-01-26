@@ -1,0 +1,280 @@
+
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "bootstrap: base check",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"bootstrap: base check"
+			],
+			"dependsOn": [
+				"docker: up",
+				"prisma: generate",
+				"prisma: migrate deploy",
+				"lint",
+				"typecheck",
+				"build",
+				"e2e: playwright"
+			],
+			"dependsOrder": "sequence",
+			"problemMatcher": []
+		},
+		{
+			"label": "run: prod (build + start)",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"run: prod (build + start)"
+			],
+			"dependsOn": [
+				"build",
+				"start: master-hub (prod)"
+			],
+			"dependsOrder": "sequence",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "run: dev + worker",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"run: dev + worker"
+			],
+			"dependsOn": [
+				"dev: master-hub",
+				"worker: master-hub"
+			],
+			"dependsOrder": "parallel",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "stop: dev (hard)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev:stop:hard",
+				"--",
+				"-Force"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "dev: master-hub",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev",
+				"--",
+				"-H",
+				"127.0.0.1",
+				"-p",
+				"3000"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "start: master-hub (prod)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"start",
+				"--",
+				"-H",
+				"127.0.0.1",
+				"-p",
+				"3001"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "worker: master-hub",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"worker"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "prisma: generate",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"prisma",
+				"generate"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "prisma: migrate deploy",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"prisma",
+				"migrate",
+				"deploy"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "typecheck",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"typecheck"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "docker: up",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"docker:up"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "docker: down",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"docker:down"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "e2e: playwright",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"e2e"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		}
+	]
+}

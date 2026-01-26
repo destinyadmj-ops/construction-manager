@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+e2e.log
+npm-debug.log*
+yarn-error.log*

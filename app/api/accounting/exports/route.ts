@@ -1,3 +1,4 @@
+export const dynamic = 'force-static';
 import { getAccountingProvider } from '@/server/accounting';
 import { ensureJdlExportDir, listJdlExportFiles } from '@/server/accounting/jdlExport';
 

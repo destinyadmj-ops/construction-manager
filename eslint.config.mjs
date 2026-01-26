@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
 
     // App generated artifacts:
     "src/generated/**",
+    // Local restore/debug folders and helper scripts
+    "_restore.disabled/**",
+    "scripts/**",
   ]),
 
   {

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE IF EXISTS "OutlookSendLog" ALTER COLUMN "updatedAt" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE IF EXISTS "Partner" ALTER COLUMN "updatedAt" DROP DEFAULT;

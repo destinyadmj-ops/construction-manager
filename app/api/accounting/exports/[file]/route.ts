@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 
+export const dynamic = 'force-static';
 export const runtime = 'nodejs';
 
 export async function GET(_request: Request, ctx: { params: Promise<{ file: string }> }) {

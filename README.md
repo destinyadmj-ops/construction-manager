@@ -44,6 +44,38 @@
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
 
+## 🏢 会社⇔自宅 データ共有（推奨: Tailscale）
+
+**最も簡単な方法:** Tailscale で会社のDBを自宅から直接使用（リアルタイム同期）
+
+詳細は [TAILSCALE-SETUP.md](TAILSCALE-SETUP.md) を参照。
+
+### クイックセットアップ
+
+```bash
+# 1. 会社・自宅両方で Tailscale インストール
+#    https://tailscale.com/download
+
+# 2. 会社で Tailscale IP 確認
+tailscale ip -4
+# 例: 100.101.102.103
+
+# 3. 自宅の .env.local に設定
+OFFICE_TAILSCALE_IP=100.101.102.103
+DATABASE_URL="postgresql://masterhub:masterhub@100.101.102.103:5432/masterhub?schema=public"
+REDIS_URL="redis://100.101.102.103:6379"
+
+# 4. 自宅で起動
+npm run dev
+```
+
+**これで完了！** 会社のデータが自宅でもリアルタイム使用可能。
+
+### その他の同期方法
+
+- **ファイル共有同期（VPN不要）:** [DB-SYNC.md](DB-SYNC.md)
+- **定期バックアップ:** [scripts/backup/README.md](scripts/backup/README.md)
+
 ## アプリ配布
 
 Master Hub は以下の形式で配布可能：
@@ -169,6 +201,26 @@ npm run db:migrate:raw
 ## バックアップ（RPO 1時間: SharePoint）
 
 - 1時間ごとのPostgreSQLバックアップを SharePoint（OneDrive同期）へ保存する手順は、[scripts/backup/README.md](scripts/backup/README.md) を参照。
+
+## データベース同期（自宅⇔会社）
+
+自宅と会社でデータベースを自動同期する方法は [DB-SYNC.md](DB-SYNC.md) を参照。
+
+### クイック同期
+
+```bash
+# 1回だけ同期（OneDriveの場合）
+npm run db:sync:once -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+
+# 30分ごとに自動同期
+npm run db:sync:30min -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+
+# 1時間ごとに自動同期
+npm run db:sync:60min -- -SharedFolder "C:\Users\YourName\OneDrive\MasterHub-Sync"
+```
+
+**最も簡単:** VPN/Tailscaleで同じDBを共有（リアルタイム同期）  
+詳細は [DB-SYNC.md](DB-SYNC.md) 参照。
 
 ## 開発起動
 

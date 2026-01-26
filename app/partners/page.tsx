@@ -224,7 +224,8 @@ export default function PartnersPage() {
     }
   }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
 
-  const openInvoiceDialog = useCallback((partnerId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _openInvoiceDialog = useCallback((partnerId: string) => {
     setInvoiceDialogOpen(partnerId);
     setSelectedInvoiceSites(new Set());
   }, []);
@@ -250,7 +251,8 @@ export default function PartnersPage() {
     window.location.href = `/accounting?${params.toString()}`;
   }, [selectedInvoiceSites]);
 
-  const openReportDialog = useCallback((partnerId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _openReportDialog = useCallback((partnerId: string) => {
     setReportDialogOpen(partnerId);
     setSelectedReportSite(null);
   }, []);
