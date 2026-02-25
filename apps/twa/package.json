@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "init": "bubblewrap init --manifest=$MASTER_HUB_MANIFEST_URL --directory=android",
+    "init": "bubblewrap init --manifest=http://localhost:3000/manifest.webmanifest --directory=android",
     "build": "bubblewrap build --directory=android",
     "install": "bubblewrap install --directory=android",
     "open": "start .\\android",
     "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path .\\android) { Remove-Item -Recurse -Force .\\android }\""
   },
   "devDependencies": {
-    "@bubblewrap/cli": "^2.3.0"
+    "@bubblewrap/cli": "1.24.1"
   }
 }

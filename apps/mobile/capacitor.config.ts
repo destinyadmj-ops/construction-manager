@@ -11,7 +11,7 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     // Set to your production URL (e.g. https://<device>.<tailnet>.ts.net/)
-    url: 'https://YOUR_URL/',
+    url: 'https://demo.masterhub.local/',
     cleartext: false,
   },
   // allowNavigation can be used when your app navigates across subdomains.

@@ -1039,38 +1039,11 @@ function WeekHubInner() {
       if (!json?.ok) return;
       setSites(json.sites.map((s) => {
         const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
-        return (
-          <div className="flex">
-            {/* 左側：現場リスト枠 */}
-            <div className={`relative transition-all duration-300 h-full ${isSiteListCollapsed ? 'w-4' : 'w-56'}`}
-              style={{ minWidth: isSiteListCollapsed ? 16 : 224 }}>
-              {/* 三角ボタンを枠の外・左上に表示 */}
-              <button
-                type="button"
-                aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
-                className="fixed left-2 top-16 z-50 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
-                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                onClick={() => setIsSiteListCollapsed((v) => !v)}
-              >
-                {isSiteListCollapsed ? (
-                  <span>&#9654;</span> // ▶ 右向き三角
-                ) : (
-                  <span>&#9664;</span> // ◀ 左向き三角
-                )}
-              </button>
-              {/* 現場リスト本体（畳み時は非表示） */}
-              {!isSiteListCollapsed && (
-                <div className="pl-6 pr-2 pt-8">
-                  {/* ...現場リスト表示部分... */}
-                </div>
-              )}
-            </div>
-            {/* 右側：週予定グリッド等（セル幅はcellMinWで連動） */}
-            <div className="flex-1">
-              {/* ...既存の週予定グリッド・UI... */}
-            </div>
-          </div>
-        );
+        return {
+          id: s.id,
+          label,
+          invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
+          reportIssuedThisMonth: s.reportIssuedThisMonth,
           paceNotConsumedAlert: s.paceNotConsumedAlert,
           unassignedThisMonth: s.unassignedThisMonth,
         };
@@ -1539,39 +1512,25 @@ function WeekHubInner() {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('month')}
-            className={`rounded-md border px-2 py-1 text-xs ${
-              mode === 'month'
-                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-            }`}
-          >
-            月予定
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('year')}
-            className={`rounded-md border px-2 py-1 text-xs ${
-              mode === 'year'
-                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-            }`}
-          >
-            年予定
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('week')}
-            className={`rounded-md border px-2 py-1 text-xs ${
-              mode === 'week'
-                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-            }`}
-          >
-            週予定
-          </button>
+          {/* タブ切替UI: 週/月/年 */}
+          {[
+            { key: 'week', label: '週予定' },
+            { key: 'month', label: '月予定' },
+            { key: 'year', label: '年予定' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setMode(tab.key as ViewMode)}
+              className={`rounded-md border px-2 py-1 text-xs ${
+                mode === tab.key
+                  ? 'border-blue-500 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-800'
+                  : 'border-zinc-200 bg-white/60 text-zinc-700 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
 
           <div className="ml-2 flex min-w-0 flex-1 items-center gap-2 text-xs">
             <span className="text-zinc-500 dark:text-zinc-400">従業員:</span>
@@ -1853,7 +1812,7 @@ function WeekHubInner() {
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[360px_1fr]">
           {mode === 'week' ? (
             <>
-              <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
+              <div className="hidden lg:block rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
                 <div onWheel={onSiteBannerWheel}>
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">

@@ -43,6 +43,8 @@ export default function SitePhotosPage() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<FileList | null>(null);
+  const [subject, setSubject] = useState('');
+  const [tags, setTags] = useState('');
 
   useEffect(() => {
     if (!dateParam) return;
@@ -95,6 +97,8 @@ export default function SitePhotosPage() {
       Array.from(files)
         .slice(0, 30)
         .forEach((f) => fd.append('files', f));
+      if (subject.trim()) fd.append('subject', subject.trim());
+      if (tags.trim()) fd.append('tags', tags.trim());
 
       const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}/photos?date=${encodeURIComponent(dateYmd)}`, {
         method: 'POST',
@@ -107,6 +111,8 @@ export default function SitePhotosPage() {
       }
       setStatusMsg('写真をアップロードしました');
       setFiles(null);
+      setSubject('');
+      setTags('');
       if (inputRef.current) inputRef.current.value = '';
       await load();
     } catch (e) {
@@ -114,7 +120,7 @@ export default function SitePhotosPage() {
     } finally {
       setBusy(false);
     }
-  }, [dateYmd, files, load, siteId]);
+  }, [dateYmd, files, load, siteId, subject, tags]);
 
   useEffect(() => {
     void load();
@@ -177,11 +183,25 @@ export default function SitePhotosPage() {
             onChange={(e) => setFiles(e.target.files)}
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="タイトル（任意）"
+            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+          />
+          <input
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="工程・タグ（カンマ区切り可・任意）"
+            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+          />
           <button
             type="button"
             onClick={() => void upload()}
             disabled={busy || !files || files.length === 0}
-            className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-black"
           >
             {busy ? 'アップロード中…' : 'アップロード'}
           </button>
@@ -198,22 +218,37 @@ export default function SitePhotosPage() {
             ) : photos.length === 0 ? (
               <div className="text-xs text-zinc-500 dark:text-zinc-400">{dateYmd} の写真はありません。</div>
             ) : (
-              <div className="flex flex-col gap-1">
-                {photos.map((p) => (
-                  <div
-                    key={p.id}
-                    data-color-edit-slot="border"
-                    className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black/60"
-                  >
-                    <div className="min-w-0 flex-1 truncate" title={p.fileName}>
-                      {p.fileName}
+              <div className="flex flex-col gap-2">
+                {/* 日付ごとにグループ化 */}
+                {Object.entries(
+                  photos.reduce((acc, p) => {
+                    const d = p.createdAt.slice(0, 10);
+                    if (!acc[d]) acc[d] = [];
+                    acc[d].push(p);
+                    return acc;
+                  }, {} as Record<string, PhotoItem[]>)
+                ).map(([date, items]) => (
+                  <div key={date} className="mb-2">
+                    <div className="mb-1 text-xs font-bold text-zinc-700 dark:text-zinc-300">{date}</div>
+                    <div className="flex flex-col gap-1">
+                      {items.map((p) => (
+                        <div
+                          key={p.id}
+                          data-color-edit-slot="border"
+                          className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black/60"
+                        >
+                          <div className="min-w-0 flex-1 truncate" title={p.fileName}>
+                            {p.fileName}
+                          </div>
+                          <a
+                            href={`/api/documents/${encodeURIComponent(p.id)}/download`}
+                            className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                          >
+                            ダウンロード
+                          </a>
+                        </div>
+                      ))}
                     </div>
-                    <a
-                      href={`/api/documents/${encodeURIComponent(p.id)}/download`}
-                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                    >
-                      ダウンロード
-                    </a>
                   </div>
                 ))}
               </div>

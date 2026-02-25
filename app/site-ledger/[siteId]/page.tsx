@@ -169,6 +169,7 @@ export default function SiteLedgerDetailPage() {
   const [paceSettingOpen, setPaceSettingOpen] = useState(false);
   const [repeatRule, setRepeatRule] = useState<RepeatRule>({ intervalMonths: 1, weekdays: [], monthDays: [] });
   const [isSavingRule, setIsSavingRule] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const canSave = useMemo(() => name.trim().length > 0 && !!siteId, [name, siteId]);
 
@@ -515,6 +516,13 @@ export default function SiteLedgerDetailPage() {
   }, [loadFolder, loadTimeClocks]);
 
   useEffect(() => {
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    );
+    setIsMobile(isMobileDevice);
+  }, []);
+
+  useEffect(() => {
     const m = month;
     if (!m || !siteId) {
       setMonthAlert(null);
@@ -642,13 +650,15 @@ export default function SiteLedgerDetailPage() {
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="金額"
-              inputMode="numeric"
-              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-            />
+            {!isMobile && (
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="金額"
+                inputMode="numeric"
+                className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+              />
+            )}
             <input
               value={pace}
               onChange={(e) => setPace(e.target.value)}
@@ -1001,6 +1011,44 @@ export default function SiteLedgerDetailPage() {
             フォルダ管理
           </button>
         </div>
+        {/* 打刻UI: 出勤/退勤ボタン・履歴表示 */}
+        <div className="mt-3 rounded-md border border-zinc-200 bg-white/60 px-3 py-3 dark:border-zinc-800 dark:bg-black/60">
+          <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">打刻</div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={punchBusy || !siteId}
+              onClick={() => {/* 出勤打刻処理: 実装はAPI連携 */}}
+              className="rounded-md border border-green-400 bg-green-50 px-3 py-2 text-xs text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              出勤
+            </button>
+            <button
+              type="button"
+              disabled={punchBusy || !siteId}
+              onClick={() => {/* 退勤打刻処理: 実装はAPI連携 */}}
+              className="rounded-md border border-blue-400 bg-blue-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              退勤
+            </button>
+          </div>
+          <div className="mt-3">
+            {timeClocks.length === 0 ? (
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">本日の打刻履歴はありません。</div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {timeClocks.map((tc) => (
+                  <div key={tc.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-green-700">出勤: {tc.inAt}</span>
+                    {tc.outAt && <span className="text-blue-700">退勤: {tc.outAt}</span>}
+                    {tc.note && <span className="text-zinc-500">({tc.note})</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div
           id="photos"
           data-color-edit-slot="border"
