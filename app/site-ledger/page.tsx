@@ -51,6 +51,11 @@ export default function SiteLedgerPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
 
+  // 削除機能関連のstate
+  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [deprMonth, setDeprMonth] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -223,6 +228,85 @@ export default function SiteLedgerPage() {
     },
     [loadSites],
   );
+
+  // 削除関連の関数
+  const handleSelectSite = useCallback((siteId: string, selected: boolean) => {
+    setSelectedSites(prev => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(siteId);
+      } else {
+        next.delete(siteId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedSites(new Set(visibleSites.map(s => s.id)));
+  }, [visibleSites]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedSites(new Set());
+  }, []);
+
+  const handleDeleteSelected = useCallback(async () => {
+    const idsToDelete = Array.from(selectedSites);
+    if (idsToDelete.length === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const promises = idsToDelete.map(id =>
+        fetch(`/api/sites/${id}`, { method: 'DELETE' })
+      );
+      const results = await Promise.allSettled(promises);
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.length - failed;
+
+      if (failed > 0) {
+        setStatusMsg(`削除に失敗: ${succeeded}件成功 / ${failed}件失敗`);
+      } else {
+        setStatusMsg(`${succeeded}件の現場を削除しました`);
+      }
+
+      setSelectedSites(new Set());
+      setShowDeleteDialog(false);
+      await loadSites();
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [selectedSites, loadSites]);
+
+  const handleDeleteAll = useCallback(async () => {
+    const idsToDelete = visibleSites.map(s => s.id);
+    if (idsToDelete.length === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const promises = idsToDelete.map(id =>
+        fetch(`/api/sites/${id}`, { method: 'DELETE' })
+      );
+      const results = await Promise.allSettled(promises);
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.length - failed;
+
+      if (failed > 0) {
+        setStatusMsg(`削除に失敗: ${succeeded}件成功 / ${failed}件失敗`);
+      } else {
+        setStatusMsg(`${succeeded}件の現場を削除しました`);
+      }
+
+      setSelectedSites(new Set());
+      setShowDeleteDialog(false);
+      await loadSites();
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [visibleSites, loadSites]);
 
   useEffect(() => {
     setAddAction({ onClick: addSite, disabled: !newName.trim(), title: '追加（現場）' });
@@ -472,7 +556,30 @@ export default function SiteLedgerPage() {
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場一覧（コンパクト）</div>
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">全体を俯瞰して名前を確認できます。</div>
             </div>
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{visibleSites.length}件</div>
+            <div className="flex items-center gap-2">
+              {visibleSites.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  >
+                    全選択
+                  </button>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <button
+                    type="button"
+                    onClick={handleDeselectAll}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  >
+                    全解除
+                  </button>
+                </div>
+              )}
+              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {visibleSites.length}件 {selectedSites.size > 0 && `(${selectedSites.size}選択中)`}
+              </div>
+            </div>
           </div>
 
           {visibleSites.length === 0 ? (
@@ -481,19 +588,26 @@ export default function SiteLedgerPage() {
             <div className="mt-2 max-h-64 overflow-auto">
               <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
-                  <button
-                    key={`grid-${s.id}`}
-                    type="button"
-                    onClick={() =>
-                      router.push(`/site-ledger/${encodeURIComponent(s.id)}?month=${encodeURIComponent(deprMonth)}`)
-                    }
-                    className="relative rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-10 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
-                    title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
-                      deprMap[s.id]
-                        ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
-                        : ''
-                    }`}
-                  >
+                  <div key={`grid-${s.id}`} className="relative">
+                    <input
+                      type="checkbox"
+                      checked={selectedSites.has(s.id)}
+                      onChange={(e) => handleSelectSite(s.id, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute -left-1 -top-1 z-10 h-3 w-3 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/site-ledger/${encodeURIComponent(s.id)}?month=${encodeURIComponent(deprMonth)}`)
+                      }
+                      className="relative w-full rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-10 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
+                      title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
+                        deprMap[s.id]
+                          ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
+                          : ''
+                      }`}
+                    >
                     <div className="absolute left-1 top-1">
                       <span
                         className={`h-2.5 w-2.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
@@ -550,6 +664,7 @@ export default function SiteLedgerPage() {
                       </div>
                     </div>
                   </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -561,6 +676,63 @@ export default function SiteLedgerPage() {
           現場の詳細/編集は「現場一覧（コンパクト）」から開いてください。
         </div>
       </div>
+
+      {/* 右下固定の削除ボタン */}
+      {selectedSites.size > 0 && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            type="button"
+            onClick={() => setShowDeleteDialog(true)}
+            className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
+          >
+            <span>削除 ({selectedSites.size}件)</span>
+          </button>
+        </div>
+      )}
+
+      {/* 削除確認ダイアログ */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-black">
+            <div className="text-center">
+              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">現場削除の確認</div>
+              <div className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                選択した現場を削除します。この操作は取り消せません。
+              </div>
+              <div className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
+                削除対象: {selectedSites.size}件
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
+              >
+                {isDeleting ? '削除中...' : '選択削除'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg border border-red-600 bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
+              >
+                {isDeleting ? '削除中...' : '一括削除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

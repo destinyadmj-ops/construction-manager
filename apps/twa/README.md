@@ -26,7 +26,7 @@ npm install
 PowerShell例:
 
 ```powershell
-$env:MASTER_HUB_MANIFEST_URL='https://YOUR_DOMAIN/manifest.webmanifest'
+$env:MASTER_HUB_MANIFEST_URL='https://demo.masterhub.local/manifest.webmanifest'
 ```
 
 ※ まずは **固定HTTPSドメイン**（例: `https://YOUR_DOMAIN/`）を1つ決めて、PC（Electron）/Android（TWA）で共通に使うのがおすすめです。

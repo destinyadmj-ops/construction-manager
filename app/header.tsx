@@ -1,5 +1,3 @@
-  // 現場リストの開閉状態
-  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 "use client";
 
 import { useOutsidePointerDown } from './use-outside-pointerdown';
@@ -140,6 +138,9 @@ export default function AppHeader() {
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
   const { actions } = useHeaderActions();
+
+  // 現場リストの開閉状態
+  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 
   const [headerUserId, setHeaderUserId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -868,7 +869,7 @@ export default function AppHeader() {
       <div className="bg-white/60 dark:bg-black/60">
         <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
 
-          <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-3">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
@@ -882,11 +883,7 @@ export default function AppHeader() {
               style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
               onClick={() => setIsSiteListCollapsed((v) => !v)}
             >
-              {isSiteListCollapsed ? (
-                <span>&#9654;</span> // ▶ 右向き三角
-              ) : (
-                <span>&#9664;</span> // ◀ 左向き三角
-              )}
+              {isSiteListCollapsed ? <span>&#9654;</span> : <span>&#9664;</span>}
             </button>
 
           <div className="flex items-center gap-2">
@@ -1245,7 +1242,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-1">
             <button
               type="button"
               data-testid="header-action-back"
@@ -1469,7 +1466,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`relative rounded-md border px-3 py-2 text-[11px] ${
+            className={`hidden sm:inline-flex relative rounded-md border px-3 py-2 text-[11px] ${
               isAlerts
                 ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
                 : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
@@ -1500,7 +1497,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isAccounting)}
+            className={`hidden sm:inline-flex ${navLinkClass(isAccounting)}`}
             title="会計（PDF/CSV/テンプレ/一覧）へ"
             aria-current={isAccounting ? 'page' : undefined}
           >
@@ -1512,7 +1509,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isReports)}
+            className={`hidden sm:inline-flex ${navLinkClass(isReports)}`}
             title="報告書（送信/履歴/検索）へ"
             aria-current={isReports ? 'page' : undefined}
           >
@@ -1524,7 +1521,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isInvoices)}
+            className={`hidden sm:inline-flex ${navLinkClass(isInvoices)}`}
             title="請求書（送信/履歴/検索）へ"
             aria-current={isInvoices ? 'page' : undefined}
           >
@@ -1535,7 +1532,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isManagement)}
+            className={`hidden sm:inline-flex ${navLinkClass(isManagement)}`}
             title="リピート/自動入力などの管理へ"
             aria-current={isManagement ? 'page' : undefined}
           >
@@ -1546,7 +1543,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isSiteLedger)}
+            className={`hidden sm:inline-flex ${navLinkClass(isSiteLedger)}`}
             title="現場台帳（追加/詳細）へ"
             aria-current={isSiteLedger ? 'page' : undefined}
           >
@@ -1557,7 +1554,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isPartners)}
+            className={`hidden sm:inline-flex ${navLinkClass(isPartners)}`}
             title="関係会社へ"
             aria-current={isPartners ? 'page' : undefined}
           >
@@ -1568,7 +1565,7 @@ export default function AppHeader() {
             <button
               type="button"
               onClick={() => setIsMultiMenuOpen((v) => !v)}
-              className={navLinkClass(isMulti)}
+              className={`hidden sm:inline-flex ${navLinkClass(isMulti)}`}
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
