@@ -65,8 +65,13 @@ next-env.d.ts
 # local helper cmd wrappers (optional)
 run-dev*.cmd
 
-# TWA generated Android project
-/apps/twa/android/
+# TWA generated Android project - keep sources but ignore build artifacts and keys
+/apps/twa/android/.gradle/
+/apps/twa/android/build/
+/apps/twa/android/local.properties
+/apps/twa/android/android.keystore
+/apps/twa/android/keystore.properties
+/apps/twa/android/app/build/
 
 # Electron build outputs
 /apps/desktop/dist/
