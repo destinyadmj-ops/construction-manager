@@ -21,6 +21,22 @@ function isRegistrationAllowed(password: string) {
   return password === expected;
 }
 
+function toReadableDbErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : 'DB unavailable';
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('authentication failed') || lower.includes('p1000')) {
+    return 'DB認証に失敗しました。Supabase の DATABASE_URL（ユーザー名・パスワード・Pooler設定）を確認してください。';
+  }
+  if (lower.includes('denied access') || lower.includes('permission denied')) {
+    return 'DBアクセス権限が不足しています。Supabase 接続文字列とロール権限を確認してください。';
+  }
+  if (lower.includes('table') && lower.includes('does not exist')) {
+    return 'DBスキーマが未適用です。`npm run db:deploy` を実行してください。';
+  }
+  return msg;
+}
+
 export async function POST(request: Request) {
   const json = await request.json().catch(() => null);
   const parsed = RegisterSchema.safeParse(json ?? {});
@@ -71,7 +87,7 @@ export async function POST(request: Request) {
     return res;
   } catch (e) {
     return Response.json(
-      { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
+      { ok: false, error: toReadableDbErrorMessage(e) },
       { status: 503 },
     );
   }
