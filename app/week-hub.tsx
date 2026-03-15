@@ -205,7 +205,7 @@ function WeekHubInner() {
   }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   // 現場リストたたみ状態
-  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
+  const [isSiteListCollapsed] = useState(false);
   // たたみ時のセル幅
   const COLLAPSED_CELL_MIN_W = 140;
   const [cellMinW, setCellMinW] = useState<number>(112);

@@ -1,11 +1,15 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+
+type InvoiceSearchItem = {
+  siteId: string;
+  siteLabel: string;
+};
 
 export default function SiteFoldersPage() {
   const params = useParams<{ siteId: string }>();
-  const router = useRouter();
   const siteId = params?.siteId ?? '';
   const [inputName, setInputName] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -28,7 +32,7 @@ export default function SiteFoldersPage() {
         if (j.dates.length > 0 && !selectedDate) setSelectedDate(j.dates[0].dateYmd);
       }
     })();
-  }, [siteId]);
+  }, [selectedDate, siteId]);
 
   // 選択日付のデータ取得
   useEffect(() => {
@@ -53,8 +57,19 @@ export default function SiteFoldersPage() {
       .then(r => r.json())
       .then(j => {
         if (Array.isArray(j.items)) {
+          const items = j.items.filter(
+            (item: unknown): item is InvoiceSearchItem =>
+              !!item &&
+              typeof item === 'object' &&
+              typeof (item as Record<string, unknown>).siteId === 'string' &&
+              typeof (item as Record<string, unknown>).siteLabel === 'string',
+          );
           // 現場ID一致のみ抽出
-          setInvoices(j.items.filter((i: any) => i.siteId === siteId).map((i: any) => ({ id: i.siteId, fileName: i.siteLabel })));
+          setInvoices(
+            items
+              .filter((item: InvoiceSearchItem) => item.siteId === siteId)
+              .map((item: InvoiceSearchItem) => ({ id: item.siteId, fileName: item.siteLabel })),
+          );
         } else {
           setInvoices([]);
         }
@@ -87,7 +102,7 @@ export default function SiteFoldersPage() {
               if (!res.ok || !j?.ok) throw new Error(j?.error || '作成失敗');
               setStatusMsg('フォルダを作成しました');
               setInputName('');
-            } catch (e) {
+            } catch {
               setStatusMsg('フォルダ作成に失敗しました');
             }
           }}
@@ -114,7 +129,6 @@ export default function SiteFoldersPage() {
           <div className="mb-2 text-sm font-bold">{selectedDate} の管理</div>
           <div className="mb-4">
             <div className="font-medium text-zinc-700 mb-1">従業員（打刻）</div>
-            <div className="text-xs text-zinc-500 mb-2">（当該現場の全従業員と打刻を表示）</div>
             <div className="bg-white rounded p-2 border border-zinc-200">
               {employees.length === 0 ? '従業員データなし' : employees.map(emp => {
                 const clocks = timeClocks.filter(tc => tc.userId === emp.id);

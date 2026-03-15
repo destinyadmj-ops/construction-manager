@@ -143,6 +143,7 @@ export default function AppHeader() {
   const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 
   const [headerUserId, setHeaderUserId] = useState<string | null>(null);
+  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
