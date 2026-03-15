@@ -3,24 +3,6 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
-type ApiUser = { id: string; name: string | null; email: string | null };
-
-type ApiCell = {
-  // Up to 2 slots. Each slot is a short label.
-  slot1: string | null;
-  slot2: string | null;
-  // Optional hint color: 'red' means attention.
-  color1: 'default' | 'red';
-  color2: 'default' | 'red';
-};
-
-type ApiResponse = {
-  ok: true;
-  weekStart: string;
-  users: ApiUser[];
-  grid: Record<string, Record<string, ApiCell>>; // userId -> day(yyyy-mm-dd) -> cell
-};
-
 type SiteItem = {
   id: string | null;
   label: string;
@@ -66,7 +48,7 @@ export default function MobileWeekHub() {
 function MobileWeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const qsUserId = searchParams.get('userId');
+  searchParams.get('userId');
   const [cursorDate] = useState<Date>(() => new Date());
   const [sites, setSites] = useState<SiteItem[]>([]);
 

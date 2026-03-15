@@ -30,8 +30,8 @@ try {
     $Name = Read-MigrationName
   }
 
-  Write-Host "Running: prisma migrate dev --skip-generate --name $Name" -ForegroundColor Cyan
-  npx prisma migrate dev --skip-generate --name $Name
+  Write-Host "Running: prisma migrate dev --skip-generate --name $Name --config prisma/prisma.config.ts" -ForegroundColor Cyan
+  npx prisma migrate dev --skip-generate --name $Name --config prisma/prisma.config.ts
 } catch {
   Write-Host $_.Exception.Message -ForegroundColor Red
   exit 1
