@@ -224,11 +224,6 @@ export default function PartnersPage() {
     }
   }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
 
-  const openInvoiceDialog = useCallback((partnerId: string) => {
-    setInvoiceDialogOpen(partnerId);
-    setSelectedInvoiceSites(new Set());
-  }, []);
-
   const toggleInvoiceSite = useCallback((siteId: string) => {
     setSelectedInvoiceSites(prev => {
       const next = new Set(prev);
@@ -249,11 +244,6 @@ export default function PartnersPage() {
     siteIds.forEach(id => params.append('siteId', id));
     window.location.href = `/accounting?${params.toString()}`;
   }, [selectedInvoiceSites]);
-
-  const openReportDialog = useCallback((partnerId: string) => {
-    setReportDialogOpen(partnerId);
-    setSelectedReportSite(null);
-  }, []);
 
   const goToReport = useCallback(() => {
     if (!selectedReportSite) return;
@@ -656,7 +646,7 @@ export default function PartnersPage() {
                                   setNewSiteName('');
                                   setSites(cur => [...cur, { id: obj.site.id, name: obj.site.name, companyName: obj.site.companyName }]);
                                   window.open(`/site-ledger/${encodeURIComponent(obj.site.id)}`, '_blank');
-                                } catch (e) {
+                                } catch {
                                   alert('現場の追加に失敗しました');
                                 } finally {
                                   setAddingSite(false);

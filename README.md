@@ -2,43 +2,63 @@
 # Master Hub
 
 ---
-## 会社・自宅での常時同期セットアップ手順（5ステップ）
+## 会社・自宅で同じDBを使う推奨構成
 
-このプロジェクトを会社・自宅など複数拠点で「コード・DBを常時同期」しながら運用するための推奨手順です。
+このプロジェクトを会社・自宅など複数拠点で運用する場合は、コードは GitHub、DB は Supabase、Redis は各PCローカル起動を基本構成にします。
 
-### 1. GitHub等のリモートリポジトリを用意し、両拠点でclone
+### 1. 両拠点で同じリポジトリを使う
 
-- GitHub（またはBitbucket等）で新規リポジトリを作成
-- 会社・自宅のPC両方で `git clone <リポジトリURL>` を実行
-- push/pull権限があることを確認
+- GitHub でリモートリポジトリを用意する
+- 会社PC・自宅PCの両方でクローンする
+- 変更同期は `git pull --rebase` を基本にする
+- 必要なら `scripts/git-auto-sync.ps1` をタスクスケジューラで定期実行する
 
-### 2. クラウドPostgres（例：Supabase, Neon, AWS RDS等）を作成し、DATABASE_URLを取得
+### 2. Supabase の Session Pooler 接続文字列を使う
 
-- Supabase: https://supabase.com/ で無料枠からPostgresプロジェクト作成
-- Neon: https://neon.tech/ で無料枠からPostgres作成
-- AWS RDS: AWSコンソールからPostgresインスタンス作成
-- いずれも「接続情報（ホスト名・DB名・ユーザー・パスワード）」を控える
+- Supabase ダッシュボードで `Settings` → `Database` → `Connection string` を開く
+- `URI` を選ぶ
+- `方法` は `Session pooler` を選ぶ
+- 次の形式の接続文字列を `.env.local` に設定する
 
-### 3. .env.local（または.env）にクラウドDB/Redisの接続情報を記載
+```env
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_DB_PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+REDIS_URL="redis://localhost:6379"
+```
 
-- プロジェクトルートに `.env.local` を作成し、以下のように記載
-	```
-	DATABASE_URL="postgresql://USER:PASSWORD@YOUR_CLOUD_HOST:5432/YOUR_DB?schema=public"
-	REDIS_URL="redis://:PASSWORD@YOUR_CLOUD_REDIS_HOST:6379/0"
-	```
-- 必要に応じて他の環境変数も設定（例: Outlook連携など）
+- パスワードに `#` や `@` が含まれる場合は URL エンコードする
+- Prisma 7 は `prisma/prisma.config.ts` を経由して `.env.local` を読む
 
-### 4. git-auto-sync.ps1の自動起動設定（タスクスケジューラ等）
+### 3. ローカルでは Redis だけ起動する
 
-- `scripts/git-auto-sync.ps1` をWindowsタスクスケジューラで「5分ごと」や「10分ごと」に自動実行するよう設定
-- 例: タスクスケジューラで「新しいタスクの作成」→「プログラム/スクリプト」に `powershell`、引数に `-File "C:\Users\<ユーザー名>\construction-manager\scripts\git-auto-sync.ps1" -IntervalMinutes 5` を指定
-- またはVS Codeのタスク「git: auto-sync (continuous 5min)」を利用
+- `docker-compose.yml` はローカル検証用の Postgres / Redis を定義している
+- Supabase を使う運用では DB はクラウド側を使うため、最低限 `redis` が起動していればよい
+- Redis が必要な場合は `npm run docker:up` で起動する
 
-### 5. 両拠点で「npm run dev」や「npm run docker:up」など通常の開発運用を開始
+### 4. Prisma コマンドは config 付きスクリプトを使う
 
-- どちらの拠点でも `npm install` → `npm run dev` で開発を開始
-- DBマイグレーションやデータ反映も常に同期
-- 以降は自動でコード・DBが同期されるため、どちらでも編集・運用可能
+- Prisma 7 では接続先を `prisma/prisma.config.ts` で解決する
+- 直接 `npx prisma ...` を打つより、次の npm script を使う
+
+```bash
+npm run db:generate
+npm run db:deploy
+npm run db:push
+npm run db:studio
+```
+
+### 5. 両拠点の初回セットアップ手順
+
+```bash
+npm install
+npm run docker:up
+npm run db:generate
+npm run db:deploy
+npm run dev
+```
+
+- `npm run dev` は Windows での Turbopack 権限問題を避けるため webpack モードで起動する
+- 会社PCでも自宅PCでも `.env.local` の `DATABASE_URL` を同じ値にすれば、同じ Supabase DB を共有できる
+- 実データは Supabase に集約されるため、PC間でDBファイルをコピーする必要はない
 
 ---
 
@@ -88,54 +108,33 @@ npm install
 
 ```bash
 npm run docker:up
+```
 
 4) Prisma
 
+```bash
+npm run db:generate
+npm run db:deploy
+```
+
+5) 開発起動
+
+```bash
+npm run dev
+```
 
 ### 未起動/落ちた時に自動起動させたい
 
 - `npm run dev:keep` はヘルスチェック（`/api/health`）で起動確認し、
-	- 既に起動中なら二重起動せず待機
-	- 起動していなければ `npm run dev` を起動
-	- プロセスが落ちたら自動で再起動
+- 既に起動中なら二重起動せず待機
+- 起動していなければ `npm run dev` を起動
+- プロセスが落ちたら自動で再起動
+
 #### Windows ログオン時に自動起動（任意）
 
 権限（管理者）不要で確実なのは「スタートアップ」方式です。
 
 ※ 現在は bg方式（`dev:keep:bg`）で自動起動するようにしているため、既に設定済みでも `dev:startup:install` を一度実行するとショートカットが更新されます。
-````
-
-## 会社・自宅での常時同期運用（推奨構成）
-
-### コードの自動同期
-
-- GitHub等のリモートリポジトリを利用し、両拠点で同じリポジトリをclone
-- `scripts/git-auto-sync.ps1` をWindowsタスクスケジューラ等で常駐させることで、変更を自動でpush/pull/commit
-	- 例: 5分ごと自動同期 `npm run git:sync:5min`、10分ごと `npm run git:sync:10min`
-- 詳細は上記「Git自動同期」セクション参照
-
-### DBの同期（クラウドDB推奨）
-
-- PostgresはSupabase/Neon/AWS RDS等のクラウドDBを利用し、`.env.local` の `DATABASE_URL` を同じ値に統一
-- どちらの拠点からも同じDBにアクセスすることで、マイグレーションやデータ反映も常に同期
-- Redisも同様にクラウドサービスを利用可能
-
-#### 例: .env.local
-```
-DATABASE_URL="postgresql://USER:PASSWORD@YOUR_CLOUD_HOST:5432/YOUR_DB?schema=public"
-REDIS_URL="redis://:PASSWORD@YOUR_CLOUD_REDIS_HOST:6379/0"
-```
-
-### 注意点
-- DBの同時マイグレーションや同時編集は競合に注意
-- Gitの自動同期はコンフリクト時は手動解決が必要
-- セキュリティのため、DB/Redisのパスワード管理・アクセス制御に注意
-
----
-※ スケジュールタスク方式（環境によっては権限で弾かれます）:
-
-- インストール: `npm run dev:autostart:install`
-- アンインストール: `npm run dev:autostart:uninstall`
 
 ### Prisma
 
