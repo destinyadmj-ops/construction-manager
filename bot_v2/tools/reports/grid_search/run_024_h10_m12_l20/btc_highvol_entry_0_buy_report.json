@@ -1,0 +1,55 @@
+{
+  "csv": "bot_v2/tools/data/btc_highvol.csv",
+  "entry_index": 0,
+  "entry_price": 68025.36,
+  "num_trades": 6,
+  "total_pnl": -329.53840011870295,
+  "win_rate": 0.8333333333333334,
+  "wins": 5,
+  "losses": 1,
+  "avg_pnl": -54.92306668645049,
+  "avg_win": 0.2525537655353382,
+  "avg_loss": -330.8011689463796,
+  "max_drawdown": 330.8011689463796,
+  "max_drawdown_pct": 261.96494694520226,
+  "max_consecutive_wins": 5,
+  "max_consecutive_losses": 1,
+  "trades": [
+    {
+      "exit_idx": 4,
+      "price": 69037.35,
+      "pnl": 0.03035970000000016,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 6,
+      "price": 72204.54,
+      "pnl": 0.12462427597859978,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 6,
+      "price": 72204.54,
+      "pnl": 0.12425152476914779,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 8,
+      "price": 84740.01,
+      "pnl": 0.4924987960689452,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 8,
+      "price": 84740.01,
+      "pnl": 0.4910345308599981,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 9,
+      "price": 34446.96,
+      "pnl": -330.8011689463796,
+      "reason": "hard_stop,dynamic_sl_hit"
+    }
+  ]
+}

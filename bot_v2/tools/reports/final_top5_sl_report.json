@@ -1,0 +1,181 @@
+{
+  "top5": [
+    {
+      "combo_idx": "1",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.16]]"
+    },
+    {
+      "combo_idx": "2",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.18]]"
+    },
+    {
+      "combo_idx": "3",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.2]]"
+    },
+    {
+      "combo_idx": "4",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.12], [0.0, 0.16]]"
+    },
+    {
+      "combo_idx": "5",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.12], [0.0, 0.18]]"
+    }
+  ],
+  "sl_summary": [
+    {
+      "entry_index": "11",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "13",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "14",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "19",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "35",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "86",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "92",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "141",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "156",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "223",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "227",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "230",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "290",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "323",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "345",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "363",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "366",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "381",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "386",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    },
+    {
+      "entry_index": "428",
+      "entry_price": "1000000.0",
+      "num_trades": "0",
+      "sl_hits": "0",
+      "total_pnl": "0"
+    }
+  ]
+}

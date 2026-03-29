@@ -1,0 +1,49 @@
+{
+  "csv": "bot_v2\\tools\\data\\synthetic.csv",
+  "entry_index": 0,
+  "entry_price": 100.0,
+  "num_trades": 5,
+  "total_pnl": -0.19940090000000005,
+  "win_rate": 0.0,
+  "wins": 0,
+  "losses": 5,
+  "avg_pnl": -0.03988018000000001,
+  "avg_win": 0.0,
+  "avg_loss": -0.03988018000000001,
+  "max_drawdown": 0.19940090000000005,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 0,
+  "max_consecutive_losses": 5,
+  "trades": [
+    {
+      "exit_idx": 1,
+      "price": 110.0,
+      "pnl": -0.00030000000000000003,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 1,
+      "price": 110.0,
+      "pnl": -0.0002991,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 2,
+      "price": 120.0,
+      "pnl": -0.0005928323352486,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 2,
+      "price": 120.0,
+      "pnl": -0.0005910644932184156,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 2,
+      "price": 120.0,
+      "pnl": -0.19761790317153302,
+      "reason": "partial_tp,partial_tp,dynamic_sl_hit"
+    }
+  ]
+}

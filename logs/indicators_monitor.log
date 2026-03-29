@@ -1,0 +1,6 @@
+2026-03-25 23:00:26,580 WARNING indicators_monitor: [監視] indicators heartbeat stale (> 1s). 確認してください。
+2026-03-25 23:11:23,811 WARNING indicators_monitor: Alert sent to webhook: https://tanaka-bot.org/webhook
+2026-03-25 23:11:29,139 WARNING indicators_monitor: Alert sent to webhook: https://tanaka-bot.org/webhook
+2026-03-26 00:58:02,221 WARNING indicators_monitor: Alert sent to webhook: https://tanaka-bot.org/webhook
+2026-03-26 02:14:10,791 INFO indicators_monitor: send_slack_alert attempt=1 status=200 url=https://tanaka-bot.org/webhook body_snip={"blocked_reasons":{"alert_a":"ob_or_sweep_not_aligned","alert_b":"trend_bos_not_confirmed","alert_c":"rebound_not_low_vol","alert_d":"sniper_low_volatility"},"bot_score":0.0,"candidates":[],"news_bia
+2026-03-26 02:14:10,794 WARNING indicators_monitor: Alert sent to webhook: https://tanaka-bot.org/webhook

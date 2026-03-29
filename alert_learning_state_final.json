@@ -1,0 +1,127 @@
+{
+  "alerts": {
+    "alert_a": {
+      "weight": 1.0,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0,
+      "rr_total": 0
+    },
+    "alert_b": {
+      "weight": 1.05,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0,
+      "rr_total": 0
+    },
+    "alert_c": {
+      "weight": 1.1,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0,
+      "rr_total": 0
+    },
+    "alert_d": {
+      "weight": 0.7484,
+      "closed": 5,
+      "wins": 3,
+      "roi_total": 0.041999999999999996,
+      "rr_total": 10.0
+    }
+  },
+  "trades": [
+    {
+      "trade_id": 1,
+      "alert": "alert_d",
+      "symbol": "BTCUSDT",
+      "side": "sell",
+      "size": 0.007,
+      "signal_bundle": [
+        "SELL",
+        "webhook_v2"
+      ],
+      "result": "loss",
+      "win": false,
+      "roi": 0.0,
+      "rr": 2.0,
+      "time_slot_utc": 12,
+      "opened_at": "2026-03-17T12:40:08.286368+00:00",
+      "closed_at": "reconciled"
+    },
+    {
+      "trade_id": 2,
+      "alert": "alert_d",
+      "symbol": "BTCUSDT",
+      "side": "buy",
+      "size": 0.007,
+      "signal_bundle": [
+        "BUY",
+        "webhook_v2"
+      ],
+      "result": "loss",
+      "win": false,
+      "roi": 0.0,
+      "rr": 2.0,
+      "time_slot_utc": 12,
+      "opened_at": "2026-03-17T12:40:36.342302+00:00",
+      "closed_at": "reconciled"
+    },
+    {
+      "trade_id": 3,
+      "alert": "alert_d",
+      "symbol": "BTCUSDT",
+      "side": "buy",
+      "size": 0.008,
+      "signal_bundle": [
+        "BUY",
+        "webhook_v2"
+      ],
+      "result": "win",
+      "win": true,
+      "roi": 0.018,
+      "rr": 2.0,
+      "time_slot_utc": 12,
+      "opened_at": "2026-03-17T12:52:12.377388+00:00",
+      "closed_at": "manual_backfill"
+    },
+    {
+      "trade_id": 4,
+      "alert": "alert_d",
+      "symbol": "BTCUSDT",
+      "side": "buy",
+      "size": 0.009,
+      "signal_bundle": [
+        "BUY",
+        "webhook_v2"
+      ],
+      "result": "win",
+      "win": true,
+      "roi": 0.012,
+      "rr": 2.0,
+      "time_slot_utc": 12,
+      "opened_at": "2026-03-17T12:53:57.570872+00:00",
+      "closed_at": "2026-03-17T12:53:59.042544+00:00"
+    },
+    {
+      "trade_id": 5,
+      "alert": "alert_d",
+      "symbol": "BTCUSDT",
+      "side": "buy",
+      "size": 0.01,
+      "signal_bundle": [
+        "BUY",
+        "webhook_v2"
+      ],
+      "result": "win",
+      "win": true,
+      "roi": 0.012,
+      "rr": 2.0,
+      "time_slot_utc": 12,
+      "opened_at": "2026-03-17T12:54:08.911889+00:00",
+      "closed_at": "2026-03-17T12:54:14.137830+00:00"
+    }
+  ],
+  "next_trade_id": 6,
+  "doten_history": {},
+  "last_updated": "2026-03-17T12:54:14.137978+00:00"
+}

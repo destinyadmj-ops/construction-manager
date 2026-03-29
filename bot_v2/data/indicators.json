@@ -1,0 +1,10 @@
+{
+  "timestamp": 1774442270,
+  "ATR": 0.03,
+  "RSI": 56.0,
+  "volatility": 0.0025,
+  "ema_fast": 12400,
+  "ema_slow": 12380,
+  "symbol": "TESTBTC",
+  "timeframe": "1m"
+}

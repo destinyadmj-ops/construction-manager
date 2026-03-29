@@ -1,0 +1,4 @@
+dataset,samples,avg_sl_hits,avg_total_pnl,avg_num_trades,pct_zero_trades
+v5_random,100,0.0,1621807156.477296,483.9,0.22
+v4_random,100,0.0,670.5634686607322,148.68,0.84
+history_random,100,0.0,78.41060024990284,129.28,0.86

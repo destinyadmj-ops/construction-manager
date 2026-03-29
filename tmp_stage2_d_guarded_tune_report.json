@@ -1,0 +1,93 @@
+{
+  "started_at": 1774010951,
+  "updated_at": 1774011852,
+  "finished": false,
+  "checks": 4,
+  "max_checks": 18,
+  "interval_sec": 300,
+  "condition": {
+    "min_trades": 8,
+    "max_win_rate": 0.4,
+    "max_avg_roi": 0.0
+  },
+  "target": {
+    "ALERT_D_ENTRY_STOP_LOSS_PCT": "0.07",
+    "ALERT_D_ROI_STOP_LOCK_LEVELS": "0.10,0.22,0.40"
+  },
+  "applied": false,
+  "applied_at": null,
+  "history_tail": [
+    {
+      "ts": 1774010951,
+      "iter": 1,
+      "row": {
+        "action": "lifecycle_close",
+        "alert_name": "alert_d",
+        "avg_roi": -0.002332,
+        "losses": 5,
+        "pnl_sum": -0.511076,
+        "position_state": "mixed",
+        "roi_sum": -0.013994,
+        "trades": 6,
+        "updated_at": 1773990635,
+        "win_rate": 0.1667,
+        "wins": 1
+      },
+      "error": null
+    },
+    {
+      "ts": 1774011251,
+      "iter": 2,
+      "row": {
+        "action": "lifecycle_close",
+        "alert_name": "alert_d",
+        "avg_roi": -0.002332,
+        "losses": 5,
+        "pnl_sum": -0.511076,
+        "position_state": "mixed",
+        "roi_sum": -0.013994,
+        "trades": 6,
+        "updated_at": 1773990635,
+        "win_rate": 0.1667,
+        "wins": 1
+      },
+      "error": null
+    },
+    {
+      "ts": 1774011552,
+      "iter": 3,
+      "row": {
+        "action": "lifecycle_close",
+        "alert_name": "alert_d",
+        "avg_roi": -0.002332,
+        "losses": 5,
+        "pnl_sum": -0.511076,
+        "position_state": "mixed",
+        "roi_sum": -0.013994,
+        "trades": 6,
+        "updated_at": 1773990635,
+        "win_rate": 0.1667,
+        "wins": 1
+      },
+      "error": null
+    },
+    {
+      "ts": 1774011852,
+      "iter": 4,
+      "row": {
+        "action": "lifecycle_close",
+        "alert_name": "alert_d",
+        "avg_roi": -0.002332,
+        "losses": 5,
+        "pnl_sum": -0.511076,
+        "position_state": "mixed",
+        "roi_sum": -0.013994,
+        "trades": 6,
+        "updated_at": 1773990635,
+        "win_rate": 0.1667,
+        "wins": 1
+      },
+      "error": null
+    }
+  ]
+}

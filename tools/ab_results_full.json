@@ -1,0 +1,672 @@
+[
+  {
+    "coef": 0.0001,
+    "result": {
+      "aggregate": {
+        "runs": 6,
+        "total_pnl_sum": 4.129410000000004,
+        "avg_win_rate": 0.3333333333333333
+      },
+      "reports": [
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 1,
+          "total_pnl": 2.0833499999999914,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.0833499999999914,
+          "avg_win": 2.0833499999999914,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 495,
+              "price": 67330.91,
+              "pnl": 2.0833499999999914,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 1,
+          "total_pnl": 2.046060000000012,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.046060000000012,
+          "avg_win": 2.046060000000012,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 309,
+              "price": 67448.15,
+              "pnl": 2.046060000000012,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        }
+      ]
+    }
+  },
+  {
+    "coef": 0.0005,
+    "result": {
+      "aggregate": {
+        "runs": 6,
+        "total_pnl_sum": 4.129410000000004,
+        "avg_win_rate": 0.3333333333333333
+      },
+      "reports": [
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 1,
+          "total_pnl": 2.0833499999999914,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.0833499999999914,
+          "avg_win": 2.0833499999999914,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 495,
+              "price": 67330.91,
+              "pnl": 2.0833499999999914,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 1,
+          "total_pnl": 2.046060000000012,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.046060000000012,
+          "avg_win": 2.046060000000012,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 309,
+              "price": 67448.15,
+              "pnl": 2.046060000000012,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        }
+      ]
+    }
+  },
+  {
+    "coef": 0.001,
+    "result": {
+      "aggregate": {
+        "runs": 6,
+        "total_pnl_sum": 4.129410000000004,
+        "avg_win_rate": 0.3333333333333333
+      },
+      "reports": [
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 1,
+          "total_pnl": 2.0833499999999914,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.0833499999999914,
+          "avg_win": 2.0833499999999914,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 495,
+              "price": 67330.91,
+              "pnl": 2.0833499999999914,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 1,
+          "total_pnl": 2.046060000000012,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.046060000000012,
+          "avg_win": 2.046060000000012,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 309,
+              "price": 67448.15,
+              "pnl": 2.046060000000012,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        }
+      ]
+    }
+  },
+  {
+    "coef": 0.005,
+    "result": {
+      "aggregate": {
+        "runs": 6,
+        "total_pnl_sum": 4.129410000000004,
+        "avg_win_rate": 0.3333333333333333
+      },
+      "reports": [
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 1,
+          "total_pnl": 2.0833499999999914,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.0833499999999914,
+          "avg_win": 2.0833499999999914,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 495,
+              "price": 67330.91,
+              "pnl": 2.0833499999999914,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 1,
+          "total_pnl": 2.046060000000012,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.046060000000012,
+          "avg_win": 2.046060000000012,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 309,
+              "price": 67448.15,
+              "pnl": 2.046060000000012,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        }
+      ]
+    }
+  },
+  {
+    "coef": 0.01,
+    "result": {
+      "aggregate": {
+        "runs": 6,
+        "total_pnl_sum": 4.129410000000004,
+        "avg_win_rate": 0.3333333333333333
+      },
+      "reports": [
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 0,
+          "entry_price": 68025.36,
+          "num_trades": 1,
+          "total_pnl": 2.0833499999999914,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.0833499999999914,
+          "avg_win": 2.0833499999999914,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 495,
+              "price": 67330.91,
+              "pnl": 2.0833499999999914,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 100,
+          "entry_price": 68130.17,
+          "num_trades": 1,
+          "total_pnl": 2.046060000000012,
+          "win_rate": 1.0,
+          "wins": 1,
+          "losses": 0,
+          "avg_pnl": 2.046060000000012,
+          "avg_win": 2.046060000000012,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 1,
+          "max_consecutive_losses": 0,
+          "trades": [
+            {
+              "exit_idx": 309,
+              "price": 67448.15,
+              "pnl": 2.046060000000012,
+              "reason": "partial"
+            }
+          ]
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        },
+        {
+          "csv": "bot_v2/tools/data/btc_sample.csv",
+          "entry_index": 200,
+          "entry_price": 67744.99,
+          "num_trades": 0,
+          "total_pnl": 0,
+          "win_rate": 0.0,
+          "wins": 0,
+          "losses": 0,
+          "avg_pnl": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "max_drawdown": 0.0,
+          "max_drawdown_pct": 0.0,
+          "max_consecutive_wins": 0,
+          "max_consecutive_losses": 0,
+          "trades": []
+        }
+      ]
+    }
+  }
+]

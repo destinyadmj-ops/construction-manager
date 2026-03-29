@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: trading-bot-rollout
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: trading-bot
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+    spec:
+      containers:
+        - name: trading-bot
+          image: myregistry/trading-bot:latest
+          env:
+            - name: REWARD_BEST_ARB_COEF
+              value: "0.0001"
+          # other env and config maintained as in your Deployment
+  strategy:
+    canary:
+      steps:
+        - setWeight: 1
+        - pause: { duration: 3600 }
+        - setWeight: 5
+        - pause: { duration: 3600 }
+        - setWeight: 25
+        - pause: { duration: 3600 }
+        - setWeight: 100
+      trafficRouting:
+        # Requires service mesh (e.g., Istio/Contour/Traefik) or other provider integration
+        istio:
+          virtualService:
+            name: trading-bot
+            routes:
+              - primary
+
+  progressDeadlineSeconds: 600
+
+# Note:
+# - Ensure you have Argo Rollouts controller installed in the cluster.
+# - Traffic routing requires a supported provider (Istio/Contour/Traefik). Adjust the trafficRouting section accordingly.

@@ -1,0 +1,8 @@
+[Unit]
+Description=Reconcile Link Gap Alert Check
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/linuxuser
+ExecStart=/usr/bin/python3 /home/linuxuser/tmp_alert_reconcile_link_gap.py --threshold 1 --window-seconds 86400 --recent-limit 10

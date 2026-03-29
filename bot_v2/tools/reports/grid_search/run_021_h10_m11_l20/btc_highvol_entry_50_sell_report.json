@@ -1,0 +1,25 @@
+{
+  "csv": "bot_v2/tools/data/btc_highvol.csv",
+  "entry_index": 50,
+  "entry_price": 7.374229256479107e+16,
+  "num_trades": 1,
+  "total_pnl": 2212268776941691.0,
+  "win_rate": 1.0,
+  "wins": 1,
+  "losses": 0,
+  "avg_pnl": 2212268776941691.0,
+  "avg_win": 2212268776941691.0,
+  "avg_loss": 0.0,
+  "max_drawdown": 0.0,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 1,
+  "max_consecutive_losses": 0,
+  "trades": [
+    {
+      "exit_idx": 51,
+      "price": -1.4748458512937802e+17,
+      "pnl": 2212268776941691.0,
+      "reason": "hard_stop"
+    }
+  ]
+}

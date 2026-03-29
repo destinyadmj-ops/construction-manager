@@ -1,0 +1,25 @@
+{
+  "csv": "bot_v2/tools/data/down_test.csv",
+  "entry_index": 0,
+  "entry_price": 100.0,
+  "num_trades": 1,
+  "total_pnl": -3.0,
+  "win_rate": 0.0,
+  "wins": 0,
+  "losses": 1,
+  "avg_pnl": -3.0,
+  "avg_win": 0.0,
+  "avg_loss": -3.0,
+  "max_drawdown": 3.0,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 0,
+  "max_consecutive_losses": 1,
+  "trades": [
+    {
+      "exit_idx": 3,
+      "price": 70.0,
+      "pnl": -3.0,
+      "reason": "hard_stop,dynamic_sl_hit"
+    }
+  ]
+}

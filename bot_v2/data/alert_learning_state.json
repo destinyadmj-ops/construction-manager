@@ -1,0 +1,48 @@
+{
+  "alerts": {
+    "alert_a": {
+      "weight": 1.0,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0.0,
+      "rr_total": 0.0,
+      "pnl_total": 0.0,
+      "last_profit": 0.0,
+      "recent_profits": []
+    },
+    "alert_b": {
+      "weight": 1.0,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0.0,
+      "rr_total": 0.0,
+      "pnl_total": 0.0,
+      "last_profit": 0.0,
+      "recent_profits": []
+    },
+    "alert_c": {
+      "weight": 1.0,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0.0,
+      "rr_total": 0.0,
+      "pnl_total": 0.0,
+      "last_profit": 0.0,
+      "recent_profits": []
+    },
+    "alert_d": {
+      "weight": 1.0,
+      "closed": 0,
+      "wins": 0,
+      "roi_total": 0.0,
+      "rr_total": 0.0,
+      "pnl_total": 0.0,
+      "last_profit": 0.0,
+      "recent_profits": []
+    }
+  },
+  "trades": [],
+  "next_trade_id": 1,
+  "doten_history": {},
+  "last_updated": "2026-03-21T02:15:22.185263+00:00"
+}

@@ -1,0 +1,20 @@
+# Windows: C:\Users\<YourUser>\.ssh\config に貼り付け
+# 値を置換して使用
+
+Host vultr-trading-prod
+    HostName 167.179.65.195
+    User root
+    Port 22
+    IdentityFile C:\Users\desti\.ssh\id_ed25519_root
+    ServerAliveInterval 30
+    ServerAliveCountMax 120
+    IdentitiesOnly yes
+
+Host vultr-trading-stg
+    HostName <VULTR_STAGING_IP>
+    User <SSH_USER>
+    Port 22
+    IdentityFile C:\Users\<YourUser>\.ssh\id_ed25519
+    ServerAliveInterval 30
+    ServerAliveCountMax 120
+    IdentitiesOnly yes

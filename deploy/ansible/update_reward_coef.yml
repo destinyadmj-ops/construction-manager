@@ -1,0 +1,61 @@
+---
+# Ansible playbook: Update REWARD_BEST_ARB_COEF in Kubernetes Deployment and perform canary rollout steps
+# Usage: ansible-playbook deploy/ansible/update_reward_coef.yml -e "k8s_namespace=default deployment_name=trading-bot" -e "coef=0.0001"
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    k8s_namespace: "default"
+    deployment_name: "trading-bot"
+    container_name: "trading-bot"
+    coef: "0.0001"
+    rollout_steps: [1, 5, 25, 100]
+    step_interval_minutes: 60
+
+  tasks:
+    - name: Ensure kubectl context is configured
+      command: kubectl version --client
+
+    - name: Patch deployment env var for preview (create new env var value)
+      community.kubernetes.k8s:
+        state: patched
+        namespace: "{{ k8s_namespace }}"
+        kind: Deployment
+        name: "{{ deployment_name }}"
+        merge_type: strategic
+        definition:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: "{{ container_name }}"
+                    env:
+                      - name: REWARD_BEST_ARB_COEF
+                        value: "{{ coef }}"
+
+    - name: Wait for rollout to start
+      command: kubectl rollout status deployment/{{ deployment_name }} -n {{ k8s_namespace }} --watch=true
+
+    - name: Canary rollout steps (assumes service mesh / traffic routing supports weights)
+      vars:
+        sleep_seconds: "{{ step_interval_minutes | int * 60 }}"
+      loop: "{{ rollout_steps }}"
+      loop_control:
+        loop_var: weight
+      block:
+        - name: Set canary weight to {{ weight }}%
+          # This assumes usage of Argo Rollouts or traffic routing that supports setWeight; fallback uses annotation.
+          command: kubectl patch rollout {{ deployment_name }} -n {{ k8s_namespace }} --type='merge' -p '{"spec":{"strategy":{"canary":{"steps":[{"setWeight":{{ weight }} }]}}}}'
+          ignore_errors: yes
+
+        - name: Sleep between steps
+          pause:
+            seconds: "{{ sleep_seconds }}"
+
+    - name: Finalize rollout (ensure 100%)
+      command: kubectl patch rollout {{ deployment_name }} -n {{ k8s_namespace }} --type='merge' -p '{"spec":{"strategy":{"canary":{"steps":[{"setWeight":100}]}}}}'
+      ignore_errors: yes
+
+    - name: Print completion
+      debug:
+        msg: "Canary rollout playbook completed. Monitor metrics and rollback if anomalies detected."

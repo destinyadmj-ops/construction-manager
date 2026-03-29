@@ -1,0 +1,5839 @@
+{
+  "csv": "bot_v2/tools/data/btc_highvol_sanitized_v3_entry_14.csv",
+  "entry_index": 14,
+  "entry_price": 88044.93126001,
+  "num_trades": 970,
+  "total_pnl": 5955.426954833468,
+  "win_rate": 1.0,
+  "wins": 970,
+  "losses": 0,
+  "avg_pnl": 6.139615417354091,
+  "avg_win": 6.139615417354091,
+  "avg_loss": 0.0,
+  "max_drawdown": 0.0,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 970,
+  "max_consecutive_losses": 0,
+  "trades": [
+    {
+      "exit_idx": 15,
+      "price": 96849.42438601,
+      "pnl": 0.26413479378000004,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 15,
+      "price": 96849.42438601,
+      "pnl": 0.26334238939866006,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 16,
+      "price": 106534.36682462,
+      "pnl": 0.5480567631598132,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 16,
+      "price": 106534.36682462,
+      "pnl": 0.546422443094538,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 17,
+      "price": 117187.80350708,
+      "pnl": 0.8535838502608639,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 17,
+      "price": 117187.80350708,
+      "pnl": 0.8510535985008193,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 18,
+      "price": 128906.58385779,
+      "pnl": 1.1826947122614995,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 18,
+      "price": 128906.58385779,
+      "pnl": 1.1792096411312745,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 19,
+      "price": 141797.24224356,
+      "pnl": 1.5375432228941364,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 19,
+      "price": 141797.24224356,
+      "pnl": 1.5330391744080458,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 20,
+      "price": 155976.96646792,
+      "pnl": 1.9204742837379478,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 20,
+      "price": 155976.96646792,
+      "pnl": 1.9148813965621683,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 21,
+      "price": 171574.66311471,
+      "pnl": 2.3340410644782343,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 21,
+      "price": 171574.66311471,
+      "pnl": 2.327283303562883,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 22,
+      "price": 188732.12942618,
+      "pnl": 2.7810238022036766,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 22,
+      "price": 188732.12942618,
+      "pnl": 2.7730184478913507,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 23,
+      "price": 207605.3423688,
+      "pnl": 3.2644503016802178,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 23,
+      "price": 207605.3423688,
+      "pnl": 3.255107394819701,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 24,
+      "price": 228365.87660568,
+      "pnl": 3.78761829152382,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 24,
+      "price": 228365.87660568,
+      "pnl": 3.776840030815601,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 25,
+      "price": 251202.46426625,
+      "pnl": 4.354119805355091,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 25,
+      "price": 251202.46426625,
+      "pnl": 4.341799892826921,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 26,
+      "price": 276322.71069288,
+      "pnl": 4.967867772483198,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 26,
+      "price": 276322.71069288,
+      "pnl": 4.953890702636841,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 27,
+      "price": 303954.98176216,
+      "pnl": 5.6331250195545515,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 27,
+      "price": 303954.98176216,
+      "pnl": 5.617365307336578,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 28,
+      "price": 334350.47993838,
+      "pnl": 6.354535903040903,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 28,
+      "price": 334350.47993838,
+      "pnl": 6.336857245368152,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 29,
+      "price": 367785.52793222,
+      "pnl": 7.1371608125672665,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 29,
+      "price": 367785.52793222,
+      "pnl": 7.117415177678401,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 30,
+      "price": 404564.08072544,
+      "pnl": 7.986513807076112,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 30,
+      "price": 404564.08072544,
+      "pnl": 7.964540445481313,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 31,
+      "price": 445020.48879798,
+      "pnl": 8.908603669819268,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 31,
+      "price": 445020.48879798,
+      "pnl": 8.884228040076966,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 32,
+      "price": 489522.53767778,
+      "pnl": 9.909978694390126,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 32,
+      "price": 489522.53767778,
+      "pnl": 9.88301129634895,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 33,
+      "price": 538474.79144556,
+      "pnl": 10.997775542634098,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 33,
+      "price": 538474.79144556,
+      "pnl": 10.968010650135632,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 34,
+      "price": 592322.27059012,
+      "pnl": 12.17977254654045,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 34,
+      "price": 592322.27059012,
+      "pnl": 12.146986830879461,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 35,
+      "price": 651554.49764913,
+      "pnl": 13.464447860357394,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 35,
+      "price": 651554.49764913,
+      "pnl": 13.428398895035883,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 36,
+      "price": 716709.94741404,
+      "pnl": 14.861042906462979,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 36,
+      "price": 716709.94741404,
+      "pnl": 14.8214675429473,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 37,
+      "price": 788380.94215545,
+      "pnl": 16.379631599243456,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 37,
+      "price": 788380.94215545,
+      "pnl": 16.336244202533944,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 38,
+      "price": 867219.03637099,
+      "pnl": 18.031195875708534,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 38,
+      "price": 867219.03637099,
+      "pnl": 17.98368640755214,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 39,
+      "price": 953940.94000809,
+      "pnl": 19.82770811015186,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 39,
+      "price": 953940.94000809,
+      "pnl": 19.775740046663262,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 40,
+      "price": 1000000.0,
+      "pnl": 20.664320616606176,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 40,
+      "price": 1000000.0,
+      "pnl": 20.610443343846047,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 41,
+      "price": 1000000.0,
+      "pnl": 20.44965289413329,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 41,
+      "price": 1000000.0,
+      "pnl": 20.396612979325248,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 42,
+      "price": 1000000.0,
+      "pnl": 20.238317220905035,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 42,
+      "price": 1000000.0,
+      "pnl": 20.18609738474253,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 43,
+      "price": 1000000.0,
+      "pnl": 20.03024492662894,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 43,
+      "price": 1000000.0,
+      "pnl": 19.978828333563364,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 44,
+      "price": 1000000.0,
+      "pnl": 19.825369102316593,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 44,
+      "price": 1000000.0,
+      "pnl": 19.774739346943004,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 45,
+      "price": 1000000.0,
+      "pnl": 19.6236245463162,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 45,
+      "price": 1000000.0,
+      "pnl": 19.573765640244112,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 46,
+      "price": 1000000.0,
+      "pnl": 19.4249477122656,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 46,
+      "price": 1000000.0,
+      "pnl": 19.37584407145519,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 47,
+      "price": 1000000.0,
+      "pnl": 19.22927665888792,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 47,
+      "price": 1000000.0,
+      "pnl": 19.180913091432892,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 48,
+      "price": 1000000.0,
+      "pnl": 19.03655100155572,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 48,
+      "price": 1000000.0,
+      "pnl": 18.988912695894868,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 49,
+      "price": 1000000.0,
+      "pnl": 18.84671186555272,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 49,
+      "price": 1000000.0,
+      "pnl": 18.799784379093104,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 50,
+      "price": 1000000.0,
+      "pnl": 18.659701840965432,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 50,
+      "price": 1000000.0,
+      "pnl": 18.613471089100802,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 51,
+      "price": 1000000.0,
+      "pnl": 18.47546493913998,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 51,
+      "price": 1000000.0,
+      "pnl": 18.429917184648865,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 52,
+      "price": 1000000.0,
+      "pnl": 18.293946550642445,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 52,
+      "price": 1000000.0,
+      "pnl": 18.249068393450898,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 53,
+      "price": 1000000.0,
+      "pnl": 18.115093404663522,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 53,
+      "price": 1000000.0,
+      "pnl": 18.0708717719583,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 54,
+      "price": 1000000.0,
+      "pnl": 17.93885352981109,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 54,
+      "price": 1000000.0,
+      "pnl": 17.895275666489642,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 55,
+      "price": 1000000.0,
+      "pnl": 17.765176216236757,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 55,
+      "price": 1000000.0,
+      "pnl": 17.7222296756809,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 56,
+      "price": 1000000.0,
+      "pnl": 17.59401197904464,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 56,
+      "price": 1000000.0,
+      "pnl": 17.551684614205502,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 57,
+      "price": 1000000.0,
+      "pnl": 17.42531252293309,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 57,
+      "price": 1000000.0,
+      "pnl": 17.383592477715325,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 58,
+      "price": 1000000.0,
+      "pnl": 17.259030708021953,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 58,
+      "price": 1000000.0,
+      "pnl": 17.217906408955816,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 59,
+      "price": 1000000.0,
+      "pnl": 17.095120516820288,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 59,
+      "price": 1000000.0,
+      "pnl": 17.054580665010636,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 60,
+      "price": 1000000.0,
+      "pnl": 16.933537022291123,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 60,
+      "price": 1000000.0,
+      "pnl": 16.893570585632848,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 61,
+      "price": 1000000.0,
+      "pnl": 16.774236356971848,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 61,
+      "price": 1000000.0,
+      "pnl": 16.73483256262171,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 62,
+      "price": 1000000.0,
+      "pnl": 16.617175683110464,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 62,
+      "price": 1000000.0,
+      "pnl": 16.578324010205723,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 63,
+      "price": 1000000.0,
+      "pnl": 16.46231316377978,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 63,
+      "price": 1000000.0,
+      "pnl": 16.424003336394385,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 64,
+      "price": 1000000.0,
+      "pnl": 16.30960793493296,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 64,
+      "price": 1000000.0,
+      "pnl": 16.27182991526255,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 65,
+      "price": 1000000.0,
+      "pnl": 16.159020078365653,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 65,
+      "price": 1000000.0,
+      "pnl": 16.121764060132822,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 66,
+      "price": 1000000.0,
+      "pnl": 16.010510595551118,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 66,
+      "price": 1000000.0,
+      "pnl": 15.97376699762291,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 67,
+      "price": 1000000.0,
+      "pnl": 15.864041382316328,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 67,
+      "price": 1000000.0,
+      "pnl": 15.827800842526143,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 68,
+      "price": 1000000.0,
+      "pnl": 15.719575204328315,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 68,
+      "price": 1000000.0,
+      "pnl": 15.6838285734948,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 69,
+      "price": 1000000.0,
+      "pnl": 15.577075673361131,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 69,
+      "price": 1000000.0,
+      "pnl": 15.541814009496914,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 70,
+      "price": 1000000.0,
+      "pnl": 15.436507224315294,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 70,
+      "price": 1000000.0,
+      "pnl": 15.401721787018671,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 71,
+      "price": 1000000.0,
+      "pnl": 15.297835092962414,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 71,
+      "price": 1000000.0,
+      "pnl": 15.263517337985446,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 72,
+      "price": 1000000.0,
+      "pnl": 15.161025294389086,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 72,
+      "price": 1000000.0,
+      "pnl": 15.127166868375776,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 73,
+      "price": 1000000.0,
+      "pnl": 15.026044602114926,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 73,
+      "price": 1000000.0,
+      "pnl": 14.99263733750339,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 74,
+      "price": 1000000.0,
+      "pnl": 14.892860527860826,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 74,
+      "price": 1000000.0,
+      "pnl": 14.859896437943684,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 75,
+      "price": 1000000.0,
+      "pnl": 14.76144130194436,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 75,
+      "price": 1000000.0,
+      "pnl": 14.72891257608174,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 76,
+      "price": 1000000.0,
+      "pnl": 14.631755854280206,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 76,
+      "price": 1000000.0,
+      "pnl": 14.599654853259965,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 77,
+      "price": 1000000.0,
+      "pnl": 14.503773795964342,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 77,
+      "price": 1000000.0,
+      "pnl": 14.472093047504405,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 78,
+      "price": 1000000.0,
+      "pnl": 14.377465401421599,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 78,
+      "price": 1000000.0,
+      "pnl": 14.34619759580941,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 79,
+      "price": 1000000.0,
+      "pnl": 14.252801591096928,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 79,
+      "price": 1000000.0,
+      "pnl": 14.221939576961287,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 80,
+      "price": 1000000.0,
+      "pnl": 14.129753914671555,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 80,
+      "price": 1000000.0,
+      "pnl": 14.099290694882251,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 81,
+      "price": 1000000.0,
+      "pnl": 14.008294534785934,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 81,
+      "price": 1000000.0,
+      "pnl": 13.978223262476767,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 82,
+      "price": 1000000.0,
+      "pnl": 13.88839621125197,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 82,
+      "price": 1000000.0,
+      "pnl": 13.858710185962991,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 83,
+      "price": 1000000.0,
+      "pnl": 13.77003228573793,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 83,
+      "price": 1000000.0,
+      "pnl": 13.74072494967273,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 84,
+      "price": 1000000.0,
+      "pnl": 13.653176666909745,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 84,
+      "price": 1000000.0,
+      "pnl": 13.624241601303991,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 85,
+      "price": 1000000.0,
+      "pnl": 13.537803816013412,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 85,
+      "price": 1000000.0,
+      "pnl": 13.509234737610795,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 86,
+      "price": 1000000.0,
+      "pnl": 13.42388873288342,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 86,
+      "price": 1000000.0,
+      "pnl": 13.395679490515432,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 87,
+      "price": 1000000.0,
+      "pnl": 13.311406942362973,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 87,
+      "price": 1000000.0,
+      "pnl": 13.283551513629016,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 88,
+      "price": 1000000.0,
+      "pnl": 13.200334481122168,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 88,
+      "price": 1000000.0,
+      "pnl": 13.172826969166652,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 89,
+      "price": 1000000.0,
+      "pnl": 13.090647884860875,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 89,
+      "price": 1000000.0,
+      "pnl": 13.063482515244072,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 90,
+      "price": 1000000.0,
+      "pnl": 12.982324175883498,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 90,
+      "price": 1000000.0,
+      "pnl": 12.955495293543057,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 91,
+      "price": 1000000.0,
+      "pnl": 12.875340851033375,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 91,
+      "price": 1000000.0,
+      "pnl": 12.848842917333483,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 92,
+      "price": 1000000.0,
+      "pnl": 12.769675869974865,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 92,
+      "price": 1000000.0,
+      "pnl": 12.743503459840221,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 93,
+      "price": 1000000.0,
+      "pnl": 12.665307643811847,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 93,
+      "price": 1000000.0,
+      "pnl": 12.639455442943625,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 94,
+      "price": 1000000.0,
+      "pnl": 12.562215024031522,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 94,
+      "price": 1000000.0,
+      "pnl": 12.536677826202663,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 95,
+      "price": 1000000.0,
+      "pnl": 12.460377291762972,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 95,
+      "price": 1000000.0,
+      "pnl": 12.435149996190278,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 96,
+      "price": 1000000.0,
+      "pnl": 12.35977414734029,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 96,
+      "price": 1000000.0,
+      "pnl": 12.334851756130757,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 97,
+      "price": 1000000.0,
+      "pnl": 12.260385700160422,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 97,
+      "price": 1000000.0,
+      "pnl": 12.235763315829498,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 98,
+      "price": 1000000.0,
+      "pnl": 12.16219245882625,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 98,
+      "price": 1000000.0,
+      "pnl": 12.137865281885665,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 99,
+      "price": 1000000.0,
+      "pnl": 12.065175321565805,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 99,
+      "price": 1000000.0,
+      "pnl": 12.041138648178762,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 100,
+      "price": 1000000.0,
+      "pnl": 11.969315566918743,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 100,
+      "price": 1000000.0,
+      "pnl": 11.94556478662035,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 101,
+      "price": 1000000.0,
+      "pnl": 11.87459484468167,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 101,
+      "price": 1000000.0,
+      "pnl": 11.851125438162516,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 102,
+      "price": 1000000.0,
+      "pnl": 11.780995167104063,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 102,
+      "price": 1000000.0,
+      "pnl": 11.75780270405496,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 103,
+      "price": 1000000.0,
+      "pnl": 11.68849890032693,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 103,
+      "price": 1000000.0,
+      "pnl": 11.6655790373429,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 104,
+      "price": 1000000.0,
+      "pnl": 11.59708875605655,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 104,
+      "price": 1000000.0,
+      "pnl": 11.5744372345982,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 105,
+      "price": 1000000.0,
+      "pnl": 11.506747783465977,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 105,
+      "price": 1000000.0,
+      "pnl": 11.484360427876467,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 106,
+      "price": 1000000.0,
+      "pnl": 11.417459361317194,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 106,
+      "price": 1000000.0,
+      "pnl": 11.395332076893094,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 107,
+      "price": 1000000.0,
+      "pnl": 11.329207190297065,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 107,
+      "price": 1000000.0,
+      "pnl": 11.307335961411393,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 108,
+      "price": 1000000.0,
+      "pnl": 11.241975285560502,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 108,
+      "price": 1000000.0,
+      "pnl": 11.220356173836372,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 109,
+      "price": 1000000.0,
+      "pnl": 11.15574796947443,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 109,
+      "price": 1000000.0,
+      "pnl": 11.134377112007746,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 110,
+      "price": 1000000.0,
+      "pnl": 11.070509864556438,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 110,
+      "price": 1000000.0,
+      "pnl": 11.049383472186122,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 111,
+      "price": 1000000.0,
+      "pnl": 10.986245886602118,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 111,
+      "price": 1000000.0,
+      "pnl": 10.965360242226438,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 112,
+      "price": 1000000.0,
+      "pnl": 10.902941237995394,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 112,
+      "price": 1000000.0,
+      "pnl": 10.88229269493299,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 113,
+      "price": 1000000.0,
+      "pnl": 10.82058140119625,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 113,
+      "price": 1000000.0,
+      "pnl": 10.800166381590497,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 114,
+      "price": 1000000.0,
+      "pnl": 10.739152132400529,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 114,
+      "price": 1000000.0,
+      "pnl": 10.718967125665941,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 115,
+      "price": 1000000.0,
+      "pnl": 10.658639455366622,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 115,
+      "price": 1000000.0,
+      "pnl": 10.638681016676037,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 116,
+      "price": 1000000.0,
+      "pnl": 10.579029655404037,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 116,
+      "price": 1000000.0,
+      "pnl": 10.55929440421536,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 117,
+      "price": 1000000.0,
+      "pnl": 10.500309273519,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 117,
+      "price": 1000000.0,
+      "pnl": 10.480793892140317,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 118,
+      "price": 1000000.0,
+      "pnl": 10.422465100712438,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 118,
+      "price": 1000000.0,
+      "pnl": 10.403166332904393,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 119,
+      "price": 1000000.0,
+      "pnl": 10.345484172425818,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 119,
+      "price": 1000000.0,
+      "pnl": 10.326398822040094,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 120,
+      "price": 1000000.0,
+      "pnl": 10.269353763130477,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 120,
+      "price": 1000000.0,
+      "pnl": 10.250478692783398,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 121,
+      "price": 1000000.0,
+      "pnl": 10.194061381056214,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 121,
+      "price": 1000000.0,
+      "pnl": 10.175393510836356,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 122,
+      "price": 1000000.0,
+      "pnl": 10.119594763055057,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 122,
+      "price": 1000000.0,
+      "pnl": 10.101131069263923,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 123,
+      "price": 1000000.0,
+      "pnl": 10.045941869596286,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 123,
+      "price": 1000000.0,
+      "pnl": 10.027679383521079,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 124,
+      "price": 1000000.0,
+      "pnl": 9.973090879888849,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 124,
+      "price": 1000000.0,
+      "pnl": 9.955026686606386,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 125,
+      "price": 1000000.0,
+      "pnl": 9.90103018712751,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 125,
+      "price": 1000000.0,
+      "pnl": 9.883161424338406,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 126,
+      "price": 1000000.0,
+      "pnl": 9.829748393859138,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 126,
+      "price": 1000000.0,
+      "pnl": 9.812072250751362,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 127,
+      "price": 1000000.0,
+      "pnl": 9.759234307465684,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 127,
+      "price": 1000000.0,
+      "pnl": 9.741748023606661,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 128,
+      "price": 1000000.0,
+      "pnl": 9.689476935760501,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 128,
+      "price": 1000000.0,
+      "pnl": 9.672177800016943,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 129,
+      "price": 1000000.0,
+      "pnl": 9.620465482694742,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 129,
+      "price": 1000000.0,
+      "pnl": 9.603350832179403,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 130,
+      "price": 1000000.0,
+      "pnl": 9.55218934417077,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 130,
+      "price": 1000000.0,
+      "pnl": 9.535256563215375,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 131,
+      "price": 1000000.0,
+      "pnl": 9.48463810395943,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 131,
+      "price": 1000000.0,
+      "pnl": 9.467884623113033,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 132,
+      "price": 1000000.0,
+      "pnl": 9.417801529718371,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 132,
+      "price": 1000000.0,
+      "pnl": 9.401224824770416,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 133,
+      "price": 1000000.0,
+      "pnl": 9.351669569108479,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 133,
+      "price": 1000000.0,
+      "pnl": 9.33526716013589,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 134,
+      "price": 1000000.0,
+      "pnl": 9.286232346005688,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 134,
+      "price": 1000000.0,
+      "pnl": 9.270001796443292,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 135,
+      "price": 1000000.0,
+      "pnl": 9.221480156805551,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 135,
+      "price": 1000000.0,
+      "pnl": 9.2054190725392,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 136,
+      "price": 1000000.0,
+      "pnl": 9.157403466817907,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 136,
+      "price": 1000000.0,
+      "pnl": 9.141509495299646,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 137,
+      "price": 1000000.0,
+      "pnl": 9.093992906749177,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 137,
+      "price": 1000000.0,
+      "pnl": 9.078263736133891,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 138,
+      "price": 1000000.0,
+      "pnl": 9.031239269269896,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 138,
+      "price": 1000000.0,
+      "pnl": 9.015672627572787,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 139,
+      "price": 1000000.0,
+      "pnl": 8.96913350566505,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 139,
+      "price": 1000000.0,
+      "pnl": 8.953727159939406,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 140,
+      "price": 1000000.0,
+      "pnl": 8.907666722565027,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 140,
+      "price": 1000000.0,
+      "pnl": 8.892418478099728,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 141,
+      "price": 1000000.0,
+      "pnl": 8.84683017875491,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 141,
+      "price": 1000000.0,
+      "pnl": 8.831737878291097,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 142,
+      "price": 1000000.0,
+      "pnl": 8.786615282059989,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 142,
+      "price": 1000000.0,
+      "pnl": 8.771676805026432,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 143,
+      "price": 1000000.0,
+      "pnl": 8.727013586305441,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 143,
+      "price": 1000000.0,
+      "pnl": 8.712226848072033,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 144,
+      "price": 1000000.0,
+      "pnl": 8.668016788348144,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 144,
+      "price": 1000000.0,
+      "pnl": 8.653379739497087,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 145,
+      "price": 1000000.0,
+      "pnl": 8.609616725178668,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 145,
+      "price": 1000000.0,
+      "pnl": 8.595127350792827,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 146,
+      "price": 1000000.0,
+      "pnl": 8.55180537109157,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 146,
+      "price": 1000000.0,
+      "pnl": 8.537461690059573,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 147,
+      "price": 1000000.0,
+      "pnl": 8.494574834922151,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 147,
+      "price": 1000000.0,
+      "pnl": 8.480374899259767,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 148,
+      "price": 1000000.0,
+      "pnl": 8.437917357347908,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 148,
+      "price": 1000000.0,
+      "pnl": 8.423859251535262,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 149,
+      "price": 1000000.0,
+      "pnl": 8.381825308252923,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 149,
+      "price": 1000000.0,
+      "pnl": 8.367907148587143,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 150,
+      "price": 1000000.0,
+      "pnl": 8.326291184153565,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 150,
+      "price": 1000000.0,
+      "pnl": 8.312511118116447,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 151,
+      "price": 1000000.0,
+      "pnl": 8.27130760568383,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 151,
+      "price": 1000000.0,
+      "pnl": 8.257663811324107,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 152,
+      "price": 1000000.0,
+      "pnl": 8.216867315138773,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 152,
+      "price": 1000000.0,
+      "pnl": 8.20335800046864,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 153,
+      "price": 1000000.0,
+      "pnl": 8.162963174074523,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 153,
+      "price": 1000000.0,
+      "pnl": 8.149586576479994,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 154,
+      "price": 1000000.0,
+      "pnl": 8.10958816096332,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 154,
+      "price": 1000000.0,
+      "pnl": 8.09634254662811,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 155,
+      "price": 1000000.0,
+      "pnl": 8.05673536890224,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 155,
+      "price": 1000000.0,
+      "pnl": 8.043619032244775,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 156,
+      "price": 1000000.0,
+      "pnl": 8.004398003374126,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 156,
+      "price": 1000000.0,
+      "pnl": 7.99140926649736,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 157,
+      "price": 1000000.0,
+      "pnl": 7.952569380059395,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 157,
+      "price": 1000000.0,
+      "pnl": 7.939706592213097,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 158,
+      "price": 1000000.0,
+      "pnl": 7.901242922697427,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 158,
+      "price": 1000000.0,
+      "pnl": 7.888504459752622,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 159,
+      "price": 1000000.0,
+      "pnl": 7.850412160996222,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 159,
+      "price": 1000000.0,
+      "pnl": 7.837796424931468,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 160,
+      "price": 1000000.0,
+      "pnl": 7.800070728589096,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 160,
+      "price": 1000000.0,
+      "pnl": 7.78757614698828,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 161,
+      "price": 1000000.0,
+      "pnl": 7.750212361037215,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 161,
+      "price": 1000000.0,
+      "pnl": 7.7378373865986125,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 162,
+      "price": 1000000.0,
+      "pnl": 7.700830893876798,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 162,
+      "price": 1000000.0,
+      "pnl": 7.688574003933066,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 163,
+      "price": 1000000.0,
+      "pnl": 7.651920260709838,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 163,
+      "price": 1000000.0,
+      "pnl": 7.639779956758677,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 164,
+      "price": 1000000.0,
+      "pnl": 7.60347449133723,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 164,
+      "price": 1000000.0,
+      "pnl": 7.591449298582459,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 165,
+      "price": 1000000.0,
+      "pnl": 7.555487709933276,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 165,
+      "price": 1000000.0,
+      "pnl": 7.543576176836048,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 166,
+      "price": 1000000.0,
+      "pnl": 7.507954133260445,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 166,
+      "price": 1000000.0,
+      "pnl": 7.496154831100337,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 167,
+      "price": 1000000.0,
+      "pnl": 7.460868068923472,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 167,
+      "price": 1000000.0,
+      "pnl": 7.449179591369219,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 168,
+      "price": 1000000.0,
+      "pnl": 7.414223913661726,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 168,
+      "price": 1000000.0,
+      "pnl": 7.402644876351347,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 169,
+      "price": 1000000.0,
+      "pnl": 7.368016151678922,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 169,
+      "price": 1000000.0,
+      "pnl": 7.356545191809008,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 170,
+      "price": 1000000.0,
+      "pnl": 7.322239353009262,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 170,
+      "price": 1000000.0,
+      "pnl": 7.310875128933201,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 171,
+      "price": 1000000.0,
+      "pnl": 7.276888171919089,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 171,
+      "price": 1000000.0,
+      "pnl": 7.265629362753986,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 172,
+      "price": 1000000.0,
+      "pnl": 7.2319573453431385,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 172,
+      "price": 1000000.0,
+      "pnl": 7.220802650585257,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 173,
+      "price": 1000000.0,
+      "pnl": 7.187441691354607,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 173,
+      "price": 1000000.0,
+      "pnl": 7.176389830503077,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 174,
+      "price": 1000000.0,
+      "pnl": 7.143336107668136,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 174,
+      "price": 1000000.0,
+      "pnl": 7.132385819856756,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 175,
+      "price": 1000000.0,
+      "pnl": 7.099635570174934,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 175,
+      "price": 1000000.0,
+      "pnl": 7.088785613811855,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 176,
+      "price": 1000000.0,
+      "pnl": 7.056335131509263,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 176,
+      "price": 1000000.0,
+      "pnl": 7.045584283924367,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 177,
+      "price": 1000000.0,
+      "pnl": 7.013429919645485,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 177,
+      "price": 1000000.0,
+      "pnl": 7.002776976745265,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 178,
+      "price": 1000000.0,
+      "pnl": 6.97091513652497,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 178,
+      "price": 1000000.0,
+      "pnl": 6.960358912454745,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 179,
+      "price": 1000000.0,
+      "pnl": 6.928786056712108,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 179,
+      "price": 1000000.0,
+      "pnl": 6.918325383525369,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 180,
+      "price": 1000000.0,
+      "pnl": 6.887038026078742,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 180,
+      "price": 1000000.0,
+      "pnl": 6.876671753413487,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 181,
+      "price": 1000000.0,
+      "pnl": 6.845666460516328,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 181,
+      "price": 1000000.0,
+      "pnl": 6.835393455278189,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 182,
+      "price": 1000000.0,
+      "pnl": 6.804666844675151,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 182,
+      "price": 1000000.0,
+      "pnl": 6.794485990727183,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 183,
+      "price": 1000000.0,
+      "pnl": 6.764034730729965,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 183,
+      "price": 1000000.0,
+      "pnl": 6.7539449285889015,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 184,
+      "price": 1000000.0,
+      "pnl": 6.723765737171412,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 184,
+      "price": 1000000.0,
+      "pnl": 6.7137659037102635,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 185,
+      "price": 1000000.0,
+      "pnl": 6.683855547622608,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 185,
+      "price": 1000000.0,
+      "pnl": 6.673944615779434,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 186,
+      "price": 1000000.0,
+      "pnl": 6.644299909680308,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 186,
+      "price": 1000000.0,
+      "pnl": 6.634476828173025,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 187,
+      "price": 1000000.0,
+      "pnl": 6.605094633780058,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 187,
+      "price": 1000000.0,
+      "pnl": 6.595358366827135,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 188,
+      "price": 1000000.0,
+      "pnl": 6.56623559208477,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 188,
+      "price": 1000000.0,
+      "pnl": 6.556585119131683,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 189,
+      "price": 1000000.0,
+      "pnl": 6.527718717396177,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 189,
+      "price": 1000000.0,
+      "pnl": 6.518153032847477,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 190,
+      "price": 1000000.0,
+      "pnl": 6.489540002088615,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 190,
+      "price": 1000000.0,
+      "pnl": 6.480058115045478,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 191,
+      "price": 1000000.0,
+      "pnl": 6.451695497064633,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 191,
+      "price": 1000000.0,
+      "pnl": 6.442296431067773,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 192,
+      "price": 1000000.0,
+      "pnl": 6.414181310731885,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 192,
+      "price": 1000000.0,
+      "pnl": 6.404864103509706,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 193,
+      "price": 1000000.0,
+      "pnl": 6.376993608000875,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 193,
+      "price": 1000000.0,
+      "pnl": 6.367757311222715,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 194,
+      "price": 1000000.0,
+      "pnl": 6.340128609302981,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 194,
+      "price": 1000000.0,
+      "pnl": 6.330972288337372,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 195,
+      "price": 1000000.0,
+      "pnl": 6.303582589628365,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 195,
+      "price": 1000000.0,
+      "pnl": 6.294505323306156,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 196,
+      "price": 1000000.0,
+      "pnl": 6.267351877583287,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 196,
+      "price": 1000000.0,
+      "pnl": 6.258352757965543,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 197,
+      "price": 1000000.0,
+      "pnl": 6.231432854466353,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 197,
+      "price": 1000000.0,
+      "pnl": 6.222510986616902,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 198,
+      "price": 1000000.0,
+      "pnl": 6.195821953363295,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 198,
+      "price": 1000000.0,
+      "pnl": 6.186976455125831,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 199,
+      "price": 1000000.0,
+      "pnl": 6.1605156582598575,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 199,
+      "price": 1000000.0,
+      "pnl": 6.151745660039489,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 200,
+      "price": 1000000.0,
+      "pnl": 6.125510503172341,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 200,
+      "price": 1000000.0,
+      "pnl": 6.116815147721483,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 201,
+      "price": 1000000.0,
+      "pnl": 6.090803071295462,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 201,
+      "price": 1000000.0,
+      "pnl": 6.082181513503977,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 202,
+      "price": 1000000.0,
+      "pnl": 6.056389994167072,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 202,
+      "price": 1000000.0,
+      "pnl": 6.0478414008565595,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 203,
+      "price": 1000000.0,
+      "pnl": 6.022267950849402,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 203,
+      "price": 1000000.0,
+      "pnl": 6.013791500571551,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 204,
+      "price": 1000000.0,
+      "pnl": 5.988433667126448,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 204,
+      "price": 1000000.0,
+      "pnl": 5.980028549965348,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 205,
+      "price": 1000000.0,
+      "pnl": 5.954883914717127,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 205,
+      "price": 1000000.0,
+      "pnl": 5.946549332095456,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 206,
+      "price": 1000000.0,
+      "pnl": 5.92161551050384,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 206,
+      "price": 1000000.0,
+      "pnl": 5.913350674992853,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 207,
+      "price": 1000000.0,
+      "pnl": 5.888625315776136,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 207,
+      "price": 1000000.0,
+      "pnl": 5.88042945090935,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 208,
+      "price": 1000000.0,
+      "pnl": 5.855910235489099,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 208,
+      "price": 1000000.0,
+      "pnl": 5.847782575579601,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 209,
+      "price": 1000000.0,
+      "pnl": 5.8234672175361535,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 209,
+      "price": 1000000.0,
+      "pnl": 5.815407007497457,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 210,
+      "price": 1000000.0,
+      "pnl": 5.791293252035968,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 210,
+      "price": 1000000.0,
+      "pnl": 5.783299747206337,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 211,
+      "price": 1000000.0,
+      "pnl": 5.759385370633135,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 211,
+      "price": 1000000.0,
+      "pnl": 5.751457836603285,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 212,
+      "price": 1000000.0,
+      "pnl": 5.727740645812334,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 212,
+      "price": 1000000.0,
+      "pnl": 5.719878358256454,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 213,
+      "price": 1000000.0,
+      "pnl": 5.696356190225674,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 213,
+      "price": 1000000.0,
+      "pnl": 5.688558434735694,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 214,
+      "price": 1000000.0,
+      "pnl": 5.665229156032932,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 214,
+      "price": 1000000.0,
+      "pnl": 5.6574952279559545,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 215,
+      "price": 1000000.0,
+      "pnl": 5.634356734254407,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 215,
+      "price": 1000000.0,
+      "pnl": 5.626685938533237,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 216,
+      "price": 1000000.0,
+      "pnl": 5.603736154136099,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 216,
+      "price": 1000000.0,
+      "pnl": 5.596127805152818,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 217,
+      "price": 1000000.0,
+      "pnl": 5.573364682526967,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 217,
+      "price": 1000000.0,
+      "pnl": 5.565818103949467,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 218,
+      "price": 1000000.0,
+      "pnl": 5.543239623268002,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 218,
+      "price": 1000000.0,
+      "pnl": 5.535754147899428,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 219,
+      "price": 1000000.0,
+      "pnl": 5.513358316592833,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 219,
+      "price": 1000000.0,
+      "pnl": 5.505933286223859,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 220,
+      "price": 1000000.0,
+      "pnl": 5.48371813853965,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 220,
+      "price": 1000000.0,
+      "pnl": 5.476352903803544,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 221,
+      "price": 1000000.0,
+      "pnl": 5.454316500374181,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 221,
+      "price": 1000000.0,
+      "pnl": 5.447010420604588,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 222,
+      "price": 1000000.0,
+      "pnl": 5.425150848023499,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 222,
+      "price": 1000000.0,
+      "pnl": 5.417903291114882,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 223,
+      "price": 1000000.0,
+      "pnl": 5.396218661520409,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 223,
+      "price": 1000000.0,
+      "pnl": 5.389029003791102,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 224,
+      "price": 1000000.0,
+      "pnl": 5.367517454458216,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 224,
+      "price": 1000000.0,
+      "pnl": 5.36038508051602,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 225,
+      "price": 1000000.0,
+      "pnl": 5.339044773455627,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 225,
+      "price": 1000000.0,
+      "pnl": 5.331969076065902,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 226,
+      "price": 1000000.0,
+      "pnl": 5.310798197631577,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 226,
+      "price": 1000000.0,
+      "pnl": 5.30377857758779,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 227,
+      "price": 1000000.0,
+      "pnl": 5.282775338089801,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 227,
+      "price": 1000000.0,
+      "pnl": 5.275811204086444,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 228,
+      "price": 1000000.0,
+      "pnl": 5.254973837412887,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 228,
+      "price": 1000000.0,
+      "pnl": 5.2480646059207565,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 229,
+      "price": 1000000.0,
+      "pnl": 5.227391369165676,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 229,
+      "price": 1000000.0,
+      "pnl": 5.220536464309429,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 230,
+      "price": 1000000.0,
+      "pnl": 5.200025637407751,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 230,
+      "price": 1000000.0,
+      "pnl": 5.193224490845713,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 231,
+      "price": 1000000.0,
+      "pnl": 5.172874376214873,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 231,
+      "price": 1000000.0,
+      "pnl": 5.1661264270210445,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 232,
+      "price": 1000000.0,
+      "pnl": 5.145935349209165,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 232,
+      "price": 1000000.0,
+      "pnl": 5.139240043757367,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 233,
+      "price": 1000000.0,
+      "pnl": 5.1192063490978255,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 233,
+      "price": 1000000.0,
+      "pnl": 5.1125631409479695,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 234,
+      "price": 1000000.0,
+      "pnl": 5.092685197220257,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 234,
+      "price": 1000000.0,
+      "pnl": 5.0860935470066595,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 235,
+      "price": 1000000.0,
+      "pnl": 5.066369743103385,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 235,
+      "price": 1000000.0,
+      "pnl": 5.059829118425119,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 236,
+      "price": 1000000.0,
+      "pnl": 5.04025786402502,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 236,
+      "price": 1000000.0,
+      "pnl": 5.033767739338233,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 237,
+      "price": 1000000.0,
+      "pnl": 5.014347464585091,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 237,
+      "price": 1000000.0,
+      "pnl": 5.007907321097263,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 238,
+      "price": 1000000.0,
+      "pnl": 4.988636476284588,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 238,
+      "price": 1000000.0,
+      "pnl": 4.98224580185069,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 239,
+      "price": 1000000.0,
+      "pnl": 4.963122857112065,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 239,
+      "price": 1000000.0,
+      "pnl": 4.956781146132578,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 240,
+      "price": 1000000.0,
+      "pnl": 4.937804591137535,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 240,
+      "price": 1000000.0,
+      "pnl": 4.931511344458286,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 241,
+      "price": 1000000.0,
+      "pnl": 4.9126796881136094,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 241,
+      "price": 1000000.0,
+      "pnl": 4.9064344129273945,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 242,
+      "price": 1000000.0,
+      "pnl": 4.8877461830837525,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 242,
+      "price": 1000000.0,
+      "pnl": 4.881548392833703,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 243,
+      "price": 1000000.0,
+      "pnl": 4.863002135997472,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 243,
+      "price": 1000000.0,
+      "pnl": 4.856851350282143,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 244,
+      "price": 1000000.0,
+      "pnl": 4.838445631332336,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 244,
+      "price": 1000000.0,
+      "pnl": 4.832341375812461,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 245,
+      "price": 1000000.0,
+      "pnl": 4.814074777722666,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 245,
+      "price": 1000000.0,
+      "pnl": 4.8080165840295646,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 246,
+      "price": 1000000.0,
+      "pnl": 4.789887707594776,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 246,
+      "price": 1000000.0,
+      "pnl": 4.783875113240366,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 247,
+      "price": 1000000.0,
+      "pnl": 4.76588257680861,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 247,
+      "price": 1000000.0,
+      "pnl": 4.759915125097008,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 248,
+      "price": 1000000.0,
+      "pnl": 4.742057564305689,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 248,
+      "price": 1000000.0,
+      "pnl": 4.73613480424634,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 249,
+      "price": 1000000.0,
+      "pnl": 4.7184108717631785,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 249,
+      "price": 1000000.0,
+      "pnl": 4.712532357985523,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 250,
+      "price": 1000000.0,
+      "pnl": 4.69494072325402,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 250,
+      "price": 1000000.0,
+      "pnl": 4.6891060159236355,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 251,
+      "price": 1000000.0,
+      "pnl": 4.671645364912967,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 251,
+      "price": 1000000.0,
+      "pnl": 4.665854029649164,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 252,
+      "price": 1000000.0,
+      "pnl": 4.648523064608422,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 252,
+      "price": 1000000.0,
+      "pnl": 4.642774672403273,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 253,
+      "price": 1000000.0,
+      "pnl": 4.625572111619937,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 253,
+      "price": 1000000.0,
+      "pnl": 4.619866238758709,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 254,
+      "price": 1000000.0,
+      "pnl": 4.602790816321326,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 254,
+      "price": 1000000.0,
+      "pnl": 4.597127044304267,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 255,
+      "price": 1000000.0,
+      "pnl": 4.580177509869182,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 255,
+      "price": 1000000.0,
+      "pnl": 4.574555425334681,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 256,
+      "price": 1000000.0,
+      "pnl": 4.557730543896801,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 256,
+      "price": 1000000.0,
+      "pnl": 4.552149738545835,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 257,
+      "price": 1000000.0,
+      "pnl": 4.535448290213316,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 257,
+      "price": 1000000.0,
+      "pnl": 4.529908360735215,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 258,
+      "price": 1000000.0,
+      "pnl": 4.513329140507993,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 258,
+      "price": 1000000.0,
+      "pnl": 4.50782968850746,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 259,
+      "price": 1000000.0,
+      "pnl": 4.491371506059579,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 259,
+      "price": 1000000.0,
+      "pnl": 4.485912137984954,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 260,
+      "price": 1000000.0,
+      "pnl": 4.469573817450575,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 260,
+      "price": 1000000.0,
+      "pnl": 4.46415414452332,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 261,
+      "price": 1000000.0,
+      "pnl": 4.447934524286382,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 261,
+      "price": 1000000.0,
+      "pnl": 4.442554162431763,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 262,
+      "price": 1000000.0,
+      "pnl": 4.426452094919192,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 262,
+      "price": 1000000.0,
+      "pnl": 4.4211106646981255,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 263,
+      "price": 1000000.0,
+      "pnl": 4.405125016176554,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 263,
+      "price": 1000000.0,
+      "pnl": 4.3998221427186115,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 264,
+      "price": 1000000.0,
+      "pnl": 4.383951793094498,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 264,
+      "price": 1000000.0,
+      "pnl": 4.378687106032034,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 265,
+      "price": 1000000.0,
+      "pnl": 4.36293094865517,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 265,
+      "price": 1000000.0,
+      "pnl": 4.357704082058552,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 266,
+      "price": 1000000.0,
+      "pnl": 4.342061023528849,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 266,
+      "price": 1000000.0,
+      "pnl": 4.336871615842781,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 267,
+      "price": 1000000.0,
+      "pnl": 4.321340575820287,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 267,
+      "price": 1000000.0,
+      "pnl": 4.316188269801187,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 268,
+      "price": 1000000.0,
+      "pnl": 4.300768180819291,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 268,
+      "price": 1000000.0,
+      "pnl": 4.295652623473721,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 269,
+      "price": 1000000.0,
+      "pnl": 4.280342430755456,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 269,
+      "price": 1000000.0,
+      "pnl": 4.275263273279567,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 270,
+      "price": 1000000.0,
+      "pnl": 4.260061934556959,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 270,
+      "price": 1000000.0,
+      "pnl": 4.255018832276946,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 271,
+      "price": 1000000.0,
+      "pnl": 4.239925317613372,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 271,
+      "price": 1000000.0,
+      "pnl": 4.234917929926915,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 272,
+      "price": 1000000.0,
+      "pnl": 4.219931221542392,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 272,
+      "price": 1000000.0,
+      "pnl": 4.214959211861059,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 273,
+      "price": 1000000.0,
+      "pnl": 4.200078303960404,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 273,
+      "price": 1000000.0,
+      "pnl": 4.195141339653003,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 274,
+      "price": 1000000.0,
+      "pnl": 4.1803652382568375,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 274,
+      "price": 1000000.0,
+      "pnl": 4.175462990593711,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 275,
+      "price": 1000000.0,
+      "pnl": 4.160790713372229,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 275,
+      "price": 1000000.0,
+      "pnl": 4.15592285747044,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 276,
+      "price": 1000000.0,
+      "pnl": 4.141353433579907,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 276,
+      "price": 1000000.0,
+      "pnl": 4.136519648349341,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 277,
+      "price": 1000000.0,
+      "pnl": 4.122052118271254,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 277,
+      "price": 1000000.0,
+      "pnl": 4.11725208636159,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 278,
+      "price": 1000000.0,
+      "pnl": 4.1028855017444705,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 278,
+      "price": 1000000.0,
+      "pnl": 4.098118909493016,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 279,
+      "price": 1000000.0,
+      "pnl": 4.083852332996768,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 279,
+      "price": 1000000.0,
+      "pnl": 4.0791188703771475,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 280,
+      "price": 1000000.0,
+      "pnl": 4.064951375519944,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 280,
+      "price": 1000000.0,
+      "pnl": 4.060250736091611,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 281,
+      "price": 1000000.0,
+      "pnl": 4.046181407099259,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 281,
+      "price": 1000000.0,
+      "pnl": 4.0415132879578275,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 282,
+      "price": 1000000.0,
+      "pnl": 4.027541219615573,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 282,
+      "price": 1000000.0,
+      "pnl": 4.02290532134395,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 283,
+      "price": 1000000.0,
+      "pnl": 4.009029618850653,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 283,
+      "price": 1000000.0,
+      "pnl": 4.004425645470959,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 284,
+      "price": 1000000.0,
+      "pnl": 3.990645424295634,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 284,
+      "price": 1000000.0,
+      "pnl": 3.98607308322189,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 285,
+      "price": 1000000.0,
+      "pnl": 3.9723874689625327,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 285,
+      "price": 1000000.0,
+      "pnl": 3.967846470954111,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 286,
+      "price": 1000000.0,
+      "pnl": 3.954254599198791,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 286,
+      "price": 1000000.0,
+      "pnl": 3.949744658314606,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 287,
+      "price": 1000000.0,
+      "pnl": 3.9362456745047782,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 287,
+      "price": 1000000.0,
+      "pnl": 3.9317665080582094,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 288,
+      "price": 1000000.0,
+      "pnl": 3.9183595673541984,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 288,
+      "price": 1000000.0,
+      "pnl": 3.913910895868728,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 289,
+      "price": 1000000.0,
+      "pnl": 3.900595163017353,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 289,
+      "price": 1000000.0,
+      "pnl": 3.8961767101829112,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 290,
+      "price": 1000000.0,
+      "pnl": 3.8829513593872087,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 290,
+      "price": 1000000.0,
+      "pnl": 3.878562852017208,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 291,
+      "price": 1000000.0,
+      "pnl": 3.865427066808222,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 291,
+      "price": 1000000.0,
+      "pnl": 3.861068234797268,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 292,
+      "price": 1000000.0,
+      "pnl": 3.848021207907856,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 292,
+      "price": 1000000.0,
+      "pnl": 3.8436917841901312,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 293,
+      "price": 1000000.0,
+      "pnl": 3.830732717430758,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 293,
+      "price": 1000000.0,
+      "pnl": 3.8264324379390544,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 294,
+      "price": 1000000.0,
+      "pnl": 3.8135605420755483,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 294,
+      "price": 1000000.0,
+      "pnl": 3.8092891457009435,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 295,
+      "price": 1000000.0,
+      "pnl": 3.796503640334159,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 295,
+      "price": 1000000.0,
+      "pnl": 3.7922608688863257,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 296,
+      "price": 1000000.0,
+      "pnl": 3.7795609823336886,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 296,
+      "price": 1000000.0,
+      "pnl": 3.7753465805018265,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 297,
+      "price": 1000000.0,
+      "pnl": 3.7627315496807365,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 297,
+      "price": 1000000.0,
+      "pnl": 3.7585452649951043,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 298,
+      "price": 1000000.0,
+      "pnl": 3.7460143353081476,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 298,
+      "price": 1000000.0,
+      "pnl": 3.741855918102204,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 299,
+      "price": 1000000.0,
+      "pnl": 3.7294083433241485,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 299,
+      "price": 1000000.0,
+      "pnl": 3.7252775466972716,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 300,
+      "price": 1000000.0,
+      "pnl": 3.712912588863822,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 300,
+      "price": 1000000.0,
+      "pnl": 3.708809168644613,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 301,
+      "price": 1000000.0,
+      "pnl": 3.6965260979428747,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 301,
+      "price": 1000000.0,
+      "pnl": 3.6924498126530247,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 302,
+      "price": 1000000.0,
+      "pnl": 3.6802479073136722,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 302,
+      "price": 1000000.0,
+      "pnl": 3.676198518132386,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 303,
+      "price": 1000000.0,
+      "pnl": 3.6640770643234837,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 303,
+      "price": 1000000.0,
+      "pnl": 3.6600543350524526,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 304,
+      "price": 1000000.0,
+      "pnl": 3.6480126267749116,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 304,
+      "price": 1000000.0,
+      "pnl": 3.644016323803821,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 305,
+      "price": 1000000.0,
+      "pnl": 3.632053662788454,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 305,
+      "price": 1000000.0,
+      "pnl": 3.628083555061022,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 306,
+      "price": 1000000.0,
+      "pnl": 3.616199250667182,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 306,
+      "price": 1000000.0,
+      "pnl": 3.612255109647719,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 307,
+      "price": 1000000.0,
+      "pnl": 3.6004484787634747,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 307,
+      "price": 1000000.0,
+      "pnl": 3.5965300784039447,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 308,
+      "price": 1000000.0,
+      "pnl": 3.5848004453477906,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 308,
+      "price": 1000000.0,
+      "pnl": 3.580907562055383,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 309,
+      "price": 1000000.0,
+      "pnl": 3.5692542584794267,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 309,
+      "price": 1000000.0,
+      "pnl": 3.565386671084613,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 310,
+      "price": 1000000.0,
+      "pnl": 3.5538090358792522,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 310,
+      "price": 1000000.0,
+      "pnl": 3.54996652560433,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 311,
+      "price": 1000000.0,
+      "pnl": 3.53846390480435,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 311,
+      "price": 1000000.0,
+      "pnl": 3.5346462552324653,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 312,
+      "price": 1000000.0,
+      "pnl": 3.523218001924573,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 312,
+      "price": 1000000.0,
+      "pnl": 3.5194249989692024,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 313,
+      "price": 1000000.0,
+      "pnl": 3.5080704732009433,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 313,
+      "price": 1000000.0,
+      "pnl": 3.5043019050758426,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 314,
+      "price": 1000000.0,
+      "pnl": 3.49302047376589,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 314,
+      "price": 1000000.0,
+      "pnl": 3.4892761309554903,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 315,
+      "price": 1000000.0,
+      "pnl": 3.4780671678052832,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 315,
+      "price": 1000000.0,
+      "pnl": 3.474346843035531,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 316,
+      "price": 1000000.0,
+      "pnl": 3.4632097284422345,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 316,
+      "price": 1000000.0,
+      "pnl": 3.4595132166518696,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 317,
+      "price": 1000000.0,
+      "pnl": 3.4484473376226337,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 317,
+      "price": 1000000.0,
+      "pnl": 3.444774435934892,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 318,
+      "price": 1000000.0,
+      "pnl": 3.4337791860023907,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 318,
+      "price": 1000000.0,
+      "pnl": 3.4301296936971344,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 319,
+      "price": 1000000.0,
+      "pnl": 3.4192044728363595,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 319,
+      "price": 1000000.0,
+      "pnl": 3.4155781913226133,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 320,
+      "price": 1000000.0,
+      "pnl": 3.404722405868908,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 320,
+      "price": 1000000.0,
+      "pnl": 3.401119138657811,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 321,
+      "price": 1000000.0,
+      "pnl": 3.3903322012261152,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 321,
+      "price": 1000000.0,
+      "pnl": 3.3867517539042677,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 322,
+      "price": 1000000.0,
+      "pnl": 3.376033083309551,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 322,
+      "price": 1000000.0,
+      "pnl": 3.3724752635127535,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 323,
+      "price": 1000000.0,
+      "pnl": 3.361824284691638,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 323,
+      "price": 1000000.0,
+      "pnl": 3.358288902079024,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 324,
+      "price": 1000000.0,
+      "pnl": 3.3477050460125444,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 324,
+      "price": 1000000.0,
+      "pnl": 3.3441919122410844,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 325,
+      "price": 1000000.0,
+      "pnl": 3.3336746158785884,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 325,
+      "price": 1000000.0,
+      "pnl": 3.330183544577977,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 326,
+      "price": 1000000.0,
+      "pnl": 3.319732250762149,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 326,
+      "price": 1000000.0,
+      "pnl": 3.316263057510053,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 327,
+      "price": 1000000.0,
+      "pnl": 3.3058772149030253,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 327,
+      "price": 1000000.0,
+      "pnl": 3.3024297172006944,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 328,
+      "price": 1000000.0,
+      "pnl": 3.292108780211237,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 328,
+      "price": 1000000.0,
+      "pnl": 3.2886827974594754,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 329,
+      "price": 1000000.0,
+      "pnl": 3.2784262261712556,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 329,
+      "price": 1000000.0,
+      "pnl": 3.2750215796467357,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 330,
+      "price": 1000000.0,
+      "pnl": 3.2648288397476097,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 330,
+      "price": 1000000.0,
+      "pnl": 3.261445352579535,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 331,
+      "price": 1000000.0,
+      "pnl": 3.2513159152918747,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 331,
+      "price": 1000000.0,
+      "pnl": 3.247953412438978,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 332,
+      "price": 1000000.0,
+      "pnl": 3.237886754451,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 332,
+      "price": 1000000.0,
+      "pnl": 3.2345450626788748,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 333,
+      "price": 1000000.0,
+      "pnl": 3.2245406660769627,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 333,
+      "price": 1000000.0,
+      "pnl": 3.221219613935725,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 334,
+      "price": 1000000.0,
+      "pnl": 3.211276966137733,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 334,
+      "price": 1000000.0,
+      "pnl": 3.207976383939998,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 335,
+      "price": 1000000.0,
+      "pnl": 3.198094977629508,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 335,
+      "price": 1000000.0,
+      "pnl": 3.1948146974286873,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 336,
+      "price": 1000000.0,
+      "pnl": 3.1849940304902096,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 336,
+      "price": 1000000.0,
+      "pnl": 3.1817338860591233,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 337,
+      "price": 1000000.0,
+      "pnl": 3.171973461514232,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 337,
+      "price": 1000000.0,
+      "pnl": 3.168733288324019,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 338,
+      "price": 1000000.0,
+      "pnl": 3.1590326142683955,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 338,
+      "price": 1000000.0,
+      "pnl": 3.155812249467731,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 339,
+      "price": 1000000.0,
+      "pnl": 3.146170839009107,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 339,
+      "price": 1000000.0,
+      "pnl": 3.142970121403712,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 340,
+      "price": 1000000.0,
+      "pnl": 3.1333874926006997,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 340,
+      "price": 1000000.0,
+      "pnl": 3.1302062626331466,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 341,
+      "price": 1000000.0,
+      "pnl": 3.12068193843493,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 341,
+      "price": 1000000.0,
+      "pnl": 3.1175200381647308,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 342,
+      "price": 1000000.0,
+      "pnl": 3.108053546351623,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 342,
+      "price": 1000000.0,
+      "pnl": 3.1049108194356014,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 343,
+      "price": 1000000.0,
+      "pnl": 3.095501692560437,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 343,
+      "price": 1000000.0,
+      "pnl": 3.0923779842333774,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 344,
+      "price": 1000000.0,
+      "pnl": 3.083025759563733,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 344,
+      "price": 1000000.0,
+      "pnl": 3.0799209166193022,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 345,
+      "price": 1000000.0,
+      "pnl": 3.0706251360805337,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 345,
+      "price": 1000000.0,
+      "pnl": 3.0675390068524746,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 346,
+      "price": 1000000.0,
+      "pnl": 3.0582992169715566,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 346,
+      "price": 1000000.0,
+      "pnl": 3.0552316513151383,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 347,
+      "price": 1000000.0,
+      "pnl": 3.0460474031652853,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 347,
+      "price": 1000000.0,
+      "pnl": 3.042998252439024,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 348,
+      "price": 1000000.0,
+      "pnl": 3.033869101585099,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 348,
+      "price": 1000000.0,
+      "pnl": 3.0308382186327254,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 349,
+      "price": 1000000.0,
+      "pnl": 3.0217637250774017,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 349,
+      "price": 1000000.0,
+      "pnl": 3.0187509642100836,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 350,
+      "price": 1000000.0,
+      "pnl": 3.009730692340765,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 350,
+      "price": 1000000.0,
+      "pnl": 3.0067359093195796,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 351,
+      "price": 1000000.0,
+      "pnl": 2.9977694278560554,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 351,
+      "price": 1000000.0,
+      "pnl": 2.994792479874705,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 352,
+      "price": 1000000.0,
+      "pnl": 2.985879361817537,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 352,
+      "price": 1000000.0,
+      "pnl": 2.9829201074853007,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 353,
+      "price": 1000000.0,
+      "pnl": 2.9740599300649198,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 353,
+      "price": 1000000.0,
+      "pnl": 2.971118229389845,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 354,
+      "price": 1000000.0,
+      "pnl": 2.96231057401636,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 354,
+      "price": 1000000.0,
+      "pnl": 2.9593862883886892,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 355,
+      "price": 1000000.0,
+      "pnl": 2.950630740602387,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 355,
+      "price": 1000000.0,
+      "pnl": 2.947723732778203,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 356,
+      "price": 1000000.0,
+      "pnl": 2.939019882200726,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 356,
+      "price": 1000000.0,
+      "pnl": 2.9361300162858357,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 357,
+      "price": 1000000.0,
+      "pnl": 2.9274774565720416,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 357,
+      "price": 1000000.0,
+      "pnl": 2.9246045980060713,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 358,
+      "price": 1000000.0,
+      "pnl": 2.9160029267965446,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 358,
+      "price": 1000000.0,
+      "pnl": 2.913146942337257,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 359,
+      "price": 1000000.0,
+      "pnl": 2.904595761211476,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 359,
+      "price": 1000000.0,
+      "pnl": 2.9017565189193038,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 360,
+      "price": 1000000.0,
+      "pnl": 2.8932554333494505,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 360,
+      "price": 1000000.0,
+      "pnl": 2.890432802572238,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 361,
+      "price": 1000000.0,
+      "pnl": 2.8819814218776334,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 361,
+      "price": 1000000.0,
+      "pnl": 2.8791752732355884,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 362,
+      "price": 1000000.0,
+      "pnl": 2.870773210537754,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 362,
+      "price": 1000000.0,
+      "pnl": 2.8679834159086046,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 363,
+      "price": 1000000.0,
+      "pnl": 2.859630288086932,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 363,
+      "price": 1000000.0,
+      "pnl": 2.856856720591283,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 364,
+      "price": 1000000.0,
+      "pnl": 2.848552148239307,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 364,
+      "price": 1000000.0,
+      "pnl": 2.8457946822261966,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 365,
+      "price": 1000000.0,
+      "pnl": 2.837538289608463,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 365,
+      "price": 1000000.0,
+      "pnl": 2.834796800641115,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 366,
+      "price": 1000000.0,
+      "pnl": 2.8265882156506237,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 366,
+      "price": 1000000.0,
+      "pnl": 2.8238625804923934,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 367,
+      "price": 1000000.0,
+      "pnl": 2.815701434608626,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 367,
+      "price": 1000000.0,
+      "pnl": 2.8129915312091316,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 368,
+      "price": 1000000.0,
+      "pnl": 2.804877459456642,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 368,
+      "price": 1000000.0,
+      "pnl": 2.8021831669380846,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 369,
+      "price": 1000000.0,
+      "pnl": 2.794115807845639,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 369,
+      "price": 1000000.0,
+      "pnl": 2.79143700648931,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 370,
+      "price": 1000000.0,
+      "pnl": 2.783416002049584,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 370,
+      "price": 1000000.0,
+      "pnl": 2.780752573282548,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 371,
+      "price": 1000000.0,
+      "pnl": 2.7727775689123626,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 371,
+      "price": 1000000.0,
+      "pnl": 2.7701293952943207,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 372,
+      "price": 1000000.0,
+      "pnl": 2.7622000397954034,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 372,
+      "price": 1000000.0,
+      "pnl": 2.7595670050057315,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 373,
+      "price": 1000000.0,
+      "pnl": 2.7516829505260088,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 373,
+      "price": 1000000.0,
+      "pnl": 2.7490649393509705,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 374,
+      "price": 1000000.0,
+      "pnl": 2.741225841346372,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 374,
+      "price": 1000000.0,
+      "pnl": 2.7386227396664977,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 375,
+      "price": 1000000.0,
+      "pnl": 2.730828256863269,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 375,
+      "price": 1000000.0,
+      "pnl": 2.728239951640908,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 376,
+      "price": 1000000.0,
+      "pnl": 2.7204897459984227,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 376,
+      "price": 1000000.0,
+      "pnl": 2.717916125265455,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 377,
+      "price": 1000000.0,
+      "pnl": 2.71020986193952,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 377,
+      "price": 1000000.0,
+      "pnl": 2.707650814785233,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 378,
+      "price": 1000000.0,
+      "pnl": 2.69998816209188,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 378,
+      "price": 1000000.0,
+      "pnl": 2.697443578651007,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 379,
+      "price": 1000000.0,
+      "pnl": 2.689824208030758,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 379,
+      "price": 1000000.0,
+      "pnl": 2.68729397947167,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 380,
+      "price": 1000000.0,
+      "pnl": 2.679717565454279,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 380,
+      "price": 1000000.0,
+      "pnl": 2.677201583967334,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 381,
+      "price": 1000000.0,
+      "pnl": 2.6696678041369872,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 381,
+      "price": 1000000.0,
+      "pnl": 2.667165962923036,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 382,
+      "price": 1000000.0,
+      "pnl": 2.659674497884011,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 382,
+      "price": 1000000.0,
+      "pnl": 2.657186691143048,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 383,
+      "price": 1000000.0,
+      "pnl": 2.649737224485821,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 383,
+      "price": 1000000.0,
+      "pnl": 2.647263347405786,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 384,
+      "price": 1000000.0,
+      "pnl": 2.6398555656735856,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 384,
+      "price": 1000000.0,
+      "pnl": 2.6373955144193113,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 385,
+      "price": 1000000.0,
+      "pnl": 2.630029107075103,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 385,
+      "price": 1000000.0,
+      "pnl": 2.6275827787774064,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 386,
+      "price": 1000000.0,
+      "pnl": 2.6202574381713117,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 386,
+      "price": 1000000.0,
+      "pnl": 2.61782473091623,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 387,
+      "price": 1000000.0,
+      "pnl": 2.61054015225337,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 387,
+      "price": 1000000.0,
+      "pnl": 2.6081209650715302,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 388,
+      "price": 1000000.0,
+      "pnl": 2.6008768463802796,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 388,
+      "price": 1000000.0,
+      "pnl": 2.5984710792364134,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 389,
+      "price": 1000000.0,
+      "pnl": 2.591267121337071,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 389,
+      "price": 1000000.0,
+      "pnl": 2.5888746751196585,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 390,
+      "price": 1000000.0,
+      "pnl": 2.5817105815935237,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 390,
+      "price": 1000000.0,
+      "pnl": 2.579331358104575,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 391,
+      "price": 1000000.0,
+      "pnl": 2.5722068352634184,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 391,
+      "price": 1000000.0,
+      "pnl": 2.5698407372083882,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 392,
+      "price": 1000000.0,
+      "pnl": 2.562755494064319,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 392,
+      "price": 1000000.0,
+      "pnl": 2.5604024250421427,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 393,
+      "price": 1000000.0,
+      "pnl": 2.553356173277863,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 393,
+      "price": 1000000.0,
+      "pnl": 2.5510160377711317,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 394,
+      "price": 1000000.0,
+      "pnl": 2.5440084917105708,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 394,
+      "price": 1000000.0,
+      "pnl": 2.5416811950758236,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 395,
+      "price": 1000000.0,
+      "pnl": 2.534712071655151,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 395,
+      "price": 1000000.0,
+      "pnl": 2.532397520113297,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 396,
+      "price": 1000000.0,
+      "pnl": 2.525466538852303,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 396,
+      "price": 1000000.0,
+      "pnl": 2.523164639479162,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 397,
+      "price": 1000000.0,
+      "pnl": 2.5162715224530063,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 397,
+      "price": 1000000.0,
+      "pnl": 2.5139821831699716,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 398,
+      "price": 1000000.0,
+      "pnl": 2.5071266549812883,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 398,
+      "price": 1000000.0,
+      "pnl": 2.504849784546108,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 399,
+      "price": 1000000.0,
+      "pnl": 2.4980315722974695,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 399,
+      "price": 1000000.0,
+      "pnl": 2.4957670802951477,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 400,
+      "price": 1000000.0,
+      "pnl": 2.488985913561874,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 400,
+      "price": 1000000.0,
+      "pnl": 2.4867337103956797,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 401,
+      "price": 1000000.0,
+      "pnl": 2.479989321198997,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 401,
+      "price": 1000000.0,
+      "pnl": 2.4777493180815955,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 402,
+      "price": 1000000.0,
+      "pnl": 2.4710414408621273,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 402,
+      "price": 1000000.0,
+      "pnl": 2.4688135498068178,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 403,
+      "price": 1000000.0,
+      "pnl": 2.462141921398419,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 403,
+      "price": 1000000.0,
+      "pnl": 2.459926055210486,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 404,
+      "price": 1000000.0,
+      "pnl": 2.453290414814396,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 404,
+      "price": 1000000.0,
+      "pnl": 2.451086487082569,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 405,
+      "price": 1000000.0,
+      "pnl": 2.4444865762419044,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 405,
+      "price": 1000000.0,
+      "pnl": 2.4422945013299198,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 406,
+      "price": 1000000.0,
+      "pnl": 2.4357300639044714,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 406,
+      "price": 1000000.0,
+      "pnl": 2.4335497569427496,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 407,
+      "price": 1000000.0,
+      "pnl": 2.427020539084108,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 407,
+      "price": 1000000.0,
+      "pnl": 2.424851915961526,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 408,
+      "price": 1000000.0,
+      "pnl": 2.41835766608851,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 408,
+      "price": 1000000.0,
+      "pnl": 2.4162006434442826,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 409,
+      "price": 1000000.0,
+      "pnl": 2.4097411122186796,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 409,
+      "price": 1000000.0,
+      "pnl": 2.40759560743434,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 410,
+      "price": 1000000.0,
+      "pnl": 2.4011705477369447,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 410,
+      "price": 1000000.0,
+      "pnl": 2.39903647892842,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 411,
+      "price": 1000000.0,
+      "pnl": 2.3926456458353775,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 411,
+      "price": 1000000.0,
+      "pnl": 2.3905229318451733,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 412,
+      "price": 1000000.0,
+      "pnl": 2.3841660826046063,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 412,
+      "price": 1000000.0,
+      "pnl": 2.382054642994078,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 413,
+      "price": 1000000.0,
+      "pnl": 2.3757315370030145,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 413,
+      "price": 1000000.0,
+      "pnl": 2.373631292044741,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 414,
+      "price": 1000000.0,
+      "pnl": 2.3673416908263185,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 414,
+      "price": 1000000.0,
+      "pnl": 2.365252561496565,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 415,
+      "price": 1000000.0,
+      "pnl": 2.3589962286775235,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 415,
+      "price": 1000000.0,
+      "pnl": 2.3569181366488032,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 416,
+      "price": 1000000.0,
+      "pnl": 2.350694837937249,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 416,
+      "price": 1000000.0,
+      "pnl": 2.3486277055709706,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 417,
+      "price": 1000000.0,
+      "pnl": 2.342437208734422,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 417,
+      "price": 1000000.0,
+      "pnl": 2.3403809590736313,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 418,
+      "price": 1000000.0,
+      "pnl": 2.3342230339173247,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 418,
+      "price": 1000000.0,
+      "pnl": 2.332177590679534,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 419,
+      "price": 1000000.0,
+      "pnl": 2.3260520090250036,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 419,
+      "price": 1000000.0,
+      "pnl": 2.3240172965951094,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 420,
+      "price": 1000000.0,
+      "pnl": 2.317923832259027,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 420,
+      "price": 1000000.0,
+      "pnl": 2.3158997756823143,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 421,
+      "price": 1000000.0,
+      "pnl": 2.309838204455584,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 421,
+      "price": 1000000.0,
+      "pnl": 2.307824729430815,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 422,
+      "price": 1000000.0,
+      "pnl": 2.301794829057931,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 422,
+      "price": 1000000.0,
+      "pnl": 2.2997918619305198,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 423,
+      "price": 1000000.0,
+      "pnl": 2.293793412089167,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 423,
+      "price": 1000000.0,
+      "pnl": 2.2918008798444354,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 424,
+      "price": 1000000.0,
+      "pnl": 2.2858336621253454,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 424,
+      "price": 1000000.0,
+      "pnl": 2.2838514923818627,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 425,
+      "price": 1000000.0,
+      "pnl": 2.2779152902689073,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 425,
+      "price": 1000000.0,
+      "pnl": 2.2759434112719092,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 426,
+      "price": 1000000.0,
+      "pnl": 2.2700380101224424,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 426,
+      "price": 1000000.0,
+      "pnl": 2.268076350737331,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 427,
+      "price": 1000000.0,
+      "pnl": 2.2622015377627633,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 427,
+      "price": 1000000.0,
+      "pnl": 2.2602500274686825,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 428,
+      "price": 1000000.0,
+      "pnl": 2.254405591715292,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 428,
+      "price": 1000000.0,
+      "pnl": 2.2524641605987856,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 429,
+      "price": 1000000.0,
+      "pnl": 2.2466498929287613,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 429,
+      "price": 1000000.0,
+      "pnl": 2.244718471677503,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 430,
+      "price": 1000000.0,
+      "pnl": 2.238934164750213,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 430,
+      "price": 1000000.0,
+      "pnl": 2.237012684646815,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 431,
+      "price": 1000000.0,
+      "pnl": 2.2312581329003045,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 431,
+      "price": 1000000.0,
+      "pnl": 2.2293465258161946,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 432,
+      "price": 1000000.0,
+      "pnl": 2.2236215254489022,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 432,
+      "price": 1000000.0,
+      "pnl": 2.2217197238382833,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 433,
+      "price": 1000000.0,
+      "pnl": 2.2160240727909764,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 433,
+      "price": 1000000.0,
+      "pnl": 2.214132009684851,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 434,
+      "price": 1000000.0,
+      "pnl": 2.20846550762278,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 434,
+      "price": 1000000.0,
+      "pnl": 2.206583116623049,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 435,
+      "price": 1000000.0,
+      "pnl": 2.20094556491831,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 435,
+      "price": 1000000.0,
+      "pnl": 2.1990727801919405,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 436,
+      "price": 1000000.0,
+      "pnl": 2.193463981906052,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 436,
+      "price": 1000000.0,
+      "pnl": 2.191600738179315,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 437,
+      "price": 1000000.0,
+      "pnl": 2.1860204980460023,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 437,
+      "price": 1000000.0,
+      "pnl": 2.184166730598782,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 438,
+      "price": 1000000.0,
+      "pnl": 2.1786148550069577,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 438,
+      "price": 1000000.0,
+      "pnl": 2.176770499667122,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 439,
+      "price": 1000000.0,
+      "pnl": 2.1712467966440827,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 439,
+      "price": 1000000.0,
+      "pnl": 2.169411789781924,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 440,
+      "price": 1000000.0,
+      "pnl": 2.1639160689767323,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 440,
+      "price": 1000000.0,
+      "pnl": 2.162090347499476,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 441,
+      "price": 1000000.0,
+      "pnl": 2.156622420166545,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 441,
+      "price": 1000000.0,
+      "pnl": 2.154805921512918,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 442,
+      "price": 1000000.0,
+      "pnl": 2.1493656004957913,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 442,
+      "price": 1000000.0,
+      "pnl": 2.147558262630659,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 443,
+      "price": 1000000.0,
+      "pnl": 2.1421453623459743,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 443,
+      "price": 1000000.0,
+      "pnl": 2.1403471237550376,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 444,
+      "price": 1000000.0,
+      "pnl": 2.1349614601766866,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 444,
+      "price": 1000000.0,
+      "pnl": 2.1331722598612424,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 445,
+      "price": 1000000.0,
+      "pnl": 2.1278136505047134,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 445,
+      "price": 1000000.0,
+      "pnl": 2.1260334279764757,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 446,
+      "price": 1000000.0,
+      "pnl": 2.1207016918833763,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 446,
+      "price": 1000000.0,
+      "pnl": 2.1189303871593603,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 447,
+      "price": 1000000.0,
+      "pnl": 2.113625344882129,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 447,
+      "price": 1000000.0,
+      "pnl": 2.1118628984795897,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 448,
+      "price": 1000000.0,
+      "pnl": 2.1065843720663775,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 448,
+      "price": 1000000.0,
+      "pnl": 2.1048307249978153,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 449,
+      "price": 1000000.0,
+      "pnl": 2.0995785379775476,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 449,
+      "price": 1000000.0,
+      "pnl": 2.097833631745764,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 450,
+      "price": 1000000.0,
+      "pnl": 2.092607609113378,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 450,
+      "price": 1000000.0,
+      "pnl": 2.090871385706594,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 451,
+      "price": 1000000.0,
+      "pnl": 2.0856713539084435,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 451,
+      "price": 1000000.0,
+      "pnl": 2.083943755795471,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 452,
+      "price": 1000000.0,
+      "pnl": 2.0787695427149036,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 452,
+      "price": 1000000.0,
+      "pnl": 2.077050512840378,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 453,
+      "price": 1000000.0,
+      "pnl": 2.071901947783477,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 453,
+      "price": 1000000.0,
+      "pnl": 2.0701914295631387,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 454,
+      "price": 1000000.0,
+      "pnl": 2.0650683432446306,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 454,
+      "price": 1000000.0,
+      "pnl": 2.0633662805606643,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 455,
+      "price": 1000000.0,
+      "pnl": 2.058268505089992,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 455,
+      "price": 1000000.0,
+      "pnl": 2.05657484228642,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 456,
+      "price": 1000000.0,
+      "pnl": 2.051502211153971,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 456,
+      "price": 1000000.0,
+      "pnl": 2.049816893032099,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 457,
+      "price": 1000000.0,
+      "pnl": 2.044769241095594,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 457,
+      "price": 1000000.0,
+      "pnl": 2.043092212909508,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 458,
+      "price": 1000000.0,
+      "pnl": 2.038069376380551,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 458,
+      "price": 1000000.0,
+      "pnl": 2.036400583832666,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 459,
+      "price": 1000000.0,
+      "pnl": 2.0314024002634383,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 459,
+      "price": 1000000.0,
+      "pnl": 2.0297417895001026,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 460,
+      "price": 1000000.0,
+      "pnl": 2.024768097770218,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 460,
+      "price": 1000000.0,
+      "pnl": 2.0231156153773604,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 461,
+      "price": 1000000.0,
+      "pnl": 2.018166255680867,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 461,
+      "price": 1000000.0,
+      "pnl": 2.016521848679697,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 462,
+      "price": 1000000.0,
+      "pnl": 2.0115966625122272,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 462,
+      "price": 1000000.0,
+      "pnl": 2.0099602783549884,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 463,
+      "price": 1000000.0,
+      "pnl": 2.005059108501054,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 463,
+      "price": 1000000.0,
+      "pnl": 2.0034306950668173,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 464,
+      "price": 1000000.0,
+      "pnl": 1.9985533855872553,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 464,
+      "price": 1000000.0,
+      "pnl": 1.9969328911777668,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 465,
+      "price": 1000000.0,
+      "pnl": 1.9920792873973185,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 465,
+      "price": 1000000.0,
+      "pnl": 1.9904666607328925,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 466,
+      "price": 1000000.0,
+      "pnl": 1.9856366092279305,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 466,
+      "price": 1000000.0,
+      "pnl": 1.9840317994433867,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 467,
+      "price": 1000000.0,
+      "pnl": 1.9792251480297782,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 467,
+      "price": 1000000.0,
+      "pnl": 1.9776281046704276,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 468,
+      "price": 1000000.0,
+      "pnl": 1.9728447023915336,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 468,
+      "price": 1000000.0,
+      "pnl": 1.9712553754092104,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 469,
+      "price": 1000000.0,
+      "pnl": 1.9664950725240211,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 469,
+      "price": 1000000.0,
+      "pnl": 1.9649134122731553,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 470,
+      "price": 1000000.0,
+      "pnl": 1.960176060244563,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 470,
+      "price": 1000000.0,
+      "pnl": 1.9586020174783008,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 471,
+      "price": 1000000.0,
+      "pnl": 1.9538874689614973,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 471,
+      "price": 1000000.0,
+      "pnl": 1.9523209948278641,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 472,
+      "price": 1000000.0,
+      "pnl": 1.947629103658874,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 472,
+      "price": 1000000.0,
+      "pnl": 1.9460701496969797,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 473,
+      "price": 1000000.0,
+      "pnl": 1.9414007708813192,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 473,
+      "price": 1000000.0,
+      "pnl": 1.9398492890176058,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 474,
+      "price": 1000000.0,
+      "pnl": 1.9352022787190724,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 474,
+      "price": 1000000.0,
+      "pnl": 1.9336582212636062,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 475,
+      "price": 1000000.0,
+      "pnl": 1.9290334367931872,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 475,
+      "price": 1000000.0,
+      "pnl": 1.9274967564359882,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 476,
+      "price": 1000000.0,
+      "pnl": 1.9228940562408985,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 476,
+      "price": 1000000.0,
+      "pnl": 1.9213647060483148,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 477,
+      "price": 1000000.0,
+      "pnl": 1.9167839497011543,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 477,
+      "price": 1000000.0,
+      "pnl": 1.9152618831122727,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 478,
+      "price": 1000000.0,
+      "pnl": 1.910702931300305,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 478,
+      "price": 1000000.0,
+      "pnl": 1.9091881021234058,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 479,
+      "price": 1000000.0,
+      "pnl": 1.904650816637954,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 479,
+      "price": 1000000.0,
+      "pnl": 1.903143179047002,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 480,
+      "price": 1000000.0,
+      "pnl": 1.8986274227729656,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 480,
+      "price": 1000000.0,
+      "pnl": 1.8971269313041401,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 481,
+      "price": 1000000.0,
+      "pnl": 1.8926325682096263,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 481,
+      "price": 1000000.0,
+      "pnl": 1.891139177757892,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 482,
+      "price": 1000000.0,
+      "pnl": 1.8866660728839582,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 482,
+      "price": 1000000.0,
+      "pnl": 1.8851797386996714,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 483,
+      "price": 1000000.0,
+      "pnl": 1.8807277581501858,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 483,
+      "price": 1000000.0,
+      "pnl": 1.8792484358357382,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 484,
+      "price": 1000000.0,
+      "pnl": 1.8748174467673495,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 484,
+      "price": 1000000.0,
+      "pnl": 1.87334509227385,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 485,
+      "price": 1000000.0,
+      "pnl": 1.8689349628860688,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 485,
+      "price": 1000000.0,
+      "pnl": 1.8674695325100612,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 486,
+      "price": 1000000.0,
+      "pnl": 1.8630801320354473,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 486,
+      "price": 1000000.0,
+      "pnl": 1.8616215824156643,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 487,
+      "price": 1000000.0,
+      "pnl": 1.857252781110126,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 487,
+      "price": 1000000.0,
+      "pnl": 1.8558010692242788,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 488,
+      "price": 1000000.0,
+      "pnl": 1.8514527383574741,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 488,
+      "price": 1000000.0,
+      "pnl": 1.8500078215190752,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 489,
+      "price": 1000000.0,
+      "pnl": 1.8456798333649198,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 489,
+      "price": 1000000.0,
+      "pnl": 1.8442416692201438,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 490,
+      "price": 1000000.0,
+      "pnl": 1.8399338970474248,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 490,
+      "price": 1000000.0,
+      "pnl": 1.8385024435720008,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 491,
+      "price": 1000000.0,
+      "pnl": 1.8342147616350863,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 491,
+      "price": 1000000.0,
+      "pnl": 1.8327899771312255,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 492,
+      "price": 1000000.0,
+      "pnl": 1.8285222606608837,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 492,
+      "price": 1000000.0,
+      "pnl": 1.827104103754239,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 493,
+      "price": 1000000.0,
+      "pnl": 1.8228562289485502,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 493,
+      "price": 1000000.0,
+      "pnl": 1.8214446585852104,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 494,
+      "price": 1000000.0,
+      "pnl": 1.81721650260058,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 494,
+      "price": 1000000.0,
+      "pnl": 1.815811478044095,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 495,
+      "price": 1000000.0,
+      "pnl": 1.8116029189863647,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 495,
+      "price": 1000000.0,
+      "pnl": 1.810204399814805,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 496,
+      "price": 1000000.0,
+      "pnl": 1.8060153167304578,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 496,
+      "price": 1000000.0,
+      "pnl": 1.804623262833503,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 497,
+      "price": 1000000.0,
+      "pnl": 1.8004535357009654,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 497,
+      "price": 1000000.0,
+      "pnl": 1.7990679072770266,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 498,
+      "price": 1000000.0,
+      "pnl": 1.7949174169980626,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 498,
+      "price": 1000000.0,
+      "pnl": 1.793538174551434,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 499,
+      "price": 1000000.0,
+      "pnl": 1.7894068029426349,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 499,
+      "price": 1000000.0,
+      "pnl": 1.7880339072806761,
+      "reason": "partial"
+    }
+  ]
+}

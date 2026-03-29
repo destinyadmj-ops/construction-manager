@@ -1,0 +1,18 @@
+{
+  "csv": "bot_v2\\tools\\data\\btc_sample.csv",
+  "entry_index": 120,
+  "entry_price": 67843.39,
+  "num_trades": 0,
+  "total_pnl": 0,
+  "win_rate": 0.0,
+  "wins": 0,
+  "losses": 0,
+  "avg_pnl": 0.0,
+  "avg_win": 0.0,
+  "avg_loss": 0.0,
+  "max_drawdown": 0.0,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 0,
+  "max_consecutive_losses": 0,
+  "trades": []
+}

@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: redis_core
+    restart: always
+    ports:
+      - "6379:6379"
+
+  bot:
+    build: .
+    container_name: trading_bot
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - NODE_ID=bot_1

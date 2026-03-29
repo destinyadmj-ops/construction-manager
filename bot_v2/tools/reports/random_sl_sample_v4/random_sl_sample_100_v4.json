@@ -1,0 +1,702 @@
+[
+  {
+    "entry_index": 9,
+    "entry_price": 65599.10040206,
+    "num_trades": 978,
+    "sl_hits": 0,
+    "total_pnl": 5209.066342590713
+  },
+  {
+    "entry_index": 10,
+    "entry_price": 68879.05542217,
+    "num_trades": 974,
+    "sl_hits": 0,
+    "total_pnl": 5252.120983056287
+  },
+  {
+    "entry_index": 14,
+    "entry_price": 76576.26863251,
+    "num_trades": 970,
+    "sl_hits": 0,
+    "total_pnl": 5263.1163628126415
+  },
+  {
+    "entry_index": 15,
+    "entry_price": 80405.08206414,
+    "num_trades": 968,
+    "sl_hits": 0,
+    "total_pnl": 5269.0198995656565
+  },
+  {
+    "entry_index": 16,
+    "entry_price": 84425.33616734,
+    "num_trades": 966,
+    "sl_hits": 0,
+    "total_pnl": 5273.660476548155
+  },
+  {
+    "entry_index": 19,
+    "entry_price": 97732.87978072,
+    "num_trades": 960,
+    "sl_hits": 0,
+    "total_pnl": 5279.203477730499
+  },
+  {
+    "entry_index": 26,
+    "entry_price": 137519.97644687,
+    "num_trades": 946,
+    "sl_hits": 0,
+    "total_pnl": 5231.242871639054
+  },
+  {
+    "entry_index": 29,
+    "entry_price": 159196.5627343,
+    "num_trades": 940,
+    "sl_hits": 0,
+    "total_pnl": 5177.309894428813
+  },
+  {
+    "entry_index": 33,
+    "entry_price": 193504.41698206,
+    "num_trades": 932,
+    "sl_hits": 0,
+    "total_pnl": 5065.18687195149
+  },
+  {
+    "entry_index": 39,
+    "entry_price": 259314.42563934,
+    "num_trades": 920,
+    "sl_hits": 0,
+    "total_pnl": 4787.697024689711
+  },
+  {
+    "entry_index": 42,
+    "entry_price": 300188.86198075,
+    "num_trades": 914,
+    "sl_hits": 0,
+    "total_pnl": 4587.05458146804
+  },
+  {
+    "entry_index": 54,
+    "entry_price": 539096.06678951,
+    "num_trades": 890,
+    "sl_hits": 0,
+    "total_pnl": 3183.7293332205486
+  },
+  {
+    "entry_index": 57,
+    "entry_price": 624071.0843172,
+    "num_trades": 884,
+    "sl_hits": 0,
+    "total_pnl": 2628.5401564975587
+  },
+  {
+    "entry_index": 60,
+    "entry_price": 722440.2889827,
+    "num_trades": 878,
+    "sl_hits": 0,
+    "total_pnl": 1963.6507623501518
+  },
+  {
+    "entry_index": 61,
+    "entry_price": 758562.30343184,
+    "num_trades": 876,
+    "sl_hits": 0,
+    "total_pnl": 1714.6210387667481
+  },
+  {
+    "entry_index": 63,
+    "entry_price": 836314.9395336,
+    "num_trades": 872,
+    "sl_hits": 0,
+    "total_pnl": 1171.126788757157
+  },
+  {
+    "entry_index": 80,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 82,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 84,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 90,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 91,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 95,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 99,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 102,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 103,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 107,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 109,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 114,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 120,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 130,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 141,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 142,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 145,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 147,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 152,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 153,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 157,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 158,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 161,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 163,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 168,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 172,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 183,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 184,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 195,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 200,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 202,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 204,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 205,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 212,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 214,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 216,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 223,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 224,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 235,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 244,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 250,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 259,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 272,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 273,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 279,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 283,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 284,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 287,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 292,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 293,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 295,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 296,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 298,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 303,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 304,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 310,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 313,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 315,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 319,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 329,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 330,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 339,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 345,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 349,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 352,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 353,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 359,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 365,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 366,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 370,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 377,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 378,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 379,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 381,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 389,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 396,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 407,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 413,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 417,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 420,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 423,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 426,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 430,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  },
+  {
+    "entry_index": 436,
+    "entry_price": 1000000.0,
+    "num_trades": 0,
+    "sl_hits": 0,
+    "total_pnl": 0
+  }
+]

@@ -1,0 +1,127 @@
+{
+  "csv": "bot_v2/tools/data/btc_highvol_sanitized.csv",
+  "entry_index": 0,
+  "entry_price": 68025.36,
+  "num_trades": 18,
+  "total_pnl": -137.18899969294722,
+  "win_rate": 0.0,
+  "wins": 0,
+  "losses": 18,
+  "avg_pnl": -7.621611094052623,
+  "avg_win": 0.0,
+  "avg_loss": -7.621611094052623,
+  "max_drawdown": 137.18899969294722,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 0,
+  "max_consecutive_losses": 18,
+  "trades": [
+    {
+      "exit_idx": 4,
+      "price": 69037.35,
+      "pnl": -0.03035970000000016,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 6,
+      "price": 68975.216385,
+      "pnl": -0.02832497386192414,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 8,
+      "price": 68913.13869025,
+      "pnl": -0.026315670807205913,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 10,
+      "price": 68851.11686543,
+      "pnl": -0.02433144339801122,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 12,
+      "price": 68789.15086025,
+      "pnl": -0.02237194975896394,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 13,
+      "price": 70852.82538606,
+      "pnl": -0.08232809652123903,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 13,
+      "price": 70852.82538606,
+      "pnl": -0.0820847730012832,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 14,
+      "price": 72978.41014764,
+      "pnl": -0.1425219025130683,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 14,
+      "price": 72978.41014764,
+      "pnl": -0.14210316036029186,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 15,
+      "price": 75167.76245207,
+      "pnl": -0.20311486392405095,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 15,
+      "price": 75167.76245207,
+      "pnl": -0.20252159578192816,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 16,
+      "price": 77422.79532563,
+      "pnl": -0.26413458635139264,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 16,
+      "price": 77422.79532563,
+      "pnl": -0.2633675890018799,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 17,
+      "price": 79745.4791854,
+      "pnl": -0.3256088328442855,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 17,
+      "price": 79745.4791854,
+      "pnl": -0.32466880897896744,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 18,
+      "price": 82137.84356097,
+      "pnl": -0.3875655438617229,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 18,
+      "price": 82137.84356097,
+      "pnl": -0.38645310374443276,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 18,
+      "price": 82137.84356097,
+      "pnl": -134.25082309823657,
+      "reason": "partial_tp,partial_tp,dynamic_sl_hit"
+    }
+  ]
+}

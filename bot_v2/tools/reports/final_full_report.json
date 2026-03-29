@@ -1,0 +1,62 @@
+{
+  "datasets": {
+    "v5_random": {
+      "samples": 100,
+      "avg_sl_hits": 0.0,
+      "avg_total_pnl": 1621807156.477296,
+      "avg_num_trades": 483.9,
+      "pct_zero_trades": 0.22
+    },
+    "v4_random": {
+      "samples": 100,
+      "avg_sl_hits": 0.0,
+      "avg_total_pnl": 670.5634686607322,
+      "avg_num_trades": 148.68,
+      "pct_zero_trades": 0.84
+    },
+    "history_random": {
+      "samples": 100,
+      "avg_sl_hits": 0.0,
+      "avg_total_pnl": 78.41060024990284,
+      "avg_num_trades": 129.28,
+      "pct_zero_trades": 0.86
+    }
+  },
+  "top5": [
+    {
+      "combo_idx": "1",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.16]]"
+    },
+    {
+      "combo_idx": "2",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.18]]"
+    },
+    {
+      "combo_idx": "3",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.11], [0.0, 0.2]]"
+    },
+    {
+      "combo_idx": "4",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.12], [0.0, 0.16]]"
+    },
+    {
+      "combo_idx": "5",
+      "total_pnl_sum": "130713.66563577176",
+      "avg_win_rate": "0.5",
+      "runs": "8",
+      "thresholds_json": "[[0.8, 0.08], [0.5, 0.12], [0.0, 0.18]]"
+    }
+  ]
+}

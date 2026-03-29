@@ -1,0 +1,109 @@
+{
+  "csv": "bot_v2/tools/data/btc_highvol_sanitized.csv",
+  "entry_index": 150,
+  "entry_price": 4064966.37800088,
+  "num_trades": 15,
+  "total_pnl": -9173.213651753536,
+  "win_rate": 0.0,
+  "wins": 0,
+  "losses": 15,
+  "avg_pnl": -611.5475767835691,
+  "avg_win": 0.0,
+  "avg_loss": -611.5475767835691,
+  "max_drawdown": 9173.213651753536,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 0,
+  "max_consecutive_losses": 15,
+  "trades": [
+    {
+      "exit_idx": 151,
+      "price": 4186915.36934091,
+      "pnl": -3.6584697402008994,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 151,
+      "price": 4186915.36934091,
+      "pnl": -3.647494330980297,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 152,
+      "price": 4312522.83042113,
+      "pnl": -7.337973489707789,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 152,
+      "price": 4312522.83042113,
+      "pnl": -7.316091454636196,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 153,
+      "price": 4441898.51533377,
+      "pnl": -11.040201608954742,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 153,
+      "price": 4441898.51533377,
+      "pnl": -11.007475486566452,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 154,
+      "price": 4575155.47079378,
+      "pnl": -14.766851165790502,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 154,
+      "price": 4575155.47079378,
+      "pnl": -14.723337378040641,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 155,
+      "price": 4712410.1349176,
+      "pnl": -18.519627201834524,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 155,
+      "price": 4712410.1349176,
+      "pnl": -18.46537617485892,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 156,
+      "price": 4853782.43896512,
+      "pnl": -22.30024398716813,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 156,
+      "price": 4853782.43896512,
+      "pnl": -22.235300264844586,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 157,
+      "price": 4999395.91213408,
+      "pnl": -26.110426265009437,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 157,
+      "price": 4999395.91213408,
+      "pnl": -26.034828615601207,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 157,
+      "price": 4999395.91213408,
+      "pnl": -8966.049954589342,
+      "reason": "partial_tp,partial_tp,dynamic_sl_hit"
+    }
+  ]
+}

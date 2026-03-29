@@ -1,0 +1,67 @@
+{
+  "csv": "bot_v2\\tools\\data\\synthetic.csv",
+  "entry_index": 0,
+  "entry_price": 100.0,
+  "num_trades": 8,
+  "total_pnl": 9.084465639679145,
+  "win_rate": 1.0,
+  "wins": 8,
+  "losses": 0,
+  "avg_pnl": 1.1355582049598931,
+  "avg_win": 1.1355582049598931,
+  "avg_loss": 0.0,
+  "max_drawdown": 0.0,
+  "max_drawdown_pct": 0.0,
+  "max_consecutive_wins": 8,
+  "max_consecutive_losses": 0,
+  "trades": [
+    {
+      "exit_idx": 1,
+      "price": 110.0,
+      "pnl": 3.0,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 1,
+      "price": 110.0,
+      "pnl": 2.1,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 2,
+      "price": 120.0,
+      "pnl": 1.4405999999999999,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 2,
+      "price": 120.0,
+      "pnl": 1.2288318,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 3,
+      "price": 115.0,
+      "pnl": 0.5720062821170765,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 3,
+      "price": 115.0,
+      "pnl": 0.5108253350351126,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 4,
+      "price": 105.0,
+      "pnl": 0.12127354249418859,
+      "reason": "partial"
+    },
+    {
+      "exit_idx": 4,
+      "price": 105.0,
+      "pnl": 0.11092868003276758,
+      "reason": "partial"
+    }
+  ]
+}

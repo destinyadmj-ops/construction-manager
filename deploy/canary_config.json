@@ -1,0 +1,17 @@
+{
+  "name": "canary-reward-coef",
+  "param": "REWARD_BEST_ARB_COEF",
+  "value": 0.0001,
+  "rollout": {
+    "initial_percent": 1,
+    "steps": [1, 5, 25, 100],
+    "step_interval_minutes": 60
+  },
+  "rollback_conditions": {
+    "max_drawdown_pct_increase": 0.05,
+    "pnl_drop_absolute": -10.0,
+    "error_rate_increase": 0.01
+  },
+  "monitoring": ["total_pnl","win_rate","avg_pnl","error_rate"],
+  "notes": "Canary rollout generated from tools/ab_winner.json. Adjust thresholds before production rollout."
+}
