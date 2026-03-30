@@ -52,8 +52,15 @@ class ReinforcementLearningTrader:
 
         Returns dict with keys: ok(bool), reason(if rejected), reward_components(dict)
         """
+        # map discrete action to numeric for safety and reward evaluation
+        action_value = info.get('action_value') if info.get('action_value') is not None else None
+        if action_value is None:
+            map_val = {'buy': 1.0, 'sell': -1.0, 'hold': 0.0}
+            action_value = map_val.get(action, 0.0)
+            info['action_value'] = action_value
+
         # safety check
-        ok, reason = safety_check({}, action, info)
+        ok, reason = safety_check({}, action_value, info)
         if not ok:
             logger.warning('Action rejected by safety_check: %s', reason)
             return {'ok': False, 'reason': reason, 'reward_components': None}
@@ -88,9 +95,17 @@ class ReinforcementLearningTrader:
                 # map discrete action to numeric value (caller may supply action_value in info)
                 action_value = info.get('action_value') if info.get('action_value') is not None else 0.0
                 from bot_v2.ai.reward import compute_reward
+                import bot_v2.config as cfg
 
-                comp = compute_reward({}, action_value, info)
+                comp = compute_reward({}, action_value, info, policy_probs=info.get('policy_probs'), old_policy_probs=info.get('old_policy_probs'))
                 reward_val = float(comp.get('total', 0.0))
+                # incorporate KL / entropy regularization if present
+                kl = comp.get('kl')
+                ent = comp.get('entropy')
+                if kl is not None:
+                    reward_val += -cfg.RL_LAMBDA_KL * float(kl)
+                if ent is not None:
+                    reward_val += cfg.RL_LAMBDA_ENTROPY * float(ent)
             except Exception:
                 reward_val = 0.0
         else:

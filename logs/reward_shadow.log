@@ -1,0 +1,67 @@
+--- Shadow run start 2026-03-29T23:40:55.397692Z
+--- Shadow run start 2026-03-29T23:41:14.591721Z
+{"t": 0, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 1, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 2, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 3, "action": "hold", "components": {"r_pnl": 0.0940901144133046, "r_mtm": 0.12055665513797714, "r_cost": -0.0009975827718147934, "r_liq": -0.002348473239874689, "r_turn": -1.0, "r_expo": -0.0, "r_l2": -0.0, "r_smooth": -0.001, "r_dd": -0.0, "total": 0.20532243377522488, "kl": null, "entropy": null}}
+{"t": 4, "action": "hold", "components": {"r_pnl": 0.3322886181008542, "r_mtm": -0.06395890221252451, "r_cost": -0.0011566256220085823, "r_liq": -0.0011396708407043021, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.3253059376779453, "kl": null, "entropy": null}}
+{"t": 5, "action": "hold", "components": {"r_pnl": -1.1499415227105172, "r_mtm": 0.11416638352914177, "r_cost": -0.0007832952580431834, "r_liq": -0.008799005726923211, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0, "r_smooth": -0.0, "r_dd": -0.0, "total": -1.1349086767521845, "kl": null, "entropy": null}}
+{"t": 6, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 7, "action": "sell", "ok": false, "reason": "position limit exceeded (curr 0.0 + action -1.0 > max 0.02)"}
+{"t": 8, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 9, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 10, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.0494769865654179 > 0.03)"}
+{"t": 11, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 12, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 13, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 14, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 15, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 16, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 17, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 18, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+{"t": 19, "action": "buy", "ok": false, "reason": "position limit exceeded (curr 0.0 + action 1.0 > max 0.02)"}
+--- Shadow run end 2026-03-29T23:41:14.600661Z
+--- Shadow run start 2026-03-29T23:42:57.554550Z
+{"t": 0, "action": "buy", "components": {"r_pnl": -0.22571011857808013, "r_mtm": -0.15899303362747405, "r_cost": -0.0007995735314570977, "r_liq": -0.0035739324361828907, "r_turn": -1.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.001, "r_dd": -0.0, "total": -0.14172202925419317, "kl": null, "entropy": null}}
+{"t": 1, "action": "buy", "components": {"r_pnl": -0.8454359898879652, "r_mtm": 0.07259229049319971, "r_cost": -0.0009856037043747467, "r_liq": -0.00678709255021794, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.8358688182679109, "kl": null, "entropy": null}}
+{"t": 2, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.042609200552736384 > 0.03)"}
+{"t": 3, "action": "hold", "components": {"r_pnl": 0.40607962871876013, "r_mtm": -0.1281454538340484, "r_cost": -0.0006564295408311236, "r_liq": -0.0035484681417319243, "r_turn": -1.0, "r_expo": -0.0, "r_l2": -0.0, "r_smooth": -0.001, "r_dd": -0.0, "total": 0.4933828878653902, "kl": null, "entropy": null}}
+{"t": 4, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.03390368496161597 > 0.03)"}
+{"t": 5, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.03816417502246574 > 0.03)"}
+{"t": 6, "action": "buy", "components": {"r_pnl": -1.297579255351381, "r_mtm": 0.009505932761244257, "r_cost": -0.0012845243322757052, "r_liq": -0.00636097975456857, "r_turn": -1.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.001, "r_dd": -0.0, "total": -1.1958326965302477, "kl": null, "entropy": null}}
+{"t": 7, "action": "sell", "components": {"r_pnl": -0.46988645910016463, "r_mtm": -0.005359982500297317, "r_cost": -0.0014685687163390857, "r_liq": -0.004186634776244862, "r_turn": -2.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.002, "r_dd": -0.0, "total": -0.27189770867841107, "kl": null, "entropy": null}}
+{"t": 8, "action": "buy", "components": {"r_pnl": 0.40614052282529134, "r_mtm": 0.03715823063137061, "r_cost": -0.00069009732078761, "r_liq": -0.00763120984825413, "r_turn": -2.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.002, "r_dd": -0.0, "total": 0.6108818534917678, "kl": null, "entropy": null}}
+{"t": 9, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.044055446165149476 > 0.03)"}
+{"t": 10, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.03627701248828237 > 0.03)"}
+{"t": 11, "action": "buy", "components": {"r_pnl": -0.5709485371209383, "r_mtm": -0.1656063146174876, "r_cost": -0.0012314774771975106, "r_liq": -0.0008381361351792339, "r_turn": -1.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.001, "r_dd": -0.0, "total": -0.489421577992295, "kl": null, "entropy": null}}
+{"t": 12, "action": "buy", "components": {"r_pnl": -0.0638853743675844, "r_mtm": 0.02205879719070003, "r_cost": -0.0008976491024657196, "r_liq": -0.006478694201946079, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.05943779665000708, "kl": null, "entropy": null}}
+{"t": 13, "action": "buy", "components": {"r_pnl": 0.4867409578016218, "r_mtm": -0.18191925129776942, "r_cost": -0.001006905894795807, "r_liq": -0.004279292859984903, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.4695817732070415, "kl": null, "entropy": null}}
+{"t": 14, "action": "buy", "components": {"r_pnl": 0.4789887415514201, "r_mtm": 0.1756265870531643, "r_cost": -0.0005470844759863645, "r_liq": -0.007437872315762113, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.4996232519386313, "kl": null, "entropy": null}}
+{"t": 15, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.039167728172213784 > 0.03)"}
+{"t": 16, "action": "buy", "components": {"r_pnl": -0.4539071363493848, "r_mtm": 0.08358010976597485, "r_cost": -0.0007044100043503218, "r_liq": -0.004339708505215217, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.44418368112453, "kl": null, "entropy": null}}
+{"t": 17, "action": "buy", "components": {"r_pnl": 0.11175711936480659, "r_mtm": -0.06689172540001073, "r_cost": -0.001187437545434252, "r_liq": -0.004515546137693426, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.10603828234821797, "kl": null, "entropy": null}}
+{"t": 18, "action": "buy", "components": {"r_pnl": 0.44179917107211586, "r_mtm": -0.19013812278063244, "r_cost": -0.0005220510747525688, "r_liq": -0.0001489175439151058, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.4222377664912576, "kl": null, "entropy": null}}
+{"t": 19, "action": "buy", "components": {"r_pnl": 0.6629354221963243, "r_mtm": 0.19256706357715014, "r_cost": -0.0005727639624703712, "r_liq": -0.00878147386315288, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -0.0001, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.6859101015231454, "kl": null, "entropy": null}}
+--- Shadow run end 2026-03-29T23:42:57.561651Z
+--- Shadow run start 2026-03-30T00:36:54.885691Z
+{"t": 0, "action": "buy", "components": {"r_pnl": 0.7601459441688277, "r_mtm": 0.13355950820970525, "r_cost": -0.0007328941012632656, "r_liq": -0.0031899662965250222, "r_turn": -0.02, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -2e-05, "r_dd": -0.0, "total": 0.7763439440367975, "kl": null, "entropy": null}}
+{"t": 1, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.04971479397811076 > 0.03)"}
+{"t": 2, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.03415837431323858 > 0.03)"}
+{"t": 3, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.04905174205144475 > 0.03)"}
+{"t": 4, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.03036364157233043 > 0.03)"}
+{"t": 5, "action": "hold", "ok": false, "reason": "drawdown threshold exceeded (0.0368666504966571 > 0.03)"}
+{"t": 6, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.04953583950721786 > 0.03)"}
+{"t": 7, "action": "sell", "ok": false, "reason": "drawdown threshold exceeded (0.04293155000086226 > 0.03)"}
+{"t": 8, "action": "buy", "components": {"r_pnl": -0.20060074793671273, "r_mtm": -0.06732836169954073, "r_cost": -0.0006617390438871834, "r_liq": -0.004568252999085623, "r_turn": -0.04, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -4e-05, "r_dd": -0.0, "total": -0.2017512366510112, "kl": null, "entropy": null}}
+{"t": 9, "action": "buy", "components": {"r_pnl": 0.00026767212147224117, "r_mtm": -0.11250887789095061, "r_cost": -0.001229546906659179, "r_liq": -0.0019432921535650794, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.011241156497499459, "kl": null, "entropy": null}}
+{"t": 10, "action": "hold", "components": {"r_pnl": 0.7756379207781043, "r_mtm": -0.11281584084842887, "r_cost": -0.0007404495234801351, "r_liq": -0.005257251536929056, "r_turn": -0.02, "r_expo": -0.0, "r_l2": -0.0, "r_smooth": -2e-05, "r_dd": -0.0, "total": 0.7682245129382458, "kl": null, "entropy": null}}
+{"t": 11, "action": "buy", "components": {"r_pnl": -0.6048373276729397, "r_mtm": -0.19864451535491098, "r_cost": -0.0011963410413737894, "r_liq": -0.007201095205915001, "r_turn": -0.02, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -2e-05, "r_dd": -0.0, "total": -0.6203176126468471, "kl": null, "entropy": null}}
+{"t": 12, "action": "buy", "components": {"r_pnl": -0.3813674519682806, "r_mtm": 0.012472968196776874, "r_cost": -0.0005806644326000756, "r_liq": -0.00499838696039171, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.37820166610100714, "kl": null, "entropy": null}}
+{"t": 13, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.04107080677244241 > 0.03)"}
+{"t": 14, "action": "buy", "components": {"r_pnl": -0.5128013149729631, "r_mtm": 0.19976769824362123, "r_cost": -0.001420975241516835, "r_liq": -0.009196573853804684, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -0.0, "r_dd": -0.0, "total": -0.48964727346321546, "kl": null, "entropy": null}}
+{"t": 15, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.042117495576808335 > 0.03)"}
+{"t": 16, "action": "buy", "components": {"r_pnl": 0.865663988068461, "r_mtm": 0.06070887532947694, "r_cost": -0.0009969298599637557, "r_liq": -0.004431842348051108, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.8729538269154705, "kl": null, "entropy": null}}
+{"t": 17, "action": "buy", "components": {"r_pnl": 0.27738155769868544, "r_mtm": 0.09761058834310787, "r_cost": -0.0009777424166256122, "r_liq": -0.003300848379543263, "r_turn": -0.0, "r_expo": -0.0, "r_l2": -4e-08, "r_smooth": -0.0, "r_dd": -0.0, "total": 0.28781525830614224, "kl": null, "entropy": null}}
+{"t": 18, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.033031772555251575 > 0.03)"}
+{"t": 19, "action": "buy", "ok": false, "reason": "drawdown threshold exceeded (0.04374212471655747 > 0.03)"}
+--- Shadow run end 2026-03-30T00:36:54.893733Z
