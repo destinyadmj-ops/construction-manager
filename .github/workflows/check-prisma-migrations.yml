@@ -1,0 +1,43 @@
+name: Check Prisma Migrations
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine DATABASE_URL
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          DATABASE_URL_SECRET: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Choose SUPABASE_DATABASE_URL if present, otherwise DATABASE_URL
+          if [ -n "${SUPABASE_DATABASE_URL}" ]; then
+            echo "Using SUPABASE_DATABASE_URL"
+            echo "DATABASE_URL=${SUPABASE_DATABASE_URL}" >> $GITHUB_ENV
+          elif [ -n "${DATABASE_URL_SECRET}" ]; then
+            echo "Using DATABASE_URL"
+            echo "DATABASE_URL=${DATABASE_URL_SECRET}" >> $GITHUB_ENV
+          else
+            echo "No DATABASE URL secret found. Set SUPABASE_DATABASE_URL or DATABASE_URL." >&2
+            exit 1
+          fi
+
+      - name: Show Prisma migrate status
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          echo "Checking prisma migrate status..."
+          npx prisma migrate status --schema=prisma/schema.prisma || true
