@@ -1,5 +1,4 @@
 import { PrismaClient } from "@/generated/prisma";
-import { PrismaPg } from "@prisma/adapter-pg";
 
 const prismaGlobal = globalThis as typeof globalThis & {
   __prisma?: PrismaClient;
@@ -11,8 +10,29 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const verifiedConnectionString = connectionString;
 
-export const prisma = prismaGlobal.__prisma ?? new PrismaClient({ adapter });
+type PrismaClientOptions = ConstructorParameters<typeof PrismaClient>[0];
+
+function getPrismaClientOptions(): PrismaClientOptions | undefined {
+  try {
+    const runtimeRequire = eval("require") as (id: string) => unknown;
+    const adapterModule = runtimeRequire("@prisma/adapter-pg") as {
+      PrismaPg?: new (options: { connectionString: string }) => unknown;
+    };
+
+    if (typeof adapterModule?.PrismaPg !== "function") {
+      return undefined;
+    }
+
+    return {
+      adapter: new adapterModule.PrismaPg({ connectionString: verifiedConnectionString }),
+    } as PrismaClientOptions;
+  } catch {
+    return undefined;
+  }
+}
+
+export const prisma = prismaGlobal.__prisma ?? new PrismaClient(getPrismaClientOptions());
 
 if (process.env.NODE_ENV !== "production") prismaGlobal.__prisma = prisma;

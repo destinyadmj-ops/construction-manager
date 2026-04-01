@@ -204,19 +204,8 @@ function WeekHubInner() {
     el.scrollTop += e.deltaY;
   }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  // 現場リストたたみ状態
-  const [isSiteListCollapsed] = useState(false);
   // たたみ時のセル幅
-  const COLLAPSED_CELL_MIN_W = 140;
   const [cellMinW, setCellMinW] = useState<number>(112);
-    // 現場リストたたみ/広げ時にセル幅を自動調整
-    useEffect(() => {
-      if (isSiteListCollapsed) {
-        setCellMinW(COLLAPSED_CELL_MIN_W);
-      } else {
-        setCellMinW(112);
-      }
-    }, [isSiteListCollapsed]);
   const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
   const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(64);
   const [cellBg, setCellBg] = useState<CellBg>('default');
@@ -1958,19 +1947,19 @@ function WeekHubInner() {
                                 <div className="flex items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
                                       title="請求未発行"
                                     />
                                   ) : null}
                                   {s.reportIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600"
+                                      className="h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
                                       title="報告未発行"
                                     />
                                   ) : null}
                                   {s.unassignedThisMonth ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
                                       title="未配置"
                                     />
                                   ) : null}

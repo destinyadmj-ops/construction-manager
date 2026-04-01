@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16
     container_name: masterhub-db
+    restart: always
     environment:
       POSTGRES_USER: masterhub
       POSTGRES_PASSWORD: masterhub
@@ -14,6 +15,7 @@ services:
   redis:
     image: redis:7
     container_name: masterhub-redis
+    restart: always
     ports:
       - "6379:6379"
     volumes:

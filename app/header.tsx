@@ -149,7 +149,7 @@ export default function AppHeader() {
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
 
-  const [monthLegend, setMonthLegend] = useState<MonthLegendState>({
+  const [, setMonthLegend] = useState<MonthLegendState>({
     invoiceMissing: false,
     reportMissing: false,
     unassigned: false,
@@ -869,7 +869,7 @@ export default function AppHeader() {
       <div className="bg-white/60 dark:bg-black/60">
         <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
 
-          <div className="hidden -ml-2 sm:flex items-center gap-3">
+          <div className="hidden sm:-ml-2 sm:flex items-center gap-3">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
@@ -1242,7 +1242,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1">
+          <div className="hidden sm:-ml-2 sm:flex items-center gap-1">
             <button
               type="button"
               data-testid="header-action-back"
@@ -1426,30 +1426,24 @@ export default function AppHeader() {
             </div>
 
             {pathname === '/' ? (
-              <div className="ml-2 flex flex-wrap items-center gap-2 text-[11px]" aria-label="当月アラート凡例">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]" aria-label="当月アラート凡例">
                 <div className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300">
                   <span
-                    className={`mh-alert-dot mh-alert-dot-invoice ${
-                      monthLegend.invoiceMissing ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
-                    }`}
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
                     aria-hidden="true"
                   />
                   <span>請求未</span>
                 </div>
                 <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/40 dark:text-orange-300">
                   <span
-                    className={`mh-alert-dot mh-alert-dot-report ${
-                      monthLegend.reportMissing ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
-                    }`}
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
                     aria-hidden="true"
                   />
                   <span>報告未</span>
                 </div>
                 <div className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-green-700 dark:border-green-900/70 dark:bg-green-950/40 dark:text-green-300">
                   <span
-                    className={`mh-alert-dot mh-alert-dot-unassigned ${
-                      monthLegend.unassigned ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
-                    }`}
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
                     aria-hidden="true"
                   />
                   <span>未配置</span>

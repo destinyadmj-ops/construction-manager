@@ -11,6 +11,7 @@
     "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path .\\android) { Remove-Item -Recurse -Force .\\android }\""
   },
   "devDependencies": {
-    "@bubblewrap/cli": "1.24.1"
+    "@bubblewrap/cli": "1.24.1",
+    "node-pty": "^1.1.0"
   }
 }
