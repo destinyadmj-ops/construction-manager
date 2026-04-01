@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
 import { useHeaderActions } from './header-actions';
 
 type ViewMode = 'week' | 'month' | 'year';
@@ -1018,6 +1018,44 @@ function WeekHubInner() {
       }
     },
     [apiKind, effectiveUserId, refreshCurrentView, saveUserOrder, scheduleKind],
+  );
+
+  const deleteUser = useCallback(
+    async (userId: string) => {
+      const label = userLabelById.get(userId) ?? userId;
+      if (!window.confirm(`「${label}」を削除しますか？`)) return;
+
+      try {
+        const r = await fetch(`/api/users?id=${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+        });
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) {
+          const msg = typeof obj?.error === 'string' ? (obj.error as string) : `HTTP ${r.status}`;
+          showCellActionMsg(`削除に失敗しました: ${msg}`);
+          return;
+        }
+
+        if (selectedUserId === userId) {
+          setSelectedUserId(null);
+        }
+
+        setUserOrder((cur) => {
+          const next = cur.filter((id) => id !== userId);
+          if (effectiveUserId && effectiveUserId !== userId) {
+            queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
+          }
+          return next;
+        });
+
+        await refreshCurrentView();
+        showCellActionMsg('削除しました');
+      } catch {
+        showCellActionMsg('削除に失敗しました');
+      }
+    },
+    [effectiveUserId, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
   );
 
   const refreshSites = useCallback(async () => {
@@ -2462,6 +2500,7 @@ function WeekHubInner() {
                       return next;
                     });
                   }}
+                  onDeleteUser={deleteUser}
                   onCreateUser={createUser}
                   draggedSite={draggedSite}
                   selectedCell={selectedCell}
@@ -2729,6 +2768,7 @@ function WeekHubInner() {
                       return next;
                     });
                   }}
+                  onDeleteUser={deleteUser}
                   onCreateUser={createUser}
                 />
               </div>
@@ -2946,6 +2986,7 @@ function WeekHubInner() {
                       return next;
                     });
                   }}
+                  onDeleteUser={deleteUser}
                 />
               </div>
             </>
@@ -3199,6 +3240,7 @@ function WeekGrid({
   userOrder,
   reorderMode,
   onMoveUser,
+  onDeleteUser,
   onCreateUser,
   draggedSite,
   selectedCell,
@@ -3242,6 +3284,7 @@ function WeekGrid({
   userOrder: string[];
   reorderMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
+  onDeleteUser: (userId: string) => void | Promise<void>;
   onCreateUser: (
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
@@ -3480,6 +3523,7 @@ function WeekGrid({
                   moveDownDisabled={idx === users.length - 1}
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
+                  onDeleteUser={() => onDeleteUser(u.id)}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={draggedSite}
                   selectedCell={selectedCell}
@@ -3533,6 +3577,7 @@ function MonthGrid({
   userOrder,
   reorderMode,
   onMoveUser,
+  onDeleteUser,
   onCreateUser,
 }: {
   monthKey: string;
@@ -3562,6 +3607,7 @@ function MonthGrid({
   userOrder: string[];
   reorderMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
+  onDeleteUser: (userId: string) => void | Promise<void>;
   onCreateUser: (
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
@@ -3766,6 +3812,7 @@ function MonthGrid({
                   moveDownDisabled={idx === users.length - 1}
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
+                  onDeleteUser={() => onDeleteUser(u.id)}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={null}
                 />
@@ -3869,6 +3916,7 @@ function YearGrid({
   cellMinHComfortable,
   cellBg,
   onMoveUser,
+  onDeleteUser,
 }: {
   data: YearSummaryApiResponse | null;
   selectedUserId: string | null;
@@ -3882,6 +3930,7 @@ function YearGrid({
   cellMinHComfortable: number;
   cellBg: CellBg;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
+  onDeleteUser: (userId: string) => void | Promise<void>;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const months = data?.months ?? [];
@@ -4006,10 +4055,16 @@ function YearGrid({
               );
               return (
                 <Fragment key={u.id}>
-                  <button
+                  <div
                     key={`${u.id}-name`}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectUser(isSelectedUser ? null : u.id)}
+                    onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      onSelectUser(isSelectedUser ? null : u.id);
+                    }}
                     aria-current={isSelectedUser ? 'true' : undefined}
                     data-user-row={u.id}
                     data-testid={`user-row-${u.id}`}
@@ -4025,37 +4080,51 @@ function YearGrid({
                         </div>
                       </div>
                       {reorderMode ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onMoveUser(u.id, -1);
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                              aria-label="上へ"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === users.length - 1}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onMoveUser(u.id, 1);
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                              aria-label="下へ"
+                            >
+                              ▼
+                            </button>
+                          </div>
                           <button
                             type="button"
-                            disabled={idx === 0}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              onMoveUser(u.id, -1);
+                              void onDeleteUser(u.id);
                             }}
-                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                            aria-label="上へ"
+                            className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
+                            aria-label="削除"
                           >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === users.length - 1}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onMoveUser(u.id, 1);
-                            }}
-                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                            aria-label="下へ"
-                          >
-                            ▼
+                            削除
                           </button>
                         </div>
                       ) : null}
                     </div>
-                  </button>
+                  </div>
 
                   {months.map((m) => {
                     const cell = grid[u.id]?.[m] ?? { days: 0, entries: 0 };
@@ -4115,6 +4184,7 @@ function Row({
   moveDownDisabled,
   onMoveUp,
   onMoveDown,
+  onDeleteUser,
   rowCellClassName,
   draggedSite,
   selectedCell,
@@ -4152,6 +4222,7 @@ function Row({
   moveDownDisabled?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onDeleteUser?: () => void | Promise<void>;
   rowCellClassName?: string;
   draggedSite: SiteItem | null;
   selectedCell?: { userId: string; day: string } | null;
@@ -4305,9 +4376,15 @@ function Row({
 
   return (
     <>
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelectUser(isSelectedUser ? null : user.id)}
+        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          onSelectUser(isSelectedUser ? null : user.id);
+        }}
         data-user-row={user.id}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
@@ -4321,37 +4398,51 @@ function Row({
         >
           <div className="min-w-0 truncate font-medium">{user.name ?? user.email ?? user.id}</div>
           {reorderMode ? (
-            <div className="flex items-center gap-1">
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={moveUpDisabled}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onMoveUp?.();
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  aria-label="上へ"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  disabled={moveDownDisabled}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onMoveDown?.();
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  aria-label="下へ"
+                >
+                  ▼
+                </button>
+              </div>
               <button
                 type="button"
-                disabled={moveUpDisabled}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onMoveUp?.();
+                  void onDeleteUser?.();
                 }}
-                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="上へ"
+                className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
+                aria-label="削除"
               >
-                ▲
-              </button>
-              <button
-                type="button"
-                disabled={moveDownDisabled}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onMoveDown?.();
-                }}
-                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="下へ"
-              >
-                ▼
+                削除
               </button>
             </div>
           ) : null}
         </div>
-      </button>
+      </div>
       {dayLabels.map((d) => {
         const cell = grid[d.key];
         const slot1 = cell?.slot1 ?? null;
