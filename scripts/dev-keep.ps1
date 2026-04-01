@@ -97,6 +97,35 @@ function Stop-StuckNextDev {
   }
 }
 
+function Invoke-DevCommand {
+  param([int]$Port)
+
+  $nextCli = Join-Path (Join-Path $PSScriptRoot '..') 'node_modules\next\dist\bin\next'
+
+  try {
+    npm.cmd run dev -- -p $Port 2>&1 | ForEach-Object {
+      $_ | Out-File -FilePath $LogFile -Append -Encoding utf8
+      $_
+    }
+    return $LASTEXITCODE
+  } catch {
+    Write-LogLine "npm launch failed; falling back to direct next dev"
+    Write-LogLine ($_.Exception.ToString())
+  }
+
+  if (-not (Test-Path $nextCli)) {
+    Write-LogLine ("Direct next CLI not found: {0}" -f $nextCli)
+    return 1
+  }
+
+  & node $nextCli dev --webpack -p $Port 2>&1 | ForEach-Object {
+    $_ | Out-File -FilePath $LogFile -Append -Encoding utf8
+    $_
+  }
+
+  return $LASTEXITCODE
+}
+
 while ($true) {
   try {
     if (Test-DevHealth) {
@@ -128,14 +157,8 @@ while ($true) {
 
     Write-LogLine ("START npm run dev -- -p {0}" -f $Port)
 
-    # Run in-process for reliability on Windows.
-    # Tee-Object has no -Encoding on Windows PowerShell 5.1, so we append via Out-File (UTF-8) ourselves.
-    npm.cmd run dev -- -p $Port 2>&1 | ForEach-Object {
-      $_ | Out-File -FilePath $LogFile -Append -Encoding utf8
-      $_
-    }
-
-    $code = $LASTEXITCODE
+    # Run in-process for reliability on Windows, with direct-next fallback if npm metadata is broken.
+    $code = Invoke-DevCommand -Port $Port
     Write-LogLine "EXIT code=$code"
   } catch {
     Write-LogLine "ERROR (dev-keep)"

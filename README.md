@@ -18,15 +18,17 @@
 - Supabase ダッシュボードで `Settings` → `Database` → `Connection string` を開く
 - `URI` を選ぶ
 - `方法` は `Session pooler` を選ぶ
-- 次の形式の接続文字列を `.env.local` に設定する
+- `Direct connection` も控えて、次の形式の接続文字列を `.env.local` に設定する
 
 ```env
-DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_DB_PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_DB_PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DIRECT_URL="postgresql://postgres:YOUR_DB_PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require"
 REDIS_URL="redis://localhost:6379"
 ```
 
 - パスワードに `#` や `@` が含まれる場合は URL エンコードする
-- Prisma 7 は `prisma/prisma.config.ts` を経由して `.env.local` を読む
+- アプリ本体は `DATABASE_URL` の pooler 接続、Prisma migrate は `DIRECT_URL` の直結接続を使う
+- Prisma 7 は `prisma/prisma.config.ts` を経由して `.env` と `.env.local` を読む
 
 ### 3. ローカルでは Redis だけ起動する
 

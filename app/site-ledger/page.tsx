@@ -38,6 +38,59 @@ type ApiSite = {
 
 type DeprItem = { siteId: string; count: number; threshold: number; alert: boolean };
 
+type PhotoFolderSummary = {
+  siteId: string;
+  name: string;
+  companyName: string | null;
+  latestDate: string | null;
+  photoCount: number;
+};
+
+function generateDateSearchTokens(dateYmd: string | null | undefined): string[] {
+  if (!dateYmd) return [];
+  const match = dateYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return [dateYmd];
+  const [, year, month, day] = match;
+  const monthNum = String(Number(month));
+  const dayNum = String(Number(day));
+  const tokens = new Set<string>();
+  const push = (value: string | null | undefined) => {
+    if (value) tokens.add(value);
+  };
+
+  push(`${year}-${month}-${day}`);
+  push(`${year}-${monthNum}-${dayNum}`);
+  push(`${year}/${month}/${day}`);
+  push(`${year}/${monthNum}/${dayNum}`);
+  push(`${year}年${month}月${day}日`);
+  push(`${year}年${monthNum}月${dayNum}日`);
+  push(`${month}/${day}`);
+  push(`${monthNum}/${dayNum}`);
+  push(`${month}/${dayNum}`);
+  push(`${monthNum}/${day}`);
+  push(`${month}月${day}日`);
+  push(`${monthNum}月${dayNum}日`);
+  push(`${month}月${dayNum}日`);
+  push(`${monthNum}月${day}日`);
+  return Array.from(tokens);
+}
+
+function formatPhotoDateLabel(dateYmd: string | null | undefined): string {
+  if (!dateYmd) return '日付未設定';
+  const match = dateYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return dateYmd;
+  const [, year, month, day] = match;
+  return `${year}年${Number(month)}月${Number(day)}日`;
+}
+
+function todayYmd(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function SiteLedgerPage() {
   const { setAddAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
@@ -47,6 +100,15 @@ export default function SiteLedgerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [q, setQ] = useState('');
+
+  const [photoSites, setPhotoSites] = useState<PhotoFolderSummary[]>([]);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoStatusMsg, setPhotoStatusMsg] = useState<string | null>(null);
+  const [photoQuery, setPhotoQuery] = useState('');
+  const [selectedPhotoSiteId, setSelectedPhotoSiteId] = useState<string | null>(null);
+  const [selectedSiteDates, setSelectedSiteDates] = useState<string[]>([]);
+  const [datesLoading, setDatesLoading] = useState(false);
+  const [datesError, setDatesError] = useState<string | null>(null);
 
   const [isImporting, setIsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
@@ -158,9 +220,110 @@ export default function SiteLedgerPage() {
     }
   }, [deprMonth]);
 
+  const loadPhotoSites = useCallback(async () => {
+    setPhotoStatusMsg(null);
+    setPhotoLoading(true);
+    try {
+      const r = await fetch('/api/sites/photos/summary');
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true) {
+        throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+      }
+      const raw = Array.isArray(obj.sites) ? (obj.sites as unknown[]) : [];
+      const parsed = raw
+        .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : null))
+        .map((o) => {
+          if (!o) return null;
+          const siteId = typeof o.siteId === 'string' ? o.siteId : '';
+          const name = typeof o.name === 'string' ? o.name : '';
+          const companyName = typeof o.companyName === 'string' ? o.companyName : o.companyName === null ? null : null;
+          const latestDate = typeof o.latestDate === 'string' ? o.latestDate : null;
+          const photoCount = typeof o.photoCount === 'number' ? o.photoCount : 0;
+          if (!siteId || !name) return null;
+          return { siteId, name, companyName, latestDate, photoCount } as PhotoFolderSummary;
+        })
+        .filter((x): x is PhotoFolderSummary => !!x);
+      parsed.sort((a, b) => {
+        if (!a.latestDate && !b.latestDate) return 0;
+        if (!a.latestDate) return 1;
+        if (!b.latestDate) return -1;
+        return b.latestDate.localeCompare(a.latestDate);
+      });
+      setPhotoSites(parsed);
+      setSelectedPhotoSiteId((prev) => {
+        if (prev && parsed.some((item) => item.siteId === prev)) return prev;
+        if (parsed.length === 0) {
+          setSelectedSiteDates([]);
+          return null;
+        }
+        return parsed[0].siteId;
+      });
+    } catch (e) {
+      setPhotoSites([]);
+      setSelectedPhotoSiteId(null);
+      setSelectedSiteDates([]);
+      setPhotoStatusMsg(e instanceof Error ? `写真フォルダの取得に失敗: ${e.message}` : '写真フォルダの取得に失敗しました');
+    } finally {
+      setPhotoLoading(false);
+    }
+  }, []);
+
+  const openPhotoFolder = useCallback(
+    (siteId: string, dateYmd?: string | null) => {
+      const target = dateYmd ?? todayYmd();
+      router.push(
+        `/site-ledger/${encodeURIComponent(siteId)}/photos?date=${encodeURIComponent(target)}`,
+      );
+    },
+    [router],
+  );
+
   useEffect(() => {
     void loadSites();
   }, [loadSites]);
+  useEffect(() => {
+    void loadPhotoSites();
+  }, [loadPhotoSites]);
+  useEffect(() => {
+    if (!selectedPhotoSiteId) {
+      setSelectedSiteDates([]);
+      setDatesError(null);
+      setDatesLoading(false);
+      return;
+    }
+    let canceled = false;
+    setDatesLoading(true);
+    setDatesError(null);
+    (async () => {
+      try {
+        const r = await fetch(`/api/sites/${encodeURIComponent(selectedPhotoSiteId)}/folder/dates`);
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) {
+          throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+        }
+        const rawDates = Array.isArray(obj.dates) ? (obj.dates as unknown[]) : [];
+        const parsedDates = rawDates
+          .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : null))
+          .map((o) => (typeof o?.dateYmd === 'string' ? o.dateYmd : null))
+          .filter((d): d is string => !!d);
+        if (!canceled) setSelectedSiteDates(parsedDates);
+      } catch (e) {
+        if (!canceled) {
+          setDatesError(e instanceof Error ? `日付一覧の取得に失敗: ${e.message}` : '日付一覧の取得に失敗しました');
+          setSelectedSiteDates([]);
+        }
+      } finally {
+        if (!canceled) {
+          setDatesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [selectedPhotoSiteId]);
 
   useEffect(() => {
     void loadDeprCounts();
@@ -175,6 +338,22 @@ export default function SiteLedgerPage() {
           return a.includes(v);
         });
   }, [q, sites]);
+
+      const filteredPhotoSites = useMemo(() => {
+        const needle = photoQuery.trim().toLowerCase();
+        if (!needle) return photoSites;
+        return photoSites.filter((site) => {
+          const tokens = [site.name, site.companyName ?? '', ...generateDateSearchTokens(site.latestDate)].map((token) =>
+            token.toLowerCase(),
+          );
+          return tokens.some((token) => token.includes(needle));
+        });
+      }, [photoQuery, photoSites]);
+
+      const selectedPhotoSite = useMemo(() => {
+        if (!selectedPhotoSiteId) return null;
+        return photoSites.find((site) => site.siteId === selectedPhotoSiteId) ?? null;
+      }, [photoSites, selectedPhotoSiteId]);
 
   const addSite = useCallback(async () => {
     const name = newName.trim();
@@ -426,6 +605,112 @@ export default function SiteLedgerPage() {
               placeholder="例: ○○マンション"
               className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
             />
+          </div>
+        </div>
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-black/40">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">写真フォルダ</div>
+              <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                エクスプローラ風アイコンをダブルクリックで写真画面へ。現場をクリックするとアップ日一覧が表示されます。
+              </div>
+              <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                {photoSites.length === 0
+                  ? 'まだアップ済みの写真フォルダがありません'
+                  : `アップ済み現場 ${photoSites.length}件（最新 ${formatPhotoDateLabel(photoSites[0]?.latestDate)}）`}
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={photoQuery}
+                onChange={(e) => setPhotoQuery(e.target.value)}
+                placeholder="現場名や日付（2026/03/18・2026年3月18日・3/18）"
+                className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+              />
+              <button
+                type="button"
+                disabled={photoLoading}
+                onClick={() => void loadPhotoSites()}
+                className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+              >
+                {photoLoading ? '更新中…' : '最新を読み込み'}
+              </button>
+            </div>
+          </div>
+          {photoStatusMsg ? (
+            <div className="mt-2 text-[11px] text-red-600 dark:text-red-400">{photoStatusMsg}</div>
+          ) : null}
+          <div className="mt-4 space-y-3">
+            {photoLoading ? (
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">写真フォルダ一覧を読み込み中…</div>
+            ) : filteredPhotoSites.length === 0 ? (
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません</div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredPhotoSites.map((site) => (
+                  <button
+                    key={`photo-site-${site.siteId}`}
+                    type="button"
+                    onClick={() => setSelectedPhotoSiteId(site.siteId)}
+                    onDoubleClick={() => openPhotoFolder(site.siteId, site.latestDate)}
+                    className={`group flex w-full items-stretch gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                      selectedPhotoSiteId === site.siteId
+                        ? 'border-indigo-400 bg-indigo-50/60 dark:border-indigo-500/70 dark:bg-indigo-900/40'
+                        : 'border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-black/40 dark:hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="relative h-12 w-14 flex-shrink-0">
+                      <div className="absolute left-0 top-1 h-5 w-12 rounded-t-xl bg-gradient-to-br from-amber-300 to-amber-400" />
+                      <div className="absolute bottom-0 left-0 h-9 w-14 rounded-b-xl rounded-tr-xl bg-gradient-to-br from-amber-400 to-amber-500 shadow-[0_6px_10px_rgba(0,0,0,0.18)]" />
+                      <div className="absolute -right-1 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-amber-600 shadow-md">
+                        {site.photoCount}
+                      </div>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{site.name}</div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {(site.companyName ? `${site.companyName} / ` : '') + formatPhotoDateLabel(site.latestDate)}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                        {site.latestDate ?? '日付情報なし'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3 text-[11px] dark:border-zinc-800 dark:bg-black/30">
+            <div className="flex items-center justify-between">
+              <div className="font-medium text-zinc-700 dark:text-zinc-300">
+                {selectedPhotoSite ? `${selectedPhotoSite.name} のアップ日一覧` : '現場を選択して日付を表示'}
+              </div>
+              <div className="text-[10px] text-zinc-500 dark:text-zinc-400">クリックで写真画面へ</div>
+            </div>
+            {datesError ? <div className="mt-1 text-[11px] text-red-600 dark:text-red-400">{datesError}</div> : null}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {selectedPhotoSiteId ? (
+                datesLoading ? (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
+                ) : selectedSiteDates.length === 0 ? (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">アップ済みの写真がありません</div>
+                ) : (
+                  selectedSiteDates.slice(0, 20).map((date) => (
+                    <button
+                      key={`photo-date-${date}`}
+                      type="button"
+                      onClick={() => openPhotoFolder(selectedPhotoSiteId, date)}
+                      className="rounded-full border border-zinc-300 px-3 py-1 text-[11px] text-zinc-700 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-200"
+                    >
+                      {formatPhotoDateLabel(date)}{' '}
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">({date})</span>
+                    </button>
+                  ))
+                )
+              ) : (
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">現場を選択してください</div>
+              )}
+            </div>
           </div>
         </div>
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">現場台帳</h1>

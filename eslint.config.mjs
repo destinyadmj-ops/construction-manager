@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
 
     // App generated artifacts:
     "src/generated/**",
+
+    // TWA helper scripts and generated assets:
+    "apps/twa/scripts/**",
   ]),
 
   {

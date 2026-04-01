@@ -1,8 +1,9 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
+// Types unused in the mobile view omitted to avoid lint warnings.
 type SiteItem = {
   id: string | null;
   label: string;
@@ -47,8 +48,6 @@ export default function MobileWeekHub() {
 
 function MobileWeekHubInner() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  searchParams.get('userId');
   const [cursorDate] = useState<Date>(() => new Date());
   const [sites, setSites] = useState<SiteItem[]>([]);
 

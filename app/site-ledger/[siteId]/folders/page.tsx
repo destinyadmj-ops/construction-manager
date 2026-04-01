@@ -29,7 +29,7 @@ export default function SiteFoldersPage() {
       const j = await r.json().catch(() => null);
       if (j?.ok && Array.isArray(j.dates)) {
         setFolders(j.dates);
-        if (j.dates.length > 0 && !selectedDate) setSelectedDate(j.dates[0].dateYmd);
+        if (j.dates.length > 0) setSelectedDate(prev => prev || j.dates[0].dateYmd);
       }
     })();
   }, [selectedDate, siteId]);
@@ -64,7 +64,6 @@ export default function SiteFoldersPage() {
               typeof (item as Record<string, unknown>).siteId === 'string' &&
               typeof (item as Record<string, unknown>).siteLabel === 'string',
           );
-          // 現場ID一致のみ抽出
           setInvoices(
             items
               .filter((item: InvoiceSearchItem) => item.siteId === siteId)

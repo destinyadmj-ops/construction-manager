@@ -1,0 +1,30 @@
+name: Prisma Migrate Deploy to Supabase
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prisma Migrate Deploy
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: npm run db:deploy

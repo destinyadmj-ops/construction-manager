@@ -21,6 +21,7 @@ jobs:
       - name: Determine DATABASE_URL
         env:
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
           DATABASE_URL_SECRET: ${{ secrets.DATABASE_URL }}
         run: |
           # Choose SUPABASE_DATABASE_URL if present, otherwise DATABASE_URL
@@ -35,9 +36,16 @@ jobs:
             exit 1
           fi
 
+          if [ -n "${SUPABASE_DIRECT_URL}" ]; then
+            echo "DIRECT_URL=${SUPABASE_DIRECT_URL}" >> $GITHUB_ENV
+          else
+            echo "DIRECT_URL=${SUPABASE_DATABASE_URL:-${DATABASE_URL_SECRET}}" >> $GITHUB_ENV
+          fi
+
       - name: Show Prisma migrate status
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
+          DIRECT_URL: ${{ env.DIRECT_URL }}
         run: |
           echo "Checking prisma migrate status..."
-          npx prisma migrate status --schema=prisma/schema.prisma || true
+          npx prisma migrate status --schema=prisma/schema.prisma --config prisma/prisma.config.ts || true

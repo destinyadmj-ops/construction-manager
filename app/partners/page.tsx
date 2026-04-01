@@ -114,9 +114,9 @@ export default function PartnersPage() {
 
       setServerPartners(parsed);
       setSource('server');
-    } catch (e) {
+    } catch {
       setSource('local');
-      setStatusMsg(e instanceof Error ? `DB未接続のためローカル表示: ${e.message}` : 'DB未接続のためローカル表示');
+      setStatusMsg('DB未接続のためローカル表示');
     }
   }, []);
 
@@ -189,11 +189,11 @@ export default function PartnersPage() {
         if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
         await loadFromServer();
         setDraftName('');
-      } catch (e) {
+      } catch {
         setSource('local');
         setPartners((cur) => [v, ...cur]);
         setDraftName('');
-        setStatusMsg(e instanceof Error ? `DB登録失敗→ローカル保存: ${e.message}` : 'DB登録失敗→ローカル保存');
+        setStatusMsg('DB登録失敗→ローカル保存');
       }
     } else {
       setPartners((cur) => [v, ...cur]);
@@ -219,11 +219,12 @@ export default function PartnersPage() {
       setDraftEmail('');
       setDraftFax('');
       setDraftAddress('');
-    } catch (e) {
-      setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
+    } catch {
+      setStatusMsg('保存に失敗しました');
     }
   }, [draftAddress, draftEmail, draftFax, draftNotes, editingPartner, loadFromServer]);
 
+  // Invoice dialog can be opened via `setInvoiceDialogOpen` directly where needed.
   const toggleInvoiceSite = useCallback((siteId: string) => {
     setSelectedInvoiceSites(prev => {
       const next = new Set(prev);
@@ -245,6 +246,7 @@ export default function PartnersPage() {
     window.location.href = `/accounting?${params.toString()}`;
   }, [selectedInvoiceSites]);
 
+  // Report dialog can be opened via `setReportDialogOpen` directly where needed.
   const goToReport = useCallback(() => {
     if (!selectedReportSite) return;
     // 報告書作成画面へ遷移
@@ -362,9 +364,9 @@ export default function PartnersPage() {
               failCount++;
               console.warn(`Failed to create partner: ${company.name}`, obj?.error);
             }
-          } catch (error) {
+          } catch {
             failCount++;
-            console.error(`Error creating partner: ${company.name}`, error);
+            // error logged intentionally omitted
           }
         }
 
@@ -379,8 +381,7 @@ export default function PartnersPage() {
         } else {
           setStatusMsg(`登録に失敗しました（${failCount}件）`);
         }
-      } catch (error) {
-        console.error('File import error:', error);
+      } catch {
         setStatusMsg('ファイル取り込み中にエラーが発生しました');
       }
     };

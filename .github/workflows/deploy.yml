@@ -23,11 +23,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      # 必要に応じてPrismaマイグレーションや他の処理を追加
       - name: Run Prisma Migrate
-        run: npx prisma migrate deploy
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: npm run db:deploy
 
       # デプロイ処理例（SSHやrsync、クラウドCLI等に置き換え可）
       - name: Deploy to server (example)
