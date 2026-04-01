@@ -9,6 +9,22 @@ function isAuthorized(request: Request): boolean {
   return request.headers.get('x-admin-token') === token;
 }
 
+function toReadableDbErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : 'DB unavailable';
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('authentication failed') || lower.includes('p1000')) {
+    return 'DB認証に失敗しました。Supabase の DATABASE_URL（ユーザー名・パスワード・Pooler設定）を確認してください。';
+  }
+  if (lower.includes('denied access') || lower.includes('permission denied')) {
+    return 'DBアクセス権限が不足しています。Supabase 接続文字列とロール権限を確認してください。';
+  }
+  if (lower.includes('table') && lower.includes('does not exist')) {
+    return 'DBスキーマが未適用です。`npm run db:deploy` を実行してください。';
+  }
+  return msg;
+}
+
 const CreateSchema = z
   .object({
     name: z.string().max(200).optional().nullable(),
@@ -48,7 +64,7 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, users });
   } catch (e) {
     return Response.json(
-      { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
+      { ok: false, error: toReadableDbErrorMessage(e) },
       { status: 503 },
     );
   }
@@ -94,7 +110,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, user });
   } catch (e) {
     return Response.json(
-      { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
+      { ok: false, error: toReadableDbErrorMessage(e) },
       { status: 503 },
     );
   }
@@ -129,7 +145,7 @@ export async function PATCH(request: Request) {
 
     return Response.json({ ok: true, user });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'DB unavailable';
+    const msg = toReadableDbErrorMessage(e);
     const status = msg.toLowerCase().includes('record to update not found') ? 404 : 503;
     return Response.json({ ok: false, error: msg }, { status });
   }
@@ -152,7 +168,7 @@ export async function DELETE(request: Request) {
     await prisma.user.delete({ where: { id: parsed.data.id }, select: { id: true } });
     return Response.json({ ok: true });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'DB unavailable';
+    const msg = toReadableDbErrorMessage(e);
     const status = msg.toLowerCase().includes('record to delete does not exist') ? 404 : 503;
     return Response.json({ ok: false, error: msg }, { status });
   }
