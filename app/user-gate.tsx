@@ -1,13 +1,27 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-type ApiUser = { id: string; name: string | null; email: string | null };
+type UserKind = 'NORMAL' | 'DAILY';
+
+type ApiUser = { id: string; name: string | null; email: string | null; kind: UserKind };
+
+type LoginMemory = {
+  userId: string;
+  userKind: UserKind | null;
+  host: string;
+  platform: string;
+  language: string;
+  timeZone: string;
+  savedAt: string;
+};
 
 type MeResponse =
-  | { ok: true; user: { id: string; name: string | null; email: string | null; kind: 'NORMAL' | 'DAILY' } | null }
+  | { ok: true; user: { id: string; name: string | null; email: string | null; kind: UserKind } | null }
   | { ok: false; error: string };
+
+const LOGIN_MEMORY_KEY = 'masterHub.loginMemory.v1';
 
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -19,9 +33,81 @@ function getString(o: Record<string, unknown> | null, key: string): string | nul
   return typeof v === 'string' ? v : null;
 }
 
+function getCurrentKind(input: string | null): UserKind {
+  return (input ?? '').trim().toLowerCase() === 'daily' ? 'DAILY' : 'NORMAL';
+}
+
+function getDeviceContext() {
+  return {
+    host: window.location.host,
+    platform: (navigator.platform ?? '').trim(),
+    language: (navigator.language ?? '').trim(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
+  };
+}
+
+function readLoginMemory(): LoginMemory | null {
+  try {
+    const raw = window.localStorage.getItem(LOGIN_MEMORY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const obj = parsed as Record<string, unknown>;
+    const userId = typeof obj.userId === 'string' ? obj.userId.trim() : '';
+    const userKind = obj.userKind === 'DAILY' || obj.userKind === 'NORMAL' ? obj.userKind : null;
+    const host = typeof obj.host === 'string' ? obj.host : '';
+    const platform = typeof obj.platform === 'string' ? obj.platform : '';
+    const language = typeof obj.language === 'string' ? obj.language : '';
+    const timeZone = typeof obj.timeZone === 'string' ? obj.timeZone : '';
+    const savedAt = typeof obj.savedAt === 'string' ? obj.savedAt : '';
+    if (!userId || !host) return null;
+    return { userId, userKind, host, platform, language, timeZone, savedAt };
+  } catch {
+    return null;
+  }
+}
+
+function writeLoginMemory(userId: string, userKind: UserKind | null) {
+  try {
+    const ctx = getDeviceContext();
+    const payload: LoginMemory = {
+      userId,
+      userKind,
+      host: ctx.host,
+      platform: ctx.platform,
+      language: ctx.language,
+      timeZone: ctx.timeZone,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(LOGIN_MEMORY_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+}
+
+function clearLoginMemory() {
+  try {
+    window.localStorage.removeItem(LOGIN_MEMORY_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function isSameDevice(memory: LoginMemory | null): memory is LoginMemory {
+  if (!memory) return false;
+  const ctx = getDeviceContext();
+  return (
+    memory.host === ctx.host &&
+    memory.platform === ctx.platform &&
+    memory.language === ctx.language &&
+    memory.timeZone === ctx.timeZone
+  );
+}
+
 export default function UserGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<{ id: string; name: string | null; email: string | null } | null>(null);
   const [open, setOpen] = useState(false);
@@ -39,6 +125,8 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   const didInitRef = useRef(false);
 
+  const currentKind = useMemo<UserKind>(() => getCurrentKind(searchParams.get('kind')), [searchParams]);
+
   const title = useMemo(() => {
     if (me?.name?.trim()) return me.name.trim();
     if (me?.email?.trim()) return me.email.trim();
@@ -54,14 +142,48 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const restoreRememberedUser = async () => {
+        const memory = readLoginMemory();
+        if (!isSameDevice(memory)) {
+          clearLoginMemory();
+          return false;
+        }
+
+        try {
+          const restore = await fetch('/api/auth/me', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ userId: memory.userId }),
+          });
+          const restoredJson = (await restore.json().catch(() => null)) as unknown;
+          const restoredObj = asObject(restoredJson);
+          if (!restore.ok || restoredObj?.ok !== true) return false;
+
+          const meRes = await fetch('/api/auth/me');
+          const meJson = (await meRes.json().catch(() => null)) as MeResponse;
+          if (!meRes.ok || meJson.ok !== true || !meJson.user) return false;
+
+          if (cancelled) return true;
+          setMe({ id: meJson.user.id, name: meJson.user.name, email: meJson.user.email });
+          writeLoginMemory(meJson.user.id, meJson.user.kind);
+          setOpen(false);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       try {
         const r = await fetch('/api/auth/me');
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
         if (!r.ok || obj?.ok !== true) {
           if (cancelled) return;
-          setMe(null);
-          setOpen(true);
+          const restored = await restoreRememberedUser();
+          if (!restored) {
+            setMe(null);
+            setOpen(true);
+          }
           return;
         }
 
@@ -69,19 +191,27 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         const id = getString(userObj, 'id');
         const nameVal = getString(userObj, 'name');
         const emailVal = getString(userObj, 'email');
+        const kindVal = getString(userObj, 'kind');
 
         if (cancelled) return;
         if (id) {
           setMe({ id, name: nameVal, email: emailVal });
+          writeLoginMemory(id, kindVal === 'DAILY' ? 'DAILY' : 'NORMAL');
           setOpen(false);
         } else {
-          setMe(null);
-          setOpen(true);
+          const restored = await restoreRememberedUser();
+          if (!restored) {
+            setMe(null);
+            setOpen(true);
+          }
         }
       } catch {
         if (cancelled) return;
-        setMe(null);
-        setOpen(true);
+        const restored = await restoreRememberedUser();
+        if (!restored) {
+          setMe(null);
+          setOpen(true);
+        }
       } finally {
         if (cancelled) return;
         setLoading(false);
@@ -101,7 +231,8 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     setUsersLoading(true);
     void (async () => {
       try {
-        const r = await fetch('/api/users?kind=normal');
+        const remembered = readLoginMemory();
+        const r = await fetch('/api/users?kind=all');
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
         const arr = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];
@@ -114,15 +245,29 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
               id,
               name: getString(o, 'name'),
               email: getString(o, 'email'),
+              kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
             } satisfies ApiUser;
           })
-          .filter((x): x is ApiUser => !!x);
+          .filter((x): x is ApiUser => !!x)
+          .sort((a, b) => {
+            const aRemembered = remembered?.userId === a.id ? 1 : 0;
+            const bRemembered = remembered?.userId === b.id ? 1 : 0;
+            if (aRemembered !== bRemembered) return bRemembered - aRemembered;
+            const aKind = a.kind === currentKind ? 1 : 0;
+            const bKind = b.kind === currentKind ? 1 : 0;
+            if (aKind !== bKind) return bKind - aKind;
+            const aLabel = (a.name ?? a.email ?? a.id).trim();
+            const bLabel = (b.name ?? b.email ?? b.id).trim();
+            return aLabel.localeCompare(bLabel, 'ja');
+          });
 
         if (cancelled) return;
         setUsers(parsed);
         if (!didInitRef.current) {
           didInitRef.current = true;
-          setSelectedExistingId(parsed[0]?.id ?? '');
+          setSelectedExistingId(remembered?.userId ?? parsed[0]?.id ?? '');
+        } else if (!selectedExistingId && parsed.length > 0) {
+          setSelectedExistingId(remembered?.userId ?? parsed[0]!.id);
         }
       } catch {
         if (cancelled) return;
@@ -136,7 +281,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [open, usersLoading]);
+  }, [currentKind, open, selectedExistingId, usersLoading]);
 
   if (loading) return <>{children}</>;
 
@@ -176,6 +321,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       }
 
       setMe({ id: j2.user.id, name: j2.user.name, email: j2.user.email });
+      writeLoginMemory(j2.user.id, j2.user.kind);
       setOpen(false);
       window.location.reload();
     } catch {
@@ -199,7 +345,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           name: n,
           email: email.trim() || null,
-          kind: 'NORMAL',
+          kind: currentKind,
           registrationPassword: registrationPassword.trim() || null,
         }),
       });
@@ -211,6 +357,8 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const userId = typeof obj?.userId === 'string' ? obj.userId : '';
+      if (userId) writeLoginMemory(userId, currentKind);
       window.location.reload();
     } catch {
       setError('通信に失敗しました');
@@ -289,7 +437,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                     const label = (u.name ?? u.email ?? u.id).trim();
                     return (
                       <option key={u.id} value={u.id}>
-                        {label}
+                        {label} {u.kind === 'DAILY' ? '［日報］' : '［通常］'}
                       </option>
                     );
                   })}
@@ -304,6 +452,11 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               {usersLoading ? <div className="mt-1 text-[11px] text-zinc-500">読み込み中…</div> : null}
+              {!usersLoading && users.length > 0 ? (
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  現在表示中の予定種別（{currentKind === 'DAILY' ? '日報' : '通常'}）に近いユーザーを先頭に表示しています。
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">

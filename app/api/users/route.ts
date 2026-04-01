@@ -52,12 +52,12 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
-    const kind = kindParam === 'daily' ? 'DAILY' : kindParam === 'normal' ? 'NORMAL' : 'NORMAL';
+    const kind = kindParam === 'daily' ? 'DAILY' : kindParam === 'all' ? null : 'NORMAL';
 
     const users = await prisma.user.findMany({
-      where: { kind },
+      where: kind ? { kind } : undefined,
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, kind: true },
       take: 200,
     });
 
