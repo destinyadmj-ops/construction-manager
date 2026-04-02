@@ -1915,6 +1915,7 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              data-site-id={s.id ?? undefined}
                               draggable={editConfigured}
                               onDragStart={(e) => {
                                 if (!editConfigured) return;
@@ -2584,6 +2585,7 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              data-site-id={s.id ?? undefined}
                               draggable={editConfigured}
                               onDragStart={(e) => {
                                 if (!editConfigured) return;
@@ -2845,6 +2847,7 @@ function WeekHubInner() {
                             <button
                               key={s.id ?? s.label}
                               type="button"
+                              data-site-id={s.id ?? undefined}
                               draggable={editConfigured}
                               onDragStart={(e) => {
                                 if (!editConfigured) return;
