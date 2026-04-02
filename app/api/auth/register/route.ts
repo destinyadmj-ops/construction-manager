@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { rememberUserLoginDevice } from '@/server/auth/login-memory';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -6,12 +7,23 @@ export const runtime = 'nodejs';
 
 const COOKIE_NAME = 'masterHub.uid';
 
+const DeviceSchema = z
+  .object({
+    deviceKey: z.string().min(16).max(200),
+    host: z.string().max(200).optional(),
+    platform: z.string().max(200).optional(),
+    language: z.string().max(100).optional(),
+    timeZone: z.string().max(100).optional(),
+  })
+  .strict();
+
 const RegisterSchema = z
   .object({
     name: z.string().min(1).max(200),
     email: z.string().email().max(320).optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
     registrationPassword: z.string().max(200).optional().nullable(),
+    device: DeviceSchema.optional(),
   })
   .strict();
 
@@ -84,6 +96,8 @@ export async function POST(request: Request) {
       path: '/',
       maxAge: 60 * 60 * 24 * 365,
     });
+
+    await rememberUserLoginDevice(request, userId, parsed.data.device);
     return res;
   } catch (e) {
     return Response.json(
