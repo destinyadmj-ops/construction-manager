@@ -28,6 +28,7 @@ jobs:
       NODE_ENV: test
       NEXT_TELEMETRY_DISABLED: 1
       DATABASE_URL: postgresql://masterhub:masterhub@127.0.0.1:5432/masterhub
+      DIRECT_URL: postgresql://masterhub:masterhub@127.0.0.1:5432/masterhub
       # REDIS_URL: (unset on purpose) => smoke asserts 503 fast when not configured
 
     steps:
@@ -45,10 +46,10 @@ jobs:
         run: npm ci
 
       - name: Prisma generate
-        run: npx prisma generate
+        run: npm run db:generate
 
       - name: Prisma migrate (deploy)
-        run: npx prisma migrate deploy
+        run: npm run db:deploy
 
       - name: Typecheck
         run: npm run typecheck
