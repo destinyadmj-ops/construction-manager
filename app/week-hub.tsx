@@ -1916,9 +1916,9 @@ function WeekHubInner() {
                               key={s.id ?? s.label}
                               type="button"
                               data-site-id={s.id ?? undefined}
-                              draggable={editConfigured}
+                              draggable={editActive}
                               onDragStart={(e) => {
-                                if (!editConfigured) return;
+                                if (!editActive) return;
                                 setDraggedSite(s);
                                 e.dataTransfer.effectAllowed = 'copy';
                               }}
@@ -1936,7 +1936,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editConfigured ? 'cursor-move' : ''}`}
+                              } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
@@ -2586,9 +2586,9 @@ function WeekHubInner() {
                               key={s.id ?? s.label}
                               type="button"
                               data-site-id={s.id ?? undefined}
-                              draggable={editConfigured}
+                              draggable={editActive}
                               onDragStart={(e) => {
-                                if (!editConfigured) return;
+                                if (!editActive) return;
                                 setDraggedSite(s);
                                 e.dataTransfer.effectAllowed = 'copy';
                               }}
@@ -2606,7 +2606,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editConfigured ? 'cursor-move' : ''}`}
+                              } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
@@ -2848,9 +2848,9 @@ function WeekHubInner() {
                               key={s.id ?? s.label}
                               type="button"
                               data-site-id={s.id ?? undefined}
-                              draggable={editConfigured}
+                              draggable={editActive}
                               onDragStart={(e) => {
-                                if (!editConfigured) return;
+                                if (!editActive) return;
                                 setDraggedSite(s);
                                 e.dataTransfer.effectAllowed = 'copy';
                               }}
@@ -2868,7 +2868,7 @@ function WeekHubInner() {
                                 active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editConfigured ? 'cursor-move' : ''}`}
+                              } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1 truncate">
