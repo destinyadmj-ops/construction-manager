@@ -10,6 +10,7 @@ type ApiUser = { id: string; name: string | null; email: string | null; kind: Us
 type LoginMemory = {
   userId: string;
   userKind: UserKind | null;
+  deviceKey: string;
   host: string;
   platform: string;
   language: string;
@@ -22,6 +23,7 @@ type MeResponse =
   | { ok: false; error: string };
 
 const LOGIN_MEMORY_KEY = 'masterHub.loginMemory.v1';
+const DEVICE_KEY_STORAGE_KEY = 'masterHub.deviceKey.v1';
 
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -35,6 +37,25 @@ function getString(o: Record<string, unknown> | null, key: string): string | nul
 
 function getCurrentKind(input: string | null): UserKind {
   return (input ?? '').trim().toLowerCase() === 'daily' ? 'DAILY' : 'NORMAL';
+}
+
+function createDeviceKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function getOrCreateDeviceKey() {
+  try {
+    const existing = (window.localStorage.getItem(DEVICE_KEY_STORAGE_KEY) ?? '').trim();
+    if (existing) return existing;
+    const next = createDeviceKey();
+    window.localStorage.setItem(DEVICE_KEY_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return createDeviceKey();
+  }
 }
 
 function getDeviceContext() {
@@ -55,13 +76,14 @@ function readLoginMemory(): LoginMemory | null {
     const obj = parsed as Record<string, unknown>;
     const userId = typeof obj.userId === 'string' ? obj.userId.trim() : '';
     const userKind = obj.userKind === 'DAILY' || obj.userKind === 'NORMAL' ? obj.userKind : null;
+    const deviceKey = typeof obj.deviceKey === 'string' ? obj.deviceKey : '';
     const host = typeof obj.host === 'string' ? obj.host : '';
     const platform = typeof obj.platform === 'string' ? obj.platform : '';
     const language = typeof obj.language === 'string' ? obj.language : '';
     const timeZone = typeof obj.timeZone === 'string' ? obj.timeZone : '';
     const savedAt = typeof obj.savedAt === 'string' ? obj.savedAt : '';
-    if (!userId || !host) return null;
-    return { userId, userKind, host, platform, language, timeZone, savedAt };
+    if (!userId || !host || !deviceKey) return null;
+    return { userId, userKind, deviceKey, host, platform, language, timeZone, savedAt };
   } catch {
     return null;
   }
@@ -73,6 +95,7 @@ function writeLoginMemory(userId: string, userKind: UserKind | null) {
     const payload: LoginMemory = {
       userId,
       userKind,
+      deviceKey: getOrCreateDeviceKey(),
       host: ctx.host,
       platform: ctx.platform,
       language: ctx.language,
@@ -153,7 +176,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           const restore = await fetch('/api/auth/me', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId: memory.userId }),
+            body: JSON.stringify({
+              userId: memory.userId,
+              restore: true,
+              device: {
+                deviceKey: memory.deviceKey,
+                host: memory.host,
+                platform: memory.platform,
+                language: memory.language,
+                timeZone: memory.timeZone,
+              },
+            }),
           });
           const restoredJson = (await restore.json().catch(() => null)) as unknown;
           const restoredObj = asObject(restoredJson);
@@ -302,7 +335,13 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       const r = await fetch('/api/auth/me', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({
+          userId,
+          device: {
+            deviceKey: getOrCreateDeviceKey(),
+            ...getDeviceContext(),
+          },
+        }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = asObject(j);
@@ -347,6 +386,10 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           email: email.trim() || null,
           kind: currentKind,
           registrationPassword: registrationPassword.trim() || null,
+          device: {
+            deviceKey: getOrCreateDeviceKey(),
+            ...getDeviceContext(),
+          },
         }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
