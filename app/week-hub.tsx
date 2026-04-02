@@ -4505,7 +4505,7 @@ function Row({
                 setEditingInput?.(slot1 ?? '');
                 setSiteSuggestions?.([]);
                 onSetSelectedCell?.(null);
-              } else if (selectedSite) {
+              } else if (selectedSite || cellClickAction === 'swap') {
                 // 現場が選択されている場合は通常のアクション
                 const beforeFallback: CellSlots = [slot1, slot2];
                 void runCellAction({
