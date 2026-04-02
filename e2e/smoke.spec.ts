@@ -648,7 +648,7 @@ test('weekhub: drag site from list to cell assigns', async ({ page, request }) =
   await expect(anyCell).toContainText(siteName, { timeout: 15_000 });
 });
 
-test('weekhub: drag cell to cell swaps', async ({ page, request }) => {
+test('weekhub: drag cell to cell copies into target', async ({ page, request }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
@@ -709,7 +709,8 @@ test('weekhub: drag cell to cell swaps', async ({ page, request }) => {
     'application/x-masterhub-cell': JSON.stringify({ userId: user.id, day: dayA, kind }),
     'text/plain': String(dayA),
   });
-  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
+  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
   await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
 });
 
@@ -770,7 +771,7 @@ test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
   await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
   await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
 
-  await page.getByTestId('cell-action-swapCells').click();
+  await page.getByTestId('cell-action-swap').click();
   await cellA.click();
   await cellB.click();
 
