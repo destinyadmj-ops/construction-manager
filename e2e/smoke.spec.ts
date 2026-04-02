@@ -714,7 +714,7 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
   await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
 });
 
-test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
+test('weekhub: click swap swaps two slots in a cell', async ({ page, request }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
@@ -749,11 +749,8 @@ test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
   const cells = page.locator(`[data-testid^="cell-${user.id}-"]`);
   await expect(cells).toHaveCount(7, { timeout: 15_000 });
   const cellA = cells.nth(0);
-  const cellB = cells.nth(1);
   const dayA = await cellA.getAttribute('data-cell-day');
-  const dayB = await cellB.getAttribute('data-cell-day');
   expect(dayA).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  expect(dayB).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
   const kind = 'NORMAL';
   const setA = await request.post('/api/schedule/cell', {
@@ -761,7 +758,7 @@ test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
   });
   expect(setA.ok()).toBeTruthy();
   const setB = await request.post('/api/schedule/cell', {
-    data: { userId: user.id, day: dayB, kind, action: 'toggle', siteId: site2 },
+    data: { userId: user.id, day: dayA, kind, action: 'add', siteId: site2 },
   });
   expect(setB.ok()).toBeTruthy();
 
@@ -769,14 +766,17 @@ test('weekhub: click2 swapCells swaps two days', async ({ page, request }) => {
   await page.waitForLoadState('domcontentloaded');
   await enterWeekHubEditMode(page, user.id);
   await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
-  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
+  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
 
   await page.getByTestId('cell-action-swap').click();
   await cellA.click();
-  await cellB.click();
 
-  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
-  await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
+  const snapRes = await request.get(
+    `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(dayA ?? '')}&kind=${encodeURIComponent(kind)}`,
+  );
+  expect(snapRes.ok()).toBeTruthy();
+  const snapJson = await snapRes.json();
+  expect(snapJson).toMatchObject({ ok: true, slots: [site2Name, site1Name] });
 });
 
 test('sites depreciation-counts endpoint returns ok', async ({ request }) => {
