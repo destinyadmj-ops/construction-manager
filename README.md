@@ -62,6 +62,30 @@ npm run dev
 - 会社PCでも自宅PCでも `.env.local` の `DATABASE_URL` を同じ値にすれば、同じ Supabase DB を共有できる
 - 実データは Supabase に集約されるため、PC間でDBファイルをコピーする必要はない
 
+### 6. GitHub Actions で接続・Migration 状態を確認する
+
+- repository secrets は少なくとも `SUPABASE_DATABASE_URL` と `SUPABASE_DIRECT_URL` を設定する
+- GitHub CLI で secrets 名を確認する場合は次を使う
+
+```bash
+gh secret list
+```
+
+- Prisma migrate deploy の workflow は `.github/workflows/prisma-migrate.yml`
+- migration 状態だけ確認する workflow は `.github/workflows/check-prisma-migrations.yml`
+- 手動実行は次で行える
+
+```bash
+gh workflow run "Check Prisma Migrations"
+gh workflow run "Prisma Migrate Deploy to Supabase"
+```
+
+- 2026-04-02 時点の確認結果
+- `gh secret list` で `DATABASE_URL` / `SUPABASE_DATABASE_URL` / `SUPABASE_DIRECT_URL` / `PACKAGE_NAME` の存在を確認
+- `Check Prisma Migrations` の最新成功 run で `17 migrations found in prisma/migrations` と `Database schema is up to date!` を確認
+- `Prisma Migrate Deploy to Supabase` の最新成功 run で `No pending migrations to apply.` を確認
+- つまり現在の main は 17 件の migration が存在し、Supabase 側は未適用なしで一致している
+
 ---
 
 PC主体 + スマホ(PWA)連携を前提にした、カレンダーベースの予定・業務ハブ。
