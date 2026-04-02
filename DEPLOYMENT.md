@@ -45,17 +45,21 @@ Copy-Item .env.production.example .env.production
 `.env.production` を編集して以下を設定：
 
 ```env
-# データベース（Azure Database for PostgreSQL）
-DATABASE_URL="postgresql://user:password@hostname:5432/master_hub?sslmode=require"
+# データベース（Supabase Session Pooler / Direct connection）
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR_DB_PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DIRECT_URL="postgresql://postgres:YOUR_DB_PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres?sslmode=require"
 
-# Redis（Azure Cache for Redis）
-REDIS_URL="redis://hostname:6380?password=xxx&ssl=true"
+# Redis
+REDIS_URL="redis://hostname:6379"
 
 # 認証（任意の強力なパスワードを設定）
 NEXTAUTH_SECRET="<ランダムな文字列>"
 
 # アプリケーションURL
 NEXTAUTH_URL="https://your-domain.com"
+
+# 管理API保護（任意だが本番では推奨）
+ADMIN_TOKEN="<ランダムな文字列>"
 ```
 
 #### 3. Docker イメージのビルドと起動
@@ -73,6 +77,28 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ```powershell
 docker compose -f docker-compose.prod.yml --env-file .env.production down
 ```
+
+### 方法1-補足: GitHub Actions から SSH で自動配備
+
+- 本番サーバーに Docker / Docker Compose / Git が入っていること
+- GitHub Actions ランナーから SSH 到達できること
+- repository secrets に次を設定すること
+
+```text
+SUPABASE_DATABASE_URL
+SUPABASE_DIRECT_URL
+PROD_REDIS_URL
+PROD_NEXTAUTH_SECRET
+PROD_NEXTAUTH_URL
+PROD_ADMIN_TOKEN
+DEPLOY_HOST
+DEPLOY_USER
+DEPLOY_SSH_KEY
+DEPLOY_PATH
+```
+
+- `DEPLOY_PATH` はサーバー上でリポジトリを展開する絶対パス
+- `deploy.yml` は SSH 接続後に `.env.production` を生成し、`docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --remove-orphans` を実行する
 
 ### 方法2: Windows Service（永続運用）
 

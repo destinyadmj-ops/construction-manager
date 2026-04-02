@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+        DIRECT_URL: ${DIRECT_URL}
     env_file:
       - ./.env.production
     ports:
@@ -15,6 +18,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+        DIRECT_URL: ${DIRECT_URL}
     env_file:
       - ./.env.production
     restart: unless-stopped
