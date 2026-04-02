@@ -4444,6 +4444,8 @@ function Row({
           <button
             key={d.key}
             type="button"
+            data-testid={`cell-${user.id}-${d.key}`}
+            data-cell-day={d.key}
             draggable={isEditable && Boolean(slot1 || slot2)}
             onDragStart={(e) => {
               if (!isEditable || (!slot1 && !slot2)) return;

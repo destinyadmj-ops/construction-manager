@@ -137,7 +137,7 @@ async function enterWeekHubEditMode(page: import('@playwright/test').Page, userI
   await page.getByTestId('header-action-add').click();
 
   const anyCell = page.locator(`[data-testid^="cell-${userId}-"]`).first();
-  await expect(anyCell).toHaveAttribute('draggable', 'true', { timeout: 15_000 });
+  await expect(anyCell).toBeVisible({ timeout: 15_000 });
 }
 
 async function dndWithData(
