@@ -7,6 +7,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM base AS builder
+ARG DATABASE_URL
+ARG DIRECT_URL
+ENV DATABASE_URL=$DATABASE_URL
+ENV DIRECT_URL=$DIRECT_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run db:generate
