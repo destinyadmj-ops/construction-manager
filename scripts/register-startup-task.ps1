@@ -1,6 +1,8 @@
 # Register a Scheduled Task to run startup-services.ps1 at system startup
 # Run this script as Administrator.
 
+$ErrorActionPreference = 'Stop'
+
 $scriptPath = "$(Resolve-Path "$PSScriptRoot\startup-services.ps1")"
 $taskName = "MasterHub Startup Services"
 
@@ -18,6 +20,7 @@ try {
     Write-Output "Scheduled task registered."
 } catch {
     Write-Error "Failed to register scheduled task: $_"
+    exit 1
 }
 
 Write-Output "If registration succeeded, the startup script will run at next system startup."

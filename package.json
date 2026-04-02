@@ -29,6 +29,7 @@
     "dev:info": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-info.ps1",
     "dev:startup:refresh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-startup-refresh.ps1",
     "dev:autostart:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-autostart.ps1",
+    "dev:autostart:install:admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-autostart-admin.ps1",
     "dev:autostart:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-dev-autostart.ps1",
     "dev:startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-startup.ps1",
     "dev:startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-dev-startup.ps1",
