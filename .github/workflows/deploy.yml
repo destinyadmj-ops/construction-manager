@@ -9,6 +9,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
