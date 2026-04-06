@@ -81,3 +81,26 @@ curl -sS https://tanaka-bot.org/healthz
 - `EXCHANGE_429_STRIKE_RESET_SECONDS`
 
 設定変更後はサービス再起動が必要です。
+
+## Archive Cleanup Timer
+
+旧クローン archive は one-shot timer で自動削除される設定です。
+
+- Timer unit: `cleanup_repo_archive_20260413.timer`
+- Target path: `/home/linuxuser/repo_from_bundle_archive_20260406_0335`
+- Scheduled time: `2026-04-13 00:10:00 UTC`
+
+状態確認コマンド:
+
+```bash
+systemctl list-timers cleanup_repo_archive_20260413.timer --all --no-pager
+systemctl status cleanup_repo_archive_20260413.timer --no-pager
+```
+
+削除後の確認コマンド:
+
+```bash
+test -d /home/linuxuser/repo_from_bundle_archive_20260406_0335 && echo exists || echo removed
+systemctl status cleanup_repo_archive_20260413.service --no-pager
+journalctl -u cleanup_repo_archive_20260413.service -n 20 --no-pager
+```
