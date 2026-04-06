@@ -286,6 +286,9 @@ MIN_ORDER_NOTIONAL_USDT = float(os.getenv('MIN_ORDER_NOTIONAL_USDT', '6.0'))
 ORDER_API_MIN_INTERVAL_MS = int(os.getenv('ORDER_API_MIN_INTERVAL_MS', '900'))
 DOTEN_REOPEN_DELAY_MS = int(os.getenv('DOTEN_REOPEN_DELAY_MS', '1200'))
 EXCHANGE_429_COOLDOWN_SECONDS = int(os.getenv('EXCHANGE_429_COOLDOWN_SECONDS', '20'))
+EXCHANGE_429_COOLDOWN_MAX_SECONDS = int(os.getenv('EXCHANGE_429_COOLDOWN_MAX_SECONDS', '180'))
+EXCHANGE_429_BACKOFF_MULTIPLIER = max(1.0, float(os.getenv('EXCHANGE_429_BACKOFF_MULTIPLIER', '2.0')))
+EXCHANGE_429_STRIKE_RESET_SECONDS = int(os.getenv('EXCHANGE_429_STRIKE_RESET_SECONDS', '900'))
 OPPOSITE_NOT_DOTEN_SIZE_SCALE = float(os.getenv('OPPOSITE_NOT_DOTEN_SIZE_SCALE', '0.50'))
 ENTRY_MARGIN_BALANCE_PCT = float(os.getenv('ENTRY_MARGIN_BALANCE_PCT', str(getattr(_config, 'ENTRY_MARGIN_BALANCE_PCT', 0.03))))
 BASE_ORDER_BALANCE_PCT = float(os.getenv('BASE_ORDER_BALANCE_PCT', '0.10'))
@@ -316,6 +319,9 @@ LEARNING_EXIT_MIN_CONFIDENCE = float(os.getenv('LEARNING_EXIT_MIN_CONFIDENCE', '
 LEARNING_REVERSE_MIN_CONFIDENCE = float(os.getenv('LEARNING_REVERSE_MIN_CONFIDENCE', '0.80'))
 LEARNING_REVERSE_MIN_SCORE_GAP = float(os.getenv('LEARNING_REVERSE_MIN_SCORE_GAP', '0.03'))
 LEARNING_REVERSE_MIN_EDGE = float(os.getenv('LEARNING_REVERSE_MIN_EDGE', '0.04'))
+LEARNING_SIZE_OBSERVATION_GAIN = float(os.getenv('LEARNING_SIZE_OBSERVATION_GAIN', '0.22'))
+LEARNING_SIZE_MULTIPLIER_MIN = float(os.getenv('LEARNING_SIZE_MULTIPLIER_MIN', '0.85'))
+LEARNING_SIZE_MULTIPLIER_MAX = float(os.getenv('LEARNING_SIZE_MULTIPLIER_MAX', '1.18'))
 MONITOR_AUTOPOLL_ENABLED = str(os.getenv('MONITOR_AUTOPOLL_ENABLED', 'true')).lower() in ('1', 'true', 'yes', 'on')
 MONITOR_AUTOPOLL_INTERVAL_SECONDS = int(os.getenv('MONITOR_AUTOPOLL_INTERVAL_SECONDS', '20'))
 MONITOR_SCHEDULER_LEASE_SECONDS = int(os.getenv('MONITOR_SCHEDULER_LEASE_SECONDS', '45'))
@@ -529,7 +535,7 @@ def _news_bias_for_alerts(symbol: str) -> dict:
     }
 
 
-def _evaluate_bots(symbol):
+def _evaluate_bots(symbol, observation_source='webhook_eval'):
     try:
         c1m  = get_candles(symbol, '1m')
         c5m  = get_candles(symbol, '5m')
@@ -540,10 +546,37 @@ def _evaluate_bots(symbol):
         c1d  = get_candles(symbol, '1d')
         if not c15m:
             return {'signal': None, 'selected_alert': None, 'score': 0.0, 'all_results': {}}
+        latest_price = 0.0
+        try:
+            if c1m and isinstance(c1m[-1], (list, tuple)) and len(c1m[-1]) >= 5:
+                latest_price = _safe_float(c1m[-1][4], 0.0)
+            elif c15m and isinstance(c15m[-1], (list, tuple)) and len(c15m[-1]) >= 5:
+                latest_price = _safe_float(c15m[-1][4], 0.0)
+        except Exception:
+            latest_price = 0.0
         news_bias = _news_bias_for_alerts(symbol)
-        return alert_bot_engine.evaluate(
+        bot_eval = alert_bot_engine.evaluate(
             c1m, c5m, c10m, c15m, c30m, c1h, c1d,
             news_bias=news_bias, symbol=symbol)
+        try:
+            learning_engine = _learning_engine()
+            if latest_price > 0.0:
+                learning_engine.resolve_market_observations({str(symbol or '').upper(): latest_price})
+            bot_eval = learning_engine.apply_observation_bias(bot_eval, symbol=str(symbol or '').upper())
+            if isinstance(bot_eval, dict):
+                bot_eval['symbol'] = str(symbol or '').upper()
+                bot_eval['observation_source'] = str(observation_source or 'webhook_eval')
+            if latest_price > 0.0:
+                learning_engine.record_market_observation(
+                    symbol=str(symbol or '').upper(),
+                    bot_eval=bot_eval,
+                    source=str(observation_source or 'webhook_eval'),
+                    current_price=latest_price,
+                    executed=False,
+                )
+        except Exception as exc:
+            app.logger.warning('OBSERVATION_LEARNING_EVAL_ERROR symbol=%s err=%s', symbol, str(exc))
+        return bot_eval
     except Exception as exc:
         app.logger.warning('EVALUATE_BOTS_ERROR symbol=%s err=%s', symbol, str(exc))
         return {'signal': None, 'selected_alert': None, 'score': 0.0, 'all_results': {}}
@@ -629,6 +662,577 @@ def _strategy_size_multiplier(alert_name):
     return max(0.65, min(1.50, raw))
 
 
+def _learning_size_adjustment(bot_eval, alert_name):
+    if not isinstance(bot_eval, dict):
+        return {
+            'selected_alert': _normalize_alert_name(alert_name),
+            'observation_bias': 0.0,
+            'threshold_adjustment': 0.0,
+            'score_margin': 0.0,
+            'context_signal': {},
+            'multiplier': 1.0,
+        }
+
+    engine = _learning_engine()
+    selected_alert = _normalize_alert_name(alert_name or bot_eval.get('selected_alert'))
+    thresholds = dict(bot_eval.get('thresholds') or {}) if isinstance(bot_eval.get('thresholds'), dict) else {}
+    observation_biases = dict(bot_eval.get('observation_biases') or {}) if isinstance(bot_eval.get('observation_biases'), dict) else {}
+    threshold_adjustments = dict(bot_eval.get('observation_threshold_adjustments') or {}) if isinstance(bot_eval.get('observation_threshold_adjustments'), dict) else {}
+    selected_candidate = _candidate_for_alert(bot_eval.get('candidates'), selected_alert) or {}
+
+    observation_bias = _safe_float(observation_biases.get(selected_alert), _safe_float(selected_candidate.get('observation_bias'), 0.0))
+    threshold_adjustment = _safe_float(threshold_adjustments.get(selected_alert), _safe_float(selected_candidate.get('observation_threshold_adjustment'), 0.0))
+    score = _safe_float(bot_eval.get('score'), _safe_float(selected_candidate.get('score'), 0.0))
+    threshold = _safe_float(thresholds.get(selected_alert), _safe_float(selected_candidate.get('threshold'), 0.0))
+    score_margin = max(-0.06, min(0.06, score - threshold))
+    size_side = str(selected_candidate.get('side') or ('buy' if str(bot_eval.get('signal') or '').upper() == 'BUY' else 'sell')).lower()
+    context_candidate = dict(selected_candidate or {'alert': selected_alert, 'side': size_side})
+    context_candidate.setdefault('alert', selected_alert)
+    context_candidate.setdefault('side', size_side)
+    context = engine._build_observation_context(
+        str(bot_eval.get('symbol') or ''),
+        bot_eval,
+        selected_alert,
+        context_candidate,
+        str(bot_eval.get('observation_source') or 'runtime_eval'),
+    )
+    context_signal = engine.get_observation_context_signal(
+        selected_alert,
+        symbol=str(bot_eval.get('symbol') or ''),
+        context=context,
+    )
+    victory_score = _safe_float(context_signal.get('victory_score'), 0.0)
+    victory_reference = context_signal.get('victory_reference') if isinstance(context_signal.get('victory_reference'), dict) else {}
+    context_scopes = context_signal.get('scopes') if isinstance(context_signal.get('scopes'), dict) else {}
+    regime_scope = context_scopes.get('regime') if isinstance(context_scopes.get('regime'), dict) else {}
+    source_scope = context_scopes.get('source_family') if isinstance(context_scopes.get('source_family'), dict) else {}
+    regime_bias = _safe_float(regime_scope.get('estimated_bias'), 0.0)
+    source_bias = _safe_float(source_scope.get('estimated_bias'), 0.0)
+    regime_tailwind = -_safe_float(regime_scope.get('estimated_threshold_adjustment'), 0.0)
+    source_tailwind = -_safe_float(source_scope.get('estimated_threshold_adjustment'), 0.0)
+
+    signal_strength = (
+        (observation_bias * 7.0)
+        + ((-threshold_adjustment) * 5.0)
+        + (score_margin * 2.5)
+        + (regime_bias * 3.5)
+        + (source_bias * 2.5)
+        + (regime_tailwind * 2.0)
+        + (source_tailwind * 1.4)
+        + (victory_score * 3.2)
+    )
+    multiplier = 1.0 + (signal_strength * LEARNING_SIZE_OBSERVATION_GAIN)
+    multiplier = _clamp(multiplier, LEARNING_SIZE_MULTIPLIER_MIN, LEARNING_SIZE_MULTIPLIER_MAX)
+    return {
+        'selected_alert': selected_alert,
+        'observation_bias': observation_bias,
+        'threshold_adjustment': threshold_adjustment,
+        'score_margin': score_margin,
+        'context_signal': context_signal,
+        'victory_score': victory_score,
+        'victory_reference': victory_reference,
+        'regime_bias': regime_bias,
+        'source_bias': source_bias,
+        'regime_tailwind': regime_tailwind,
+        'source_tailwind': source_tailwind,
+        'multiplier': multiplier,
+    }
+
+
+def _learning_threshold_overview(summary_payload: dict) -> dict:
+    engine = _learning_engine()
+    summary = (summary_payload or {}).get('summary') or {}
+    context_scopes = (summary_payload or {}).get('observation_context_scopes') or {}
+    representative_contexts = (summary_payload or {}).get('observation_summary', {}).get('representative_contexts', {}) if isinstance((summary_payload or {}).get('observation_summary'), dict) else {}
+    per_alert = {}
+    for alert_name in ('alert_a', 'alert_b', 'alert_c', 'alert_d'):
+        metrics = summary.get(alert_name, {}) if isinstance(summary, dict) else {}
+        representative_context = representative_contexts.get(alert_name, {}) if isinstance(representative_contexts, dict) else {}
+        if hasattr(engine, 'get_observation_context_signal'):
+            representative_signal = engine.get_observation_context_signal(
+                alert_name,
+                context={
+                    'regime': ((representative_context.get('regime') or {}).get('value') if isinstance(representative_context.get('regime'), dict) else 'unknown') or 'unknown',
+                    'source_family': ((representative_context.get('source_family') or {}).get('value') if isinstance(representative_context.get('source_family'), dict) else 'runtime') or 'runtime',
+                    'threshold_state': ((representative_context.get('threshold_state') or {}).get('value') if isinstance(representative_context.get('threshold_state'), dict) else 'unknown') or 'unknown',
+                    'style': ((representative_context.get('style') or {}).get('value') if isinstance(representative_context.get('style'), dict) else 'unknown') or 'unknown',
+                    'alignment': 'mixed',
+                    'timeframe_bias': 'unknown',
+                },
+            )
+        else:
+            representative_signal = {}
+        per_alert[alert_name] = {
+            'observation_bias': _safe_float(metrics.get('observation_bias'), 0.0),
+            'observation_resolved': int(metrics.get('observation_resolved', 0) or 0),
+            'observation_win_rate': _safe_float(metrics.get('observation_win_rate'), 0.0),
+            'observation_victory_score': _safe_float(metrics.get('observation_victory_score'), 0.0),
+            'top_regime_context': next((row for row in list(context_scopes.get('regime') or []) if str(row.get('alert')) == alert_name), None),
+            'top_source_context': next((row for row in list(context_scopes.get('source_family') or []) if str(row.get('alert')) == alert_name), None),
+            'top_threshold_state_context': next((row for row in list(context_scopes.get('threshold_state') or []) if str(row.get('alert')) == alert_name), None),
+            'representative_contexts': representative_context,
+            'representative_context_signal': representative_signal,
+            'representative_victory_score': _safe_float(representative_signal.get('victory_score'), 0.0),
+            'representative_victory_reference': representative_signal.get('victory_reference', {}),
+        }
+    return {
+        'per_alert': per_alert,
+        'top_context_adjustments': {
+            'threshold_state': list(context_scopes.get('threshold_state') or [])[:3],
+            'source_family': list(context_scopes.get('source_family') or [])[:3],
+            'regime': list(context_scopes.get('regime') or [])[:3],
+        },
+    }
+
+
+def _victory_scope_leaderboard(summary_payload: dict, overall_limit=None, value_limit=None, leaders_per_value=None) -> dict:
+    context_scopes = (summary_payload or {}).get('observation_context_scopes') or {}
+    leaderboard = {}
+    overall_limit = max(1, _safe_int(overall_limit, _safe_int(os.getenv('VICTORY_LEADERBOARD_OVERALL_LIMIT', '8'), 8)))
+    value_limit = max(1, _safe_int(value_limit, _safe_int(os.getenv('VICTORY_LEADERBOARD_VALUE_LIMIT', '8'), 8)))
+    leaders_per_value = max(1, _safe_int(leaders_per_value, _safe_int(os.getenv('VICTORY_LEADERBOARD_LEADERS_PER_VALUE', '3'), 3)))
+    for scope_name, rows in context_scopes.items():
+        if not isinstance(rows, list):
+            continue
+        normalized_rows = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            normalized_rows.append({
+                'alert': _normalize_alert_name(row.get('alert')),
+                'value': str(row.get('value') or 'unknown'),
+                'victory_score': _safe_float(row.get('victory_score'), 0.0),
+                'win_rate': _safe_float(row.get('win_rate'), 0.0),
+                'resolved': int(row.get('resolved', 0) or 0),
+                'avg_edge': _safe_float(row.get('avg_edge'), 0.0),
+                'estimated_bias': _safe_float(row.get('estimated_bias'), 0.0),
+                'estimated_threshold_adjustment': _safe_float(row.get('estimated_threshold_adjustment'), 0.0),
+            })
+        normalized_rows.sort(
+            key=lambda item: (
+                float(item.get('victory_score', 0.0)),
+                float(item.get('win_rate', 0.0)),
+                int(item.get('resolved', 0)),
+                float(item.get('avg_edge', 0.0)),
+            ),
+            reverse=True,
+        )
+
+        by_value = {}
+        grouped_by_value = {}
+        by_alert = {}
+        for row in normalized_rows:
+            value = str(row.get('value') or 'unknown')
+            alert = _normalize_alert_name(row.get('alert'))
+            if value not in by_value:
+                by_value[value] = row
+            grouped_by_value.setdefault(value, []).append(row)
+            if alert not in by_alert:
+                by_alert[alert] = row
+
+        top_by_value = []
+        for value, grouped_rows in grouped_by_value.items():
+            top_by_value.append({
+                'value': value,
+                'leaders': grouped_rows[:leaders_per_value],
+                'leader': grouped_rows[0] if grouped_rows else None,
+            })
+        top_by_value.sort(
+            key=lambda item: (
+                _safe_float(((item.get('leader') or {}).get('victory_score')), 0.0),
+                _safe_float(((item.get('leader') or {}).get('win_rate')), 0.0),
+                int(((item.get('leader') or {}).get('resolved')) or 0),
+            ),
+            reverse=True,
+        )
+
+        leaderboard[scope_name] = {
+            'top_overall': normalized_rows[:overall_limit],
+            'leaders_by_value': list(by_value.values())[:value_limit],
+            'top_by_value': top_by_value[:value_limit],
+            'best_per_alert': list(by_alert.values()),
+            'limits': {
+                'overall_limit': overall_limit,
+                'value_limit': value_limit,
+                'leaders_per_value': leaders_per_value,
+            },
+        }
+    return leaderboard
+
+
+def _victory_rank_for_context(summary_payload: dict, alert_name, context_signal: dict) -> dict:
+    normalized_alert = _normalize_alert_name(alert_name)
+    context_scopes = (summary_payload or {}).get('observation_context_scopes') or {}
+    scopes = (context_signal or {}).get('scopes') if isinstance((context_signal or {}).get('scopes'), dict) else {}
+    per_scope = {}
+
+    for scope_name, scope_signal in scopes.items():
+        if not isinstance(scope_signal, dict):
+            continue
+        target_value = str(scope_signal.get('value') or 'unknown')
+        scope_rows = list(context_scopes.get(scope_name) or []) if isinstance(context_scopes.get(scope_name), list) else []
+        same_value_rows = []
+        for row in scope_rows:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get('value') or 'unknown') != target_value:
+                continue
+            same_value_rows.append({
+                'alert': _normalize_alert_name(row.get('alert')),
+                'value': target_value,
+                'victory_score': _safe_float(row.get('victory_score'), 0.0),
+                'win_rate': _safe_float(row.get('win_rate'), 0.0),
+                'resolved': int(row.get('resolved', 0) or 0),
+                'avg_edge': _safe_float(row.get('avg_edge'), 0.0),
+            })
+        same_value_rows.sort(
+            key=lambda item: (
+                float(item.get('victory_score', 0.0)),
+                float(item.get('win_rate', 0.0)),
+                int(item.get('resolved', 0)),
+                float(item.get('avg_edge', 0.0)),
+            ),
+            reverse=True,
+        )
+
+        rank = None
+        total = len(same_value_rows)
+        target_entry = None
+        for index, row in enumerate(same_value_rows, start=1):
+            if _normalize_alert_name(row.get('alert')) == normalized_alert:
+                rank = index
+                target_entry = row
+                break
+
+        per_scope[scope_name] = {
+            'value': target_value,
+            'rank': rank,
+            'total': total,
+            'entry': target_entry,
+            'leaders': same_value_rows[:3],
+        }
+
+    ranked_scopes = [
+        {'scope': scope_name, **scope_rank}
+        for scope_name, scope_rank in per_scope.items()
+        if isinstance(scope_rank, dict) and scope_rank.get('rank') is not None
+    ]
+    ranked_scopes.sort(
+        key=lambda item: (
+            int(item.get('rank') or 9999),
+            -int(item.get('total') or 0),
+            -_safe_float(((item.get('entry') or {}).get('victory_score')), 0.0),
+        )
+    )
+
+    return {
+        'alert': normalized_alert,
+        'best_scope': ranked_scopes[0] if ranked_scopes else None,
+        'per_scope': per_scope,
+    }
+
+
+def _summarize_victory_rank_delta(selected_rank: dict, current_rank: dict) -> dict:
+    selected_scopes = (selected_rank or {}).get('per_scope') if isinstance((selected_rank or {}).get('per_scope'), dict) else {}
+    current_scopes = (current_rank or {}).get('per_scope') if isinstance((current_rank or {}).get('per_scope'), dict) else {}
+    comparisons = []
+    unavailable_reasons = []
+    required_samples = max(1, _safe_int(os.getenv('OBSERVATION_BIAS_MIN_SAMPLES'), _safe_int(getattr(_config, 'OBSERVATION_BIAS_MIN_SAMPLES', 3), 3)))
+
+    for scope_name, selected_scope in selected_scopes.items():
+        if not isinstance(selected_scope, dict):
+            continue
+        current_scope = current_scopes.get(scope_name) if isinstance(current_scopes.get(scope_name), dict) else {}
+        selected_value = str(selected_scope.get('value') or 'unknown')
+        current_value = str(current_scope.get('value') or 'unknown')
+        if selected_value != current_value:
+            unavailable_reasons.append({
+                'scope': scope_name,
+                'reason': 'value_mismatch',
+                'selected_value': selected_value,
+                'current_value': current_value,
+                'selected_total': int(selected_scope.get('total') or 0),
+                'current_total': int(current_scope.get('total') or 0),
+                'required_samples': required_samples,
+            })
+            continue
+        selected_rank_value = selected_scope.get('rank')
+        current_rank_value = current_scope.get('rank')
+        if selected_rank_value is None or current_rank_value is None:
+            selected_total = int(selected_scope.get('total') or 0)
+            current_total = int(current_scope.get('total') or 0)
+            unavailable_reasons.append({
+                'scope': scope_name,
+                'reason': 'missing_rank',
+                'value': selected_value,
+                'selected_rank': selected_rank_value,
+                'current_rank': current_rank_value,
+                'selected_total': selected_total,
+                'current_total': current_total,
+                'required_samples': required_samples,
+                'selected_sample_gap': max(0, required_samples - selected_total),
+                'current_sample_gap': max(0, required_samples - current_total),
+            })
+            continue
+        rank_delta = int(current_rank_value) - int(selected_rank_value)
+        comparisons.append({
+            'scope': scope_name,
+            'value': selected_value,
+            'selected_rank': int(selected_rank_value),
+            'current_rank': int(current_rank_value),
+            'rank_delta': rank_delta,
+            'selected_total': int(selected_scope.get('total') or 0),
+        })
+
+    comparisons.sort(
+        key=lambda item: (
+            int(item.get('rank_delta') or 0),
+            -int(item.get('selected_total') or 0),
+            -1 * int(item.get('selected_rank') or 9999),
+        ),
+        reverse=True,
+    )
+
+    positive_edges = [item for item in comparisons if int(item.get('rank_delta') or 0) > 0]
+    negative_edges = [item for item in comparisons if int(item.get('rank_delta') or 0) < 0]
+    neutral_edges = [item for item in comparisons if int(item.get('rank_delta') or 0) == 0]
+    best_edge = positive_edges[0] if positive_edges else (neutral_edges[0] if neutral_edges else (negative_edges[0] if negative_edges else None))
+
+    summary_text = 'rank_unavailable'
+    unavailable_detail = None
+    if best_edge is not None:
+        delta = int(best_edge.get('rank_delta') or 0)
+        if delta > 0:
+            summary_text = f"selected_ahead:{best_edge['scope']}:{best_edge['selected_rank']}vs{best_edge['current_rank']}"
+        elif delta < 0:
+            summary_text = f"current_ahead:{best_edge['scope']}:{best_edge['selected_rank']}vs{best_edge['current_rank']}"
+        else:
+            summary_text = f"rank_tied:{best_edge['scope']}:{best_edge['selected_rank']}"
+    else:
+        unavailable_reasons.sort(
+            key=lambda item: (
+                0 if str(item.get('reason') or '') == 'missing_rank' else 1,
+                -max(int(item.get('selected_sample_gap') or 0), int(item.get('current_sample_gap') or 0)),
+                -int(item.get('selected_total') or 0),
+                -int(item.get('current_total') or 0),
+            )
+        )
+        unavailable_detail = unavailable_reasons[0] if unavailable_reasons else {'reason': 'no_shared_scope'}
+        if str(unavailable_detail.get('reason') or '') == 'value_mismatch':
+            summary_text = f"rank_unavailable:value_mismatch:{unavailable_detail.get('scope')}"
+        elif str(unavailable_detail.get('reason') or '') == 'missing_rank':
+            summary_text = f"rank_unavailable:missing_rank:{unavailable_detail.get('scope')}"
+        else:
+            summary_text = 'rank_unavailable:no_shared_scope'
+
+    return {
+        'summary': summary_text,
+        'best_edge': best_edge,
+        'positive_scope_count': len(positive_edges),
+        'negative_scope_count': len(negative_edges),
+        'neutral_scope_count': len(neutral_edges),
+        'comparisons': comparisons[:5],
+        'unavailable_reason': unavailable_detail,
+        'unavailable_scopes': unavailable_reasons[:5],
+    }
+
+
+def _priority_learning_targets(summary_payload: dict) -> dict:
+    context_scopes = (summary_payload or {}).get('observation_context_scopes') or {}
+    required_samples = max(1, _safe_int(os.getenv('OBSERVATION_BIAS_MIN_SAMPLES'), _safe_int(getattr(_config, 'OBSERVATION_BIAS_MIN_SAMPLES', 3), 3)))
+    max_gap = max(1, _safe_int(os.getenv('LEARNING_TARGET_MAX_SAMPLE_GAP', '3'), 3))
+    suggestions = []
+
+    for scope_name, rows in context_scopes.items():
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            resolved = int(row.get('resolved', 0) or 0)
+            sample_gap = max(0, required_samples - resolved)
+            if sample_gap <= 0 or sample_gap > max_gap:
+                continue
+            recommended_source = _recommended_observation_source(scope_name, str(row.get('value') or 'unknown'))
+            suggestions.append({
+                'scope': scope_name,
+                'alert': _normalize_alert_name(row.get('alert')),
+                'value': str(row.get('value') or 'unknown'),
+                'resolved': resolved,
+                'required_samples': required_samples,
+                'sample_gap': sample_gap,
+                'victory_score': _safe_float(row.get('victory_score'), 0.0),
+                'win_rate': _safe_float(row.get('win_rate'), 0.0),
+                'avg_edge': _safe_float(row.get('avg_edge'), 0.0),
+                'estimated_bias': _safe_float(row.get('estimated_bias'), 0.0),
+                'estimated_threshold_adjustment': _safe_float(row.get('estimated_threshold_adjustment'), 0.0),
+                'recommended_source': recommended_source,
+            })
+
+    suggestions.sort(
+        key=lambda item: (
+            -1 * int(item.get('sample_gap') or 0),
+            _safe_float(item.get('victory_score'), 0.0),
+            _safe_float(item.get('win_rate'), 0.0),
+            int(item.get('resolved') or 0),
+        ),
+        reverse=False,
+    )
+    suggestions.sort(
+        key=lambda item: (
+            int(item.get('sample_gap') or 0),
+            -_safe_float(item.get('victory_score'), 0.0),
+            -_safe_float(item.get('win_rate'), 0.0),
+            -int(item.get('resolved') or 0),
+        )
+    )
+
+    per_scope = {}
+    per_alert = {}
+    for item in suggestions:
+        per_scope.setdefault(item['scope'], []).append(item)
+        per_alert.setdefault(item['alert'], []).append(item)
+
+    return {
+        'required_samples': required_samples,
+        'max_sample_gap': max_gap,
+        'top_targets': suggestions[:12],
+        'per_scope': {key: value[:5] for key, value in per_scope.items()},
+        'per_alert': {key: value[:5] for key, value in per_alert.items()},
+    }
+
+
+def _recommended_observation_source(scope_name: str, scope_value: str) -> dict:
+    scope = str(scope_name or 'unknown')
+    value = str(scope_value or 'unknown').lower()
+    if scope == 'source_family':
+        if 'monitor' in value:
+            return {'source': 'monitor_learning_override', 'reason': 'same_source_family'}
+        if 'webhook' in value:
+            return {'source': 'webhook_eval', 'reason': 'same_source_family'}
+        return {'source': 'runtime_eval', 'reason': 'same_source_family'}
+    if scope in ('regime', 'alignment', 'timeframe_bias', 'threshold_state', 'style'):
+        return {'source': 'monitor_learning_override', 'reason': 'needs_runtime_context'}
+    if scope == 'symbol':
+        return {'source': 'webhook_eval', 'reason': 'symbol_entry_flow'}
+    return {'source': 'runtime_eval', 'reason': 'general_context_fill'}
+
+
+def _synthetic_priority_targets_from_context(context_signal: dict, alert_name=None, limit=4) -> list:
+    scopes = (context_signal or {}).get('scopes') if isinstance((context_signal or {}).get('scopes'), dict) else {}
+    normalized_alert = _normalize_alert_name(alert_name) if alert_name else None
+    required_samples = max(1, _safe_int(os.getenv('OBSERVATION_BIAS_MIN_SAMPLES'), _safe_int(getattr(_config, 'OBSERVATION_BIAS_MIN_SAMPLES', 3), 3)))
+    synthetic_targets = []
+
+    for scope_name, scope_item in scopes.items():
+        if not isinstance(scope_item, dict):
+            continue
+        resolved = int(scope_item.get('resolved', 0) or 0)
+        sample_gap = max(0, required_samples - resolved)
+        if sample_gap <= 0:
+            continue
+        value = str(scope_item.get('value') or 'unknown')
+        synthetic_targets.append({
+            'scope': scope_name,
+            'alert': normalized_alert,
+            'value': value,
+            'resolved': resolved,
+            'required_samples': required_samples,
+            'sample_gap': sample_gap,
+            'victory_score': _safe_float((context_signal or {}).get('victory_score'), 0.0),
+            'win_rate': _safe_float(scope_item.get('win_rate'), 0.0),
+            'avg_edge': _safe_float(scope_item.get('avg_edge'), 0.0),
+            'estimated_bias': _safe_float(scope_item.get('estimated_bias'), 0.0),
+            'estimated_threshold_adjustment': _safe_float(scope_item.get('estimated_threshold_adjustment'), 0.0),
+            'recommended_source': _recommended_observation_source(scope_name, value),
+            'synthetic': True,
+            'matches_current_context': True,
+            'matches_alert': True,
+        })
+
+    synthetic_targets.sort(
+        key=lambda item: (
+            int(item.get('sample_gap') or 0),
+            -_safe_float(item.get('win_rate'), 0.0),
+            -_safe_float(item.get('avg_edge'), 0.0),
+        )
+    )
+    return synthetic_targets[:max(1, _safe_int(limit, 4))]
+
+
+def _contextual_priority_learning_targets(summary_payload: dict, context_signal: dict, alert_name=None, limit=4) -> dict:
+    priority_targets = (summary_payload or {}).get('priority_learning_targets') if isinstance((summary_payload or {}).get('priority_learning_targets'), dict) else {}
+    top_targets = list(priority_targets.get('top_targets') or []) if isinstance(priority_targets.get('top_targets'), list) else []
+    scopes = (context_signal or {}).get('scopes') if isinstance((context_signal or {}).get('scopes'), dict) else {}
+    normalized_alert = _normalize_alert_name(alert_name) if alert_name else None
+    context_values = {
+        scope_name: str((scope_item or {}).get('value') or 'unknown')
+        for scope_name, scope_item in scopes.items()
+        if isinstance(scope_item, dict)
+    }
+    matched = []
+    for item in top_targets:
+        if not isinstance(item, dict):
+            continue
+        scope_name = str(item.get('scope') or 'unknown')
+        scope_value = str(item.get('value') or 'unknown')
+        if context_values.get(scope_name) != scope_value:
+            continue
+        enriched = dict(item)
+        enriched['matches_current_context'] = True
+        enriched['matches_alert'] = bool(normalized_alert and _normalize_alert_name(item.get('alert')) == normalized_alert)
+        matched.append(enriched)
+
+    matched.sort(
+        key=lambda item: (
+            0 if item.get('matches_alert') else 1,
+            int(item.get('sample_gap') or 0),
+            -_safe_float(item.get('victory_score'), 0.0),
+            -_safe_int(item.get('resolved'), 0),
+        )
+    )
+
+    synthetic_targets = _synthetic_priority_targets_from_context(context_signal, alert_name=normalized_alert, limit=limit)
+    fallback_targets = top_targets[:max(1, _safe_int(limit, 4))]
+    if not fallback_targets:
+        fallback_targets = synthetic_targets
+
+    return {
+        'alert': normalized_alert,
+        'context_values': context_values,
+        'matched_targets': matched[:max(1, _safe_int(limit, 4))],
+        'synthetic_targets': synthetic_targets,
+        'fallback_targets': fallback_targets,
+    }
+
+
+def _summarize_priority_learning_targets(target_payload: dict) -> dict:
+    matched_targets = list((target_payload or {}).get('matched_targets') or []) if isinstance((target_payload or {}).get('matched_targets'), list) else []
+    synthetic_targets = list((target_payload or {}).get('synthetic_targets') or []) if isinstance((target_payload or {}).get('synthetic_targets'), list) else []
+    fallback_targets = list((target_payload or {}).get('fallback_targets') or []) if isinstance((target_payload or {}).get('fallback_targets'), list) else []
+    top_target = matched_targets[0] if matched_targets else (synthetic_targets[0] if synthetic_targets else (fallback_targets[0] if fallback_targets else None))
+    if not isinstance(top_target, dict):
+        return {
+            'summary': 'no_priority_target',
+            'top_target': None,
+        }
+
+    recommended_source = top_target.get('recommended_source') if isinstance(top_target.get('recommended_source'), dict) else {}
+    mode = 'matched' if matched_targets else ('synthetic' if synthetic_targets else 'fallback')
+    summary = 'learn_next:{mode}:{scope}:{value}:gap={gap}:src={source}'.format(
+        mode=mode,
+        scope=str(top_target.get('scope') or 'unknown'),
+        value=str(top_target.get('value') or 'unknown'),
+        gap=int(top_target.get('sample_gap') or 0),
+        source=str(recommended_source.get('source') or 'runtime_eval'),
+    )
+    return {
+        'summary': summary,
+        'top_target': top_target,
+        'mode': mode,
+    }
+
+
 def _planned_rr_for_alert(alert_name):
     planned_rr_map = {
         'alert_a': ALERT_A_PLANNED_RR,
@@ -663,6 +1267,81 @@ def _candidate_for_alert(candidates, alert_name):
             return candidate
     return None
 
+def _learning_threshold_snapshot(bot_eval, focus_alert=None, current_alert=None):
+    if not isinstance(bot_eval, dict):
+        return {}
+
+    engine = _learning_engine()
+    selected_alert = _normalize_alert_name(focus_alert or bot_eval.get('selected_alert'))
+    current_alert_name = _normalize_alert_name(current_alert) if current_alert else None
+    thresholds = dict(bot_eval.get('thresholds') or {}) if isinstance(bot_eval.get('thresholds'), dict) else {}
+    observation_biases = dict(bot_eval.get('observation_biases') or {}) if isinstance(bot_eval.get('observation_biases'), dict) else {}
+    observation_threshold_adjustments = dict(bot_eval.get('observation_threshold_adjustments') or {}) if isinstance(bot_eval.get('observation_threshold_adjustments'), dict) else {}
+    selected_candidate = _candidate_for_alert(bot_eval.get('candidates'), selected_alert) or {}
+    current_candidate = _candidate_for_alert(bot_eval.get('candidates'), current_alert_name) or {} if current_alert_name else {}
+
+    snapshot = {
+        'selected_alert': selected_alert,
+        'selected_score': _safe_float(bot_eval.get('score'), _safe_float(selected_candidate.get('score'), 0.0)),
+        'selected_threshold': _safe_float(thresholds.get(selected_alert), _safe_float(selected_candidate.get('threshold'), 0.0)),
+        'selected_observation_bias': _safe_float(observation_biases.get(selected_alert), _safe_float(selected_candidate.get('observation_bias'), 0.0)),
+        'selected_threshold_adjustment': _safe_float(observation_threshold_adjustments.get(selected_alert), _safe_float(selected_candidate.get('observation_threshold_adjustment'), 0.0)),
+        'observation_biases': observation_biases,
+        'observation_threshold_adjustments': observation_threshold_adjustments,
+        'thresholds': thresholds,
+    }
+    snapshot['selected_score_margin'] = snapshot['selected_score'] - snapshot['selected_threshold']
+
+    if current_alert_name:
+        snapshot.update({
+            'current_alert': current_alert_name,
+            'current_score': _safe_float(current_candidate.get('score'), 0.0),
+            'current_threshold': _safe_float(thresholds.get(current_alert_name), _safe_float(current_candidate.get('threshold'), 0.0)),
+            'current_observation_bias': _safe_float(observation_biases.get(current_alert_name), _safe_float(current_candidate.get('observation_bias'), 0.0)),
+            'current_threshold_adjustment': _safe_float(observation_threshold_adjustments.get(current_alert_name), _safe_float(current_candidate.get('observation_threshold_adjustment'), 0.0)),
+        })
+        snapshot['current_score_margin'] = snapshot['current_score'] - snapshot['current_threshold']
+
+    side = str(selected_candidate.get('side') or ('buy' if str(bot_eval.get('signal') or '').upper() == 'BUY' else 'sell')).lower()
+    context_candidate = dict(selected_candidate or {'alert': selected_alert, 'side': side})
+    context_candidate.setdefault('alert', selected_alert)
+    context_candidate.setdefault('side', side)
+    context = engine._build_observation_context(
+        str(bot_eval.get('symbol') or ''),
+        bot_eval,
+        selected_alert,
+        context_candidate,
+        str(bot_eval.get('observation_source') or 'runtime_eval'),
+    )
+    snapshot['context_signal'] = engine.get_observation_context_signal(
+        selected_alert,
+        symbol=str(bot_eval.get('symbol') or ''),
+        context=context,
+    )
+    snapshot['victory_score'] = _safe_float(snapshot['context_signal'].get('victory_score'), 0.0) if isinstance(snapshot.get('context_signal'), dict) else 0.0
+    snapshot['victory_reference'] = snapshot['context_signal'].get('victory_reference', {}) if isinstance(snapshot.get('context_signal'), dict) else {}
+
+    if current_alert_name:
+        current_side = str(current_candidate.get('side') or ('buy' if str(bot_eval.get('signal') or '').upper() == 'BUY' else 'sell')).lower()
+        current_context_candidate = dict(current_candidate or {'alert': current_alert_name, 'side': current_side})
+        current_context_candidate.setdefault('alert', current_alert_name)
+        current_context_candidate.setdefault('side', current_side)
+        current_context = engine._build_observation_context(
+            str(bot_eval.get('symbol') or ''),
+            bot_eval,
+            current_alert_name,
+            current_context_candidate,
+            str(bot_eval.get('observation_source') or 'runtime_eval'),
+        )
+        snapshot['current_context_signal'] = engine.get_observation_context_signal(
+            current_alert_name,
+            symbol=str(bot_eval.get('symbol') or ''),
+            context=current_context,
+        )
+        snapshot['current_victory_score'] = _safe_float(snapshot['current_context_signal'].get('victory_score'), 0.0) if isinstance(snapshot.get('current_context_signal'), dict) else 0.0
+        snapshot['current_victory_reference'] = snapshot['current_context_signal'].get('victory_reference', {}) if isinstance(snapshot.get('current_context_signal'), dict) else {}
+    return snapshot
+
 
 def _learning_strength(metrics):
     if not isinstance(metrics, dict):
@@ -691,7 +1370,7 @@ def _learning_override_decision(active_alert, hold_side, bot_eval):
     target_alert = _normalize_alert_name(bot_eval.get('selected_alert'))
     confidence = _safe_float(bot_eval.get('confidence'), 0.0)
     score = _safe_float(bot_eval.get('score'), 0.0)
-    thresholds = bot_eval.get('thresholds') if isinstance(bot_eval.get('thresholds'), dict) else {}
+    thresholds: dict[str, float] = dict(bot_eval.get('thresholds') or {}) if isinstance(bot_eval.get('thresholds'), dict) else {}
     min_required = _safe_float(thresholds.get(target_alert), 0.0)
     if score < min_required:
         return {
@@ -712,13 +1391,85 @@ def _learning_override_decision(active_alert, hold_side, bot_eval):
     current_candidate = _candidate_for_alert(bot_eval.get('candidates'), current_alert) or {}
     current_score = _safe_float(current_candidate.get('score'), 0.0)
     score_gap = score - current_score
+    target_observation_bias = _safe_float((bot_eval.get('observation_biases') or {}).get(target_alert), _safe_float(( _candidate_for_alert(bot_eval.get('candidates'), target_alert) or {}).get('observation_bias'), 0.0))
+    current_observation_bias = _safe_float((bot_eval.get('observation_biases') or {}).get(current_alert), _safe_float(current_candidate.get('observation_bias'), 0.0))
+    observation_edge = target_observation_bias - current_observation_bias
+    threshold_adjustments = dict(bot_eval.get('observation_threshold_adjustments') or {}) if isinstance(bot_eval.get('observation_threshold_adjustments'), dict) else {}
+    target_threshold_adjustment = _safe_float(threshold_adjustments.get(target_alert), _safe_float((_candidate_for_alert(bot_eval.get('candidates'), target_alert) or {}).get('observation_threshold_adjustment'), 0.0))
+    current_threshold_adjustment = _safe_float(threshold_adjustments.get(current_alert), _safe_float(current_candidate.get('observation_threshold_adjustment'), 0.0))
+    threshold_adjustment_edge = current_threshold_adjustment - target_threshold_adjustment
 
     strength_edge = _learning_strength(target_metrics) - _learning_strength(current_metrics)
+    threshold_snapshot = _learning_threshold_snapshot(bot_eval, focus_alert=target_alert, current_alert=current_alert)
+    context_signal = threshold_snapshot.get('context_signal') if isinstance(threshold_snapshot.get('context_signal'), dict) else {}
+    current_context_signal = threshold_snapshot.get('current_context_signal') if isinstance(threshold_snapshot.get('current_context_signal'), dict) else {}
+    context_scopes = context_signal.get('scopes') if isinstance(context_signal.get('scopes'), dict) else {}
+    regime_scope = context_scopes.get('regime') if isinstance(context_scopes.get('regime'), dict) else {}
+    source_scope = context_scopes.get('source_family') if isinstance(context_scopes.get('source_family'), dict) else {}
+    regime_edge = _safe_float(regime_scope.get('estimated_bias'), 0.0)
+    source_edge = _safe_float(source_scope.get('estimated_bias'), 0.0)
+    regime_threshold_tailwind = -_safe_float(regime_scope.get('estimated_threshold_adjustment'), 0.0)
+    source_threshold_tailwind = -_safe_float(source_scope.get('estimated_threshold_adjustment'), 0.0)
+    target_victory_score = _safe_float(context_signal.get('victory_score'), 0.0)
+    current_victory_score = _safe_float(current_context_signal.get('victory_score'), 0.0)
+    victory_edge = target_victory_score - current_victory_score
+    victory_reference = context_signal.get('victory_reference', {}) if isinstance(context_signal.get('victory_reference'), dict) else {}
+
+    reverse_confidence_threshold = _clamp(
+        LEARNING_REVERSE_MIN_CONFIDENCE
+        - max(0.0, observation_edge) * 0.45
+        - max(0.0, regime_edge) * 0.30
+        - max(0.0, source_edge) * 0.18
+        - max(0.0, victory_edge) * 0.22
+        + max(0.0, -observation_edge) * 0.20,
+        0.68,
+        0.92,
+    )
+    reverse_score_gap_threshold = _clamp(
+        LEARNING_REVERSE_MIN_SCORE_GAP
+        - max(0.0, observation_edge) * 0.18
+        - max(0.0, regime_threshold_tailwind) * 0.10
+        - max(0.0, source_threshold_tailwind) * 0.06
+        - max(0.0, victory_edge) * 0.05
+        + max(0.0, -observation_edge) * 0.08,
+        0.008,
+        0.08,
+    )
+    reverse_strength_threshold = _clamp(
+        LEARNING_REVERSE_MIN_EDGE
+        - max(0.0, threshold_adjustment_edge) * 0.80
+        - max(0.0, regime_threshold_tailwind) * 0.45
+        - max(0.0, source_threshold_tailwind) * 0.25
+        - max(0.0, victory_edge) * 0.08
+        + max(0.0, -threshold_adjustment_edge) * 0.35,
+        0.0,
+        0.08,
+    )
+    exit_confidence_threshold = _clamp(
+        LEARNING_EXIT_MIN_CONFIDENCE
+        - max(0.0, observation_edge) * 0.22
+        - max(0.0, regime_edge) * 0.16
+        - max(0.0, source_edge) * 0.10
+        - max(0.0, victory_edge) * 0.12
+        + max(0.0, -observation_edge) * 0.12,
+        0.62,
+        0.88,
+    )
+    exit_strength_threshold = _clamp(
+        0.0
+        - max(0.0, threshold_adjustment_edge) * 0.35
+        - max(0.0, regime_threshold_tailwind) * 0.18
+        - max(0.0, source_threshold_tailwind) * 0.10
+        - max(0.0, victory_edge) * 0.05
+        + max(0.0, -threshold_adjustment_edge) * 0.12,
+        -0.03,
+        0.05,
+    )
 
     if (
-        confidence >= LEARNING_REVERSE_MIN_CONFIDENCE
-        and score_gap >= LEARNING_REVERSE_MIN_SCORE_GAP
-        and strength_edge >= LEARNING_REVERSE_MIN_EDGE
+        confidence >= reverse_confidence_threshold
+        and score_gap >= reverse_score_gap_threshold
+        and strength_edge >= reverse_strength_threshold
     ):
         return {
             'action': 'reverse',
@@ -729,9 +1480,30 @@ def _learning_override_decision(active_alert, hold_side, bot_eval):
             'score': score,
             'score_gap': score_gap,
             'strength_edge': strength_edge,
+            'observation_edge': observation_edge,
+            'target_observation_bias': target_observation_bias,
+            'current_observation_bias': current_observation_bias,
+            'target_threshold_adjustment': target_threshold_adjustment,
+            'current_threshold_adjustment': current_threshold_adjustment,
+            'threshold_adjustment_edge': threshold_adjustment_edge,
+            'target_victory_score': target_victory_score,
+            'current_victory_score': current_victory_score,
+            'victory_edge': victory_edge,
+            'victory_reference': victory_reference,
+            'reverse_thresholds': {
+                'confidence': reverse_confidence_threshold,
+                'score_gap': reverse_score_gap_threshold,
+                'strength_edge': reverse_strength_threshold,
+                'regime_edge': regime_edge,
+                'source_edge': source_edge,
+                'victory_edge': victory_edge,
+                'regime_threshold_tailwind': regime_threshold_tailwind,
+                'source_threshold_tailwind': source_threshold_tailwind,
+            },
+            'threshold_snapshot': threshold_snapshot,
         }
 
-    if confidence >= LEARNING_EXIT_MIN_CONFIDENCE and strength_edge >= 0.0:
+    if confidence >= exit_confidence_threshold and strength_edge >= exit_strength_threshold:
         return {
             'action': 'close',
             'reason': 'learning_override_exit',
@@ -741,6 +1513,36 @@ def _learning_override_decision(active_alert, hold_side, bot_eval):
             'score': score,
             'score_gap': score_gap,
             'strength_edge': strength_edge,
+            'observation_edge': observation_edge,
+            'target_observation_bias': target_observation_bias,
+            'current_observation_bias': current_observation_bias,
+            'target_threshold_adjustment': target_threshold_adjustment,
+            'current_threshold_adjustment': current_threshold_adjustment,
+            'threshold_adjustment_edge': threshold_adjustment_edge,
+            'target_victory_score': target_victory_score,
+            'current_victory_score': current_victory_score,
+            'victory_edge': victory_edge,
+            'victory_reference': victory_reference,
+            'reverse_thresholds': {
+                'confidence': reverse_confidence_threshold,
+                'score_gap': reverse_score_gap_threshold,
+                'strength_edge': reverse_strength_threshold,
+                'regime_edge': regime_edge,
+                'source_edge': source_edge,
+                'victory_edge': victory_edge,
+                'regime_threshold_tailwind': regime_threshold_tailwind,
+                'source_threshold_tailwind': source_threshold_tailwind,
+            },
+            'exit_thresholds': {
+                'confidence': exit_confidence_threshold,
+                'strength_edge': exit_strength_threshold,
+                'regime_edge': regime_edge,
+                'source_edge': source_edge,
+                'victory_edge': victory_edge,
+                'regime_threshold_tailwind': regime_threshold_tailwind,
+                'source_threshold_tailwind': source_threshold_tailwind,
+            },
+            'threshold_snapshot': threshold_snapshot,
         }
 
     return {
@@ -752,6 +1554,36 @@ def _learning_override_decision(active_alert, hold_side, bot_eval):
         'score': score,
         'score_gap': score_gap,
         'strength_edge': strength_edge,
+        'observation_edge': observation_edge,
+        'target_observation_bias': target_observation_bias,
+        'current_observation_bias': current_observation_bias,
+        'target_threshold_adjustment': target_threshold_adjustment,
+        'current_threshold_adjustment': current_threshold_adjustment,
+        'threshold_adjustment_edge': threshold_adjustment_edge,
+        'target_victory_score': target_victory_score,
+        'current_victory_score': current_victory_score,
+        'victory_edge': victory_edge,
+        'victory_reference': victory_reference,
+        'reverse_thresholds': {
+            'confidence': reverse_confidence_threshold,
+            'score_gap': reverse_score_gap_threshold,
+            'strength_edge': reverse_strength_threshold,
+            'regime_edge': regime_edge,
+            'source_edge': source_edge,
+            'victory_edge': victory_edge,
+            'regime_threshold_tailwind': regime_threshold_tailwind,
+            'source_threshold_tailwind': source_threshold_tailwind,
+        },
+        'exit_thresholds': {
+            'confidence': exit_confidence_threshold,
+            'strength_edge': exit_strength_threshold,
+            'regime_edge': regime_edge,
+            'source_edge': source_edge,
+            'victory_edge': victory_edge,
+            'regime_threshold_tailwind': regime_threshold_tailwind,
+            'source_threshold_tailwind': source_threshold_tailwind,
+        },
+        'threshold_snapshot': threshold_snapshot,
     }
 
 
@@ -1863,9 +2695,48 @@ def _get_execution_throttle_state():
     }
 
 
+def _parse_exchange_429_code(last_code: str) -> tuple[int, int]:
+    text = str(last_code or '').strip()
+    if not text.startswith('429'):
+        return 0, 0
+    parts = text.split(':')
+    strike = 1
+    created_at = 0
+    if len(parts) >= 2:
+        try:
+            strike = max(1, int(parts[1]))
+        except Exception:
+            strike = 1
+    if len(parts) >= 3:
+        try:
+            created_at = max(0, int(parts[2]))
+        except Exception:
+            created_at = 0
+    return strike, created_at
+
+
+def _build_exchange_429_cooldown_state():
+    now_ts = int(time.time())
+    throttle = _get_execution_throttle_state()
+    prev_strike, prev_created_at = _parse_exchange_429_code(throttle.get('last_code', ''))
+    if prev_created_at > 0 and (now_ts - prev_created_at) <= max(0, int(EXCHANGE_429_STRIKE_RESET_SECONDS)):
+        strike = prev_strike + 1
+    else:
+        strike = 1
+    cooldown_seconds = int(round(EXCHANGE_429_COOLDOWN_SECONDS * (EXCHANGE_429_BACKOFF_MULTIPLIER ** max(0, strike - 1))))
+    cooldown_seconds = max(int(EXCHANGE_429_COOLDOWN_SECONDS), cooldown_seconds)
+    cooldown_seconds = min(int(EXCHANGE_429_COOLDOWN_MAX_SECONDS), cooldown_seconds)
+    return {
+        'last_code': f'429:{strike}:{now_ts}',
+        'cooldown_seconds': cooldown_seconds,
+        'strike_count': strike,
+    }
+
+
 def _decision_stats_payload(limit=8):
     now_ms = int(time.time() * 1000)
     throttle = _get_execution_throttle_state()
+    strike_count, _ = _parse_exchange_429_code(throttle.get('last_code', ''))
     return {
         'no_signal_reasons': _top_reason_stats('no_signal', limit=limit),
         'blocked_reasons': _top_reason_stats('blocked_reason', limit=limit),
@@ -1874,6 +2745,7 @@ def _decision_stats_payload(limit=8):
             'next_allowed_in_ms': max(0, int(throttle.get('next_allowed_at_ms', 0)) - now_ms),
             'cooldown_remaining_ms': max(0, int(throttle.get('cooldown_until_ms', 0)) - now_ms),
             'last_code': throttle.get('last_code', ''),
+            'strike_count': strike_count,
             'updated_at': throttle.get('updated_at', 0),
         },
     }
@@ -2200,15 +3072,30 @@ def _execute_exchange_call(label: str, fn, interval_ms: int = None):
     except Exception as exc:
         text = str(exc)
         if '429' in text or 'too many requests' in text.lower():
-            _set_exchange_cooldown('429', EXCHANGE_429_COOLDOWN_SECONDS)
+            cooldown_state = _build_exchange_429_cooldown_state()
+            _set_exchange_cooldown(cooldown_state['last_code'], cooldown_state['cooldown_seconds'])
             _record_reason_stat('exchange_rate_limit', f'{label}:exception_429')
+            app.logger.warning(
+                'EXCHANGE_429_EXCEPTION label=%s strike=%s cooldown_seconds=%s error=%s',
+                label,
+                cooldown_state['strike_count'],
+                cooldown_state['cooldown_seconds'],
+                text,
+            )
         raise
 
     if _is_exchange_429(response):
-        _set_exchange_cooldown('429', EXCHANGE_429_COOLDOWN_SECONDS)
+        cooldown_state = _build_exchange_429_cooldown_state()
+        _set_exchange_cooldown(cooldown_state['last_code'], cooldown_state['cooldown_seconds'])
         _record_reason_stat('exchange_rate_limit', f'{label}:429')
         _record_runtime_error(f'exchange_429:{label}')
-        app.logger.warning('EXCHANGE_429 label=%s response=%s', label, response)
+        app.logger.warning(
+            'EXCHANGE_429 label=%s strike=%s cooldown_seconds=%s response=%s',
+            label,
+            cooldown_state['strike_count'],
+            cooldown_state['cooldown_seconds'],
+            response,
+        )
     return response
 
 
@@ -2428,14 +3315,40 @@ def _current_daily_drawdown_ratio() -> float:
     return loss_abs / live_balance
 
 
-def _learning_summary_payload(recent_limit=8):
+def _learning_summary_payload(
+    recent_limit=8,
+    compact=False,
+    victory_overall_limit=None,
+    victory_value_limit=None,
+    victory_leaders_per_value=None,
+):
     engine = _learning_engine()
     state = engine.state
     trades = list(state.get('trades', []))
-    return {
+    if hasattr(engine, 'get_observation_summary'):
+        observation_summary = engine.get_observation_summary(recent_limit=recent_limit, compact=compact)
+    else:
+        observation_summary = {
+            'context_scopes': {},
+            'representative_contexts': {},
+            'recent_observations': [],
+        }
+    payload = {
         'summary': engine.get_alert_summary(),
-        'recent_trades': trades[-recent_limit:],
+        'observation_summary': observation_summary,
+        'observation_context_scopes': observation_summary.get('context_scopes', {}),
     }
+    payload['threshold_overview'] = _learning_threshold_overview(payload)
+    payload['victory_scope_leaderboard'] = _victory_scope_leaderboard(
+        payload,
+        overall_limit=victory_overall_limit,
+        value_limit=victory_value_limit,
+        leaders_per_value=victory_leaders_per_value,
+    )
+    payload['priority_learning_targets'] = _priority_learning_targets(payload)
+    if not compact:
+        payload['recent_trades'] = trades[-recent_limit:]
+    return payload
 
 
 def _build_phase45_context(symbol):
@@ -2559,7 +3472,7 @@ def generate_signal(symbol):
 def healthz():
     _start_monitor_autopoll()
     recent_error_count, last_runtime_error = _recent_error_summary()
-    learning = _learning_summary_payload(recent_limit=4)
+    learning = _learning_summary_payload(recent_limit=4, compact=True)
     reconcile = _reconcile_stats_payload(window_seconds=86400, recent_limit=6)
     now_ts = int(time.time())
     last_webhook_received_at, last_webhook_source_ua = _get_webhook_ingress()
@@ -2591,6 +3504,9 @@ def healthz():
         'recent_error_count': recent_error_count,
         'last_runtime_error': last_runtime_error,
         'learning_summary': learning['summary'],
+        'observation_summary': learning['observation_summary'],
+        'victory_scope_leaderboard': learning.get('victory_scope_leaderboard', {}),
+        'priority_learning_targets': learning.get('priority_learning_targets', {}),
         'reconcile_stats': reconcile,
         'decision_stats': _decision_stats_payload(limit=6),
     }
@@ -2600,7 +3516,23 @@ def healthz():
 
 @app.get('/learning-summary')
 def learning_summary():
-    payload = _learning_summary_payload(recent_limit=12)
+    recent_limit = max(1, _safe_int(request.args.get('recent_limit'), 12))
+    verbose = str(request.args.get('verbose', '0')).strip().lower() in ('1', 'true', 'yes', 'on')
+    compact_arg = request.args.get('compact')
+    if compact_arg is None:
+        compact = not verbose
+    else:
+        compact = str(compact_arg).strip().lower() in ('1', 'true', 'yes', 'on')
+    victory_overall_limit = max(1, _safe_int(request.args.get('victory_overall_limit'), _safe_int(os.getenv('VICTORY_LEADERBOARD_OVERALL_LIMIT', '8'), 8)))
+    victory_value_limit = max(1, _safe_int(request.args.get('victory_value_limit'), _safe_int(os.getenv('VICTORY_LEADERBOARD_VALUE_LIMIT', '8'), 8)))
+    victory_leaders_per_value = max(1, _safe_int(request.args.get('victory_leaders_per_value'), _safe_int(os.getenv('VICTORY_LEADERBOARD_LEADERS_PER_VALUE', '3'), 3)))
+    payload = _learning_summary_payload(
+        recent_limit=recent_limit,
+        compact=compact,
+        victory_overall_limit=victory_overall_limit,
+        victory_value_limit=victory_value_limit,
+        victory_leaders_per_value=victory_leaders_per_value,
+    )
     return jsonify({'status': 'ok', **payload}), 200
 
 
@@ -2735,7 +3667,10 @@ def webhook():
                         'no_signal_reason': bot_eval.get('no_signal_reason') if bot_eval else 'signal_missing',
                         'blocked_reasons': bot_eval.get('blocked_reasons', {}) if bot_eval else {},
                         'thresholds': bot_eval.get('thresholds', {}) if bot_eval else {},
-                        'news_bias': bot_eval.get('news_bias', {}) if bot_eval else {}}
+                        'observation_threshold_adjustments': bot_eval.get('observation_threshold_adjustments', {}) if bot_eval else {},
+                        'news_bias': bot_eval.get('news_bias', {}) if bot_eval else {},
+                        'observation_biases': bot_eval.get('observation_biases', {}) if bot_eval else {},
+                        'learning_threshold_snapshot': _learning_threshold_snapshot(bot_eval) if bot_eval else {}}
             if phase45_context:
                 response['phase45'] = phase45_context
             return jsonify(response), 200
@@ -2794,6 +3729,10 @@ def webhook():
         size_multiplier = _safe_float(size_plan.get('strategy_multiplier'), 1.0)
         order_size_scale_applied = _safe_float(size_plan.get('order_size_scale'), 1.0)
         size = _safe_float(size_plan.get('size'), 0.0)
+        learning_size_meta = _learning_size_adjustment(bot_eval, selected_alert)
+        learning_size_multiplier = _safe_float(learning_size_meta.get('multiplier'), 1.0)
+        size_multiplier *= learning_size_multiplier
+        size *= learning_size_multiplier
         min_size_floor = 0.0
         min_notional_floor = 0.0
         min_pct_floor = target_margin_pct
@@ -2866,6 +3805,8 @@ def webhook():
         size_adjustment_meta = {
             'addon_scale': 1.0,
             'opposite_not_doten_scale': 1.0,
+            'learning_observation_scale': learning_size_multiplier,
+            'learning_size_meta': learning_size_meta,
             'base_size_before_adjustments': size,
         }
 
@@ -3092,6 +4033,8 @@ def webhook():
                 'estimated_base_notional': (base_size * est_mark) if est_mark > 0 else None,
                 'estimated_margin_from_size': ((base_size * est_mark) / target_leverage_for_size) if est_mark > 0 and target_leverage_for_size > 0 else None,
                 'multiplier': size_multiplier,
+                'learning_observation_multiplier': learning_size_multiplier,
+                'learning_size_meta': learning_size_meta,
                 'order_size_scale': order_size_scale_applied,
                 'min_entry_balance_pct': min_pct_floor,
                 'min_entry_notional_floor': min_notional_floor if min_notional_floor > 0 else None,
@@ -3113,6 +4056,9 @@ def webhook():
                 'atr': bot_eval.get('atr'),
                 'candidates': bot_eval.get('candidates', []),
                 'news_bias': bot_eval.get('news_bias', {}),
+                'observation_biases': bot_eval.get('observation_biases', {}),
+                'observation_threshold_adjustments': bot_eval.get('observation_threshold_adjustments', {}),
+                'learning_threshold_snapshot': _learning_threshold_snapshot(bot_eval, focus_alert=selected_alert),
             }
         if phase45_context:
             response['phase45'] = phase45_context
@@ -3152,6 +4098,8 @@ def monitor():
     exchange_position_map = _build_exchange_position_map(exchange_positions)
     registry_positions = position_registry.get_all()
     symbol_side_counts = {}
+    learning_compact = _learning_summary_payload(recent_limit=4, compact=True)
+
     for reg in registry_positions:
         reg_symbol = str(reg.get('symbol') or '').upper()
         reg_hold_side = _registry_side_to_hold_side(reg.get('side'))
@@ -3238,6 +4186,7 @@ def monitor():
             profile_trailing_action = next((item for item in profile_actions if item.get('kind') == 'trailing_close'), None)
             profile_has_close = any(action_name == 'close' for action_name, _ in (profile_exit.get('actions') or []))
             prefer_profile_partial = _should_prefer_profile_partial(lifecycle.get('reason'), profile_partial_tuples)
+            learning_eval = None
             monitor_detail = {
                 'position_state': position_state,
                 'monitor_profile_source': monitor_profile_source,
@@ -3442,10 +4391,37 @@ def monitor():
             learning_eval = None
             if LEARNING_ADAPTIVE_EXIT_ENABLED and c5m and c15m:
                 try:
-                    c1h = get_candles(sym, '1h') or []
-                    if c1h:
-                        news_bias = _news_bias_for_alerts(sym)
-                        learning_eval = alert_bot_engine.evaluate(c5m, c15m, c1h, news_bias=news_bias, symbol=sym)
+                    learning_eval = _evaluate_bots(sym, observation_source='monitor_learning_override')
+                    if isinstance(learning_eval, dict):
+                        learning_threshold_snapshot = _learning_threshold_snapshot(learning_eval, focus_alert=learning_eval.get('selected_alert'), current_alert=bot_name)
+                        selected_context_signal = learning_threshold_snapshot.get('context_signal') if isinstance(learning_threshold_snapshot.get('context_signal'), dict) else {}
+                        current_context_signal = learning_threshold_snapshot.get('current_context_signal') if isinstance(learning_threshold_snapshot.get('current_context_signal'), dict) else {}
+                        selected_victory_rank = _victory_rank_for_context(learning_compact, learning_eval.get('selected_alert'), selected_context_signal)
+                        current_victory_rank = _victory_rank_for_context(learning_compact, bot_name, current_context_signal)
+                        victory_rank_delta = _summarize_victory_rank_delta(selected_victory_rank, current_victory_rank)
+                        selected_priority_targets = _contextual_priority_learning_targets(learning_compact, selected_context_signal, alert_name=learning_eval.get('selected_alert'))
+                        current_priority_targets = _contextual_priority_learning_targets(learning_compact, current_context_signal, alert_name=bot_name)
+                        selected_priority_summary = _summarize_priority_learning_targets(selected_priority_targets)
+                        current_priority_summary = _summarize_priority_learning_targets(current_priority_targets)
+                        monitor_detail['learning_eval'] = {
+                            'selected_alert': learning_eval.get('selected_alert'),
+                            'signal': learning_eval.get('signal'),
+                            'score': learning_eval.get('score'),
+                            'confidence': learning_eval.get('confidence'),
+                            'thresholds': learning_eval.get('thresholds', {}),
+                            'observation_biases': learning_eval.get('observation_biases', {}),
+                            'observation_threshold_adjustments': learning_eval.get('observation_threshold_adjustments', {}),
+                            'learning_threshold_snapshot': learning_threshold_snapshot,
+                            'selected_victory_rank': selected_victory_rank,
+                            'current_victory_rank': current_victory_rank,
+                            'victory_rank_delta': victory_rank_delta,
+                            'victory_rank_summary': victory_rank_delta.get('summary'),
+                            'selected_priority_learning_targets': selected_priority_targets,
+                            'selected_priority_learning_summary': selected_priority_summary,
+                            'current_priority_learning_targets': current_priority_targets,
+                            'current_priority_learning_summary': current_priority_summary,
+                        }
+                    if isinstance(learning_eval, dict):
                         learning_override = _learning_override_decision(bot_name, hold_side, learning_eval)
                 except Exception as ex:
                     learning_override = {'action': 'hold', 'reason': f'learning_override_error:{ex}'}
@@ -3529,6 +4505,9 @@ def monitor():
         'registry_positions': registry_payload,
         'exchange_position_count': len(exchange_positions),
         'outcome_stats': _monitor_outcome_stats_payload(limit=48),
+        'learning_threshold_overview': learning_compact.get('threshold_overview', {}),
+        'victory_scope_leaderboard': learning_compact.get('victory_scope_leaderboard', {}),
+        'priority_learning_targets': learning_compact.get('priority_learning_targets', {}),
     }), 200
 
 
