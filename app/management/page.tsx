@@ -291,7 +291,9 @@ export default function ManagementPage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      const r = await fetch(`/api/users/schedule-permissions?kind=${encodeURIComponent(scheduleKind)}`);
+      const r = await fetch(`/api/users/schedule-permissions?kind=${encodeURIComponent(scheduleKind)}`, {
+        cache: 'no-store',
+      });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       const raw = Array.isArray(obj?.users) ? (obj?.users as unknown[]) : [];

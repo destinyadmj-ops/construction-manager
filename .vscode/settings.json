@@ -1,4 +1,6 @@
 {
   "terminal.integrated.cwd": "${workspaceFolder}",
-  "java.configuration.updateBuildConfiguration": "interactive"
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "python.envFile": "${workspaceFolder}/.env.local",
+  "python.terminal.useEnvFile": true
 }

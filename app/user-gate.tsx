@@ -265,7 +265,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         const remembered = readLoginMemory();
-        const r = await fetch('/api/users?kind=all');
+        const r = await fetch('/api/users?kind=all', { cache: 'no-store' });
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
         const arr = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];

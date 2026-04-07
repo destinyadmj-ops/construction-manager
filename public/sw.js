@@ -1,4 +1,4 @@
-const CACHE_NAME = 'master-hub-v2';
+const CACHE_NAME = 'master-hub-v3';
 const CORE_ASSETS = ['/', '/?mode=week', '/manifest.webmanifest', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -37,21 +37,32 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET
   if (request.method !== 'GET') return;
 
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return;
+  }
+
+  const isSameOrigin = url.origin === self.location.origin;
+  const isApiRequest = isSameOrigin && url.pathname.startsWith('/api/');
+
+  // Never cache API requests. Always forward them to the network.
+  if (isApiRequest) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
 
       return fetch(request)
         .then((response) => {
-          // Cache same-origin responses
-          try {
-            const url = new URL(request.url);
-            if (url.origin === self.location.origin) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-            }
-          } catch {
-            // ignore
+          // Cache only successful same-origin non-API responses.
+          if (isSameOrigin && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }
           return response;
         })

@@ -38,7 +38,7 @@ export default function SiteFoldersPage() {
   useEffect(() => {
     if (!siteId || !selectedDate) return;
     // 従業員一覧
-    fetch('/api/users?kind=NORMAL')
+    fetch('/api/users?kind=NORMAL', { cache: 'no-store' })
       .then(r => r.json())
       .then(j => setEmployees(Array.isArray(j.users) ? j.users : []));
     // 打刻

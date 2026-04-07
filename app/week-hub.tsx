@@ -289,7 +289,7 @@ function WeekHubInner() {
 
     try {
       const kind = scheduleKind === 'daily' ? 'daily' : 'normal';
-      const r = await fetch(`/api/users?kind=${encodeURIComponent(kind)}`);
+      const r = await fetch(`/api/users?kind=${encodeURIComponent(kind)}`, { cache: 'no-store' });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       const users = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];
