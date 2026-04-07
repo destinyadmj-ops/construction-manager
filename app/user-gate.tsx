@@ -159,6 +159,30 @@ function readDomUserCandidates(defaultKind: UserKind): ApiUser[] {
   return mergeUserCandidates(candidates, []);
 }
 
+function candidateLabel(user: ApiUser) {
+  return (user.name ?? user.email ?? user.id).trim();
+}
+
+function sortUserCandidates(candidates: ApiUser[], rememberedUserId: string | null, currentKind: UserKind) {
+  const orderIndex = new Map(candidates.map((candidate, index) => [candidate.id, index] as const));
+
+  return [...candidates].sort((a, b) => {
+    const aRemembered = rememberedUserId === a.id ? 1 : 0;
+    const bRemembered = rememberedUserId === b.id ? 1 : 0;
+    if (aRemembered !== bRemembered) return bRemembered - aRemembered;
+
+    const aKind = a.kind === currentKind ? 1 : 0;
+    const bKind = b.kind === currentKind ? 1 : 0;
+    if (aKind !== bKind) return bKind - aKind;
+
+    const aOrder = orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const bOrder = orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+
+    return candidateLabel(a).localeCompare(candidateLabel(b), 'ja');
+  });
+}
+
 export default function UserGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -305,6 +329,37 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         const remembered = readLoginMemory();
         const cached = readCachedUserCandidates();
         const domCandidates = readDomUserCandidates(currentKind);
+        const localCandidates = mergeUserCandidates(domCandidates, cached);
+
+        if (localCandidates.length > 0) {
+          const sortedLocal = sortUserCandidates(localCandidates, remembered?.userId ?? null, currentKind);
+          if (cancelled) return;
+          setUsers(sortedLocal);
+          if (!didInitRef.current) {
+            didInitRef.current = true;
+            setSelectedExistingId(remembered?.userId ?? sortedLocal[0]?.id ?? '');
+          } else if (sortedLocal.length > 0) {
+            setSelectedExistingId((current) => current || remembered?.userId || sortedLocal[0]!.id);
+          }
+          return;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+
+        const delayedLocalCandidates = mergeUserCandidates(readDomUserCandidates(currentKind), readCachedUserCandidates());
+        if (delayedLocalCandidates.length > 0) {
+          const sortedDelayedLocal = sortUserCandidates(delayedLocalCandidates, remembered?.userId ?? null, currentKind);
+          if (cancelled) return;
+          setUsers(sortedDelayedLocal);
+          if (!didInitRef.current) {
+            didInitRef.current = true;
+            setSelectedExistingId(remembered?.userId ?? sortedDelayedLocal[0]?.id ?? '');
+          } else if (sortedDelayedLocal.length > 0) {
+            setSelectedExistingId((current) => current || remembered?.userId || sortedDelayedLocal[0]!.id);
+          }
+          return;
+        }
+
         const r = await fetch('/api/users?kind=all', { cache: 'no-store' });
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
@@ -323,22 +378,11 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           })
           .filter((x): x is ApiUser => !!x);
 
-        const combined = mergeUserCandidates(mergeUserCandidates(parsed, cached), domCandidates);
+        const combined = mergeUserCandidates(mergeUserCandidates(domCandidates, cached), parsed);
 
         if (combined.length > 0) writeCachedUserCandidates(combined);
 
-        const merged = combined
-          .sort((a, b) => {
-            const aRemembered = remembered?.userId === a.id ? 1 : 0;
-            const bRemembered = remembered?.userId === b.id ? 1 : 0;
-            if (aRemembered !== bRemembered) return bRemembered - aRemembered;
-            const aKind = a.kind === currentKind ? 1 : 0;
-            const bKind = b.kind === currentKind ? 1 : 0;
-            if (aKind !== bKind) return bKind - aKind;
-            const aLabel = (a.name ?? a.email ?? a.id).trim();
-            const bLabel = (b.name ?? b.email ?? b.id).trim();
-            return aLabel.localeCompare(bLabel, 'ja');
-          });
+        const merged = sortUserCandidates(combined, remembered?.userId ?? null, currentKind);
 
         if (cancelled) return;
         setUsers(merged);
@@ -351,20 +395,11 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       } catch {
         if (cancelled) return;
         const remembered = readLoginMemory();
-        const cached = mergeUserCandidates(readCachedUserCandidates(), readDomUserCandidates(currentKind)).sort((a, b) => {
-          const aRemembered = remembered?.userId === a.id ? 1 : 0;
-          const bRemembered = remembered?.userId === b.id ? 1 : 0;
-          if (aRemembered !== bRemembered) return bRemembered - aRemembered;
-          const aKind = a.kind === currentKind ? 1 : 0;
-          const bKind = b.kind === currentKind ? 1 : 0;
-          if (aKind !== bKind) return bKind - aKind;
-          const aLabel = (a.name ?? a.email ?? a.id).trim();
-          const bLabel = (b.name ?? b.email ?? b.id).trim();
-          return aLabel.localeCompare(bLabel, 'ja');
-        });
-        setUsers(cached);
-        if (cached.length > 0) {
-          setSelectedExistingId((current) => current || remembered?.userId || cached[0]!.id);
+        const fallbackCandidates = mergeUserCandidates(readDomUserCandidates(currentKind), readCachedUserCandidates());
+        const sortedFallback = sortUserCandidates(fallbackCandidates, remembered?.userId ?? null, currentKind);
+        setUsers(sortedFallback);
+        if (sortedFallback.length > 0) {
+          setSelectedExistingId((current) => current || remembered?.userId || sortedFallback[0]!.id);
         }
       } finally {
         if (cancelled) return;

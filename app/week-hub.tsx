@@ -288,21 +288,16 @@ function WeekHubInner() {
       return q;
     }
 
-    try {
-      const kind = scheduleKind === 'daily' ? 'daily' : 'normal';
-      const r = await fetch(`/api/users?kind=${encodeURIComponent(kind)}`, { cache: 'no-store' });
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      const users = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];
-      const first = users[0] && typeof users[0] === 'object' ? (users[0] as Record<string, unknown>) : null;
-      const id = typeof first?.id === 'string' ? first.id : null;
-      setEffectiveUserId(id);
-      return id;
-    } catch {
-      setEffectiveUserId(null);
-      return null;
-    }
-  }, [qsUserId, scheduleKind]);
+    const firstVisibleUserId =
+      (mode === 'week'
+        ? data?.users?.[0]?.id
+        : mode === 'month'
+          ? monthData?.users?.[0]?.id
+          : yearData?.users?.[0]?.id) ?? null;
+
+    setEffectiveUserId(firstVisibleUserId);
+    return firstVisibleUserId;
+  }, [data?.users, mode, monthData?.users, qsUserId, yearData?.users]);
 
   const loadUserOrder = useCallback(
     async (userId: string | null) => {
@@ -922,23 +917,49 @@ function WeekHubInner() {
     if (mode !== 'week') return;
 
     const controller = new AbortController();
-    queueMicrotask(() => setIsLoading(true));
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setIsLoading(true);
+        try {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
+                signal: controller.signal,
+              });
+              if (!res.ok) {
+                if (attempt === 0 && (res.status === 500 || res.status === 503)) {
+                  await new Promise((resolve) => window.setTimeout(resolve, 350));
+                  continue;
+                }
+                throw new Error(`Failed to load (${res.status})`);
+              }
+              const json = (await res.json()) as ApiResponse;
+              setData(json);
+              return;
+            } catch {
+              if (controller.signal.aborted) return;
+              if (attempt === 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, 350));
+                continue;
+              }
+              throw new Error('Failed to load schedule');
+            }
+          }
+        } catch {
+          // Keep UI usable even if API is not ready.
+          setData(null);
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsLoading(false);
+          }
+        }
+      })();
+    }, 250);
 
-    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-        return (await res.json()) as ApiResponse;
-      })
-      .then((json) => setData(json))
-      .catch(() => {
-        // Keep UI usable even if API is not ready.
-        setData(null);
-      })
-      .finally(() => setIsLoading(false));
-
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [kindQuery, mode, weekStart]);
 
   const viewMonth = useMemo(() => {
@@ -1061,35 +1082,49 @@ function WeekHubInner() {
   );
 
   const refreshSites = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`);
-      if (!r.ok) return;
-      const json = (await r.json()) as {
-        ok: true;
-        sites: Array<{
-          id: string;
-          companyName?: string | null;
-          name: string;
-          invoiceIssuedThisMonth?: boolean;
-          reportIssuedThisMonth?: boolean;
-          paceNotConsumedAlert?: boolean;
-          unassignedThisMonth?: boolean;
-        }>;
-      };
-      if (!json?.ok) return;
-      setSites(json.sites.map((s) => {
-        const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
-        return {
-          id: s.id,
-          label,
-          invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
-          reportIssuedThisMonth: s.reportIssuedThisMonth,
-          paceNotConsumedAlert: s.paceNotConsumedAlert,
-          unassignedThisMonth: s.unassignedThisMonth,
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`);
+        if (!r.ok) {
+          if (attempt === 0 && (r.status === 500 || r.status === 503)) {
+            await new Promise((resolve) => window.setTimeout(resolve, 350));
+            continue;
+          }
+          return;
+        }
+
+        const json = (await r.json()) as {
+          ok: true;
+          sites: Array<{
+            id: string;
+            companyName?: string | null;
+            name: string;
+            invoiceIssuedThisMonth?: boolean;
+            reportIssuedThisMonth?: boolean;
+            paceNotConsumedAlert?: boolean;
+            unassignedThisMonth?: boolean;
+          }>;
         };
-      }));
-    } catch {
-      // ignore
+        if (!json?.ok) return;
+        setSites(json.sites.map((s) => {
+          const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
+          return {
+            id: s.id,
+            label,
+            invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
+            reportIssuedThisMonth: s.reportIssuedThisMonth,
+            paceNotConsumedAlert: s.paceNotConsumedAlert,
+            unassignedThisMonth: s.unassignedThisMonth,
+          };
+        }));
+        return;
+      } catch {
+        if (attempt === 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+          continue;
+        }
+        return;
+      }
     }
   }, [deprMonth, scheduleKind]);
 
@@ -1334,28 +1369,51 @@ function WeekHubInner() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/schedule/sites?${kindQuery}`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) return null;
-        return (await r.json()) as {
-          ok: true;
-          names: string[];
-          sites?: Array<{ id: string; label: string }>;
-        };
-      })
-      .then((json) => {
-        if (!json?.ok) return;
-        const fromLedger = (json.sites ?? []).map((s) => ({ id: s.id, label: s.label }));
-        if (fromLedger.length > 0) {
-          setSites(fromLedger);
-        } else {
-          setSites((json.names ?? []).map((label) => ({ id: null, label })));
+
+    const loadScheduleSites = async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(`/api/schedule/sites?${kindQuery}`, { signal: controller.signal });
+          if (!r.ok) {
+            if (attempt === 0 && (r.status === 500 || r.status === 503)) {
+              await new Promise((resolve) => window.setTimeout(resolve, 350));
+              continue;
+            }
+            return;
+          }
+
+          const json = (await r.json()) as {
+            ok: true;
+            names: string[];
+            sites?: Array<{ id: string; label: string }>;
+          };
+          if (!json?.ok) return;
+          const fromLedger = (json.sites ?? []).map((s) => ({ id: s.id, label: s.label }));
+          if (fromLedger.length > 0) {
+            setSites(fromLedger);
+          } else {
+            setSites((json.names ?? []).map((label) => ({ id: null, label })));
+          }
+          return;
+        } catch {
+          if (controller.signal.aborted) return;
+          if (attempt === 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, 350));
+            continue;
+          }
+          return;
         }
-      })
-      .catch(() => {
-        // ignore
-      });
-    return () => controller.abort();
+      }
+    };
+
+    const timer = window.setTimeout(() => {
+      void loadScheduleSites();
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [kindQuery]);
 
   useEffect(() => {
