@@ -39,7 +39,7 @@ jobs:
 
       - name: Validate deploy secrets
         run: |
-          required_vars=(DATABASE_URL DIRECT_URL REDIS_URL NEXTAUTH_SECRET NEXTAUTH_URL DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY)
+          required_vars=(DATABASE_URL DIRECT_URL NEXTAUTH_SECRET NEXTAUTH_URL DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY)
           for var_name in "${required_vars[@]}"; do
             if [ -z "${!var_name}" ]; then
               echo "Missing required secret: ${var_name}" >&2
@@ -75,10 +75,14 @@ jobs:
             git fetch origin main --prune
             git checkout -B main origin/main
             git reset --hard "$GITHUB_SHA"
+            redis_url="${REDIS_URL:-redis://redis:6379}"
             cat > .env.production <<EOF
             DATABASE_URL=${DATABASE_URL}
             DIRECT_URL=${DIRECT_URL}
-            REDIS_URL=${REDIS_URL}
+            REDIS_URL=${redis_url}
+            MASTER_HUB_STORAGE_DIR=/data/masterhub-storage
+            PRINT_OUTBOX_DIR=/data/masterhub-outbox/print
+            FAX_OUTBOX_DIR=/data/masterhub-outbox/fax
             NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
             NEXTAUTH_URL=${NEXTAUTH_URL}
             ADMIN_TOKEN=${ADMIN_TOKEN}
