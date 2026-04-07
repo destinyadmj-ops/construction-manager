@@ -12,6 +12,31 @@ if (!connectionString) {
 
 const verifiedConnectionString = connectionString;
 
+function getPgAdapterConfig(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+    const shouldUseSupabaseSsl =
+      sslMode === "require" ||
+      url.hostname.endsWith(".supabase.co") ||
+      url.hostname.endsWith(".pooler.supabase.com");
+
+    if (!shouldUseSupabaseSsl) {
+      return { connectionString };
+    }
+
+    url.searchParams.delete("sslmode");
+    return {
+      connectionString: url.toString(),
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    };
+  } catch {
+    return { connectionString };
+  }
+}
+
 type PrismaClientOptions = ConstructorParameters<typeof PrismaClient>[0];
 
 function getPrismaClientOptions(): PrismaClientOptions | undefined {
@@ -26,7 +51,7 @@ function getPrismaClientOptions(): PrismaClientOptions | undefined {
     }
 
     return {
-      adapter: new adapterModule.PrismaPg({ connectionString: verifiedConnectionString }),
+        adapter: new adapterModule.PrismaPg(getPgAdapterConfig(verifiedConnectionString)),
     } as PrismaClientOptions;
   } catch {
     return undefined;

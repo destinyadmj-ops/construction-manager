@@ -55,6 +55,7 @@ next-env.d.ts
 
 # local dev-keep state / locks
 /.dev/
+/dev-keep.pid
 
 # local logs / artifacts
 *.log

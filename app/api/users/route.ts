@@ -3,6 +3,10 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, max-age=0, must-revalidate',
+};
+
 function isAuthorized(request: Request): boolean {
   const token = process.env.ADMIN_TOKEN;
   if (!token) return process.env.NODE_ENV !== 'production';
@@ -61,11 +65,11 @@ export async function GET(request: Request) {
       take: 200,
     });
 
-    return Response.json({ ok: true, users });
+    return Response.json({ ok: true, users }, { headers: NO_STORE_HEADERS });
   } catch (e) {
     return Response.json(
       { ok: false, error: toReadableDbErrorMessage(e) },
-      { status: 503 },
+      { status: 503, headers: NO_STORE_HEADERS },
     );
   }
 }

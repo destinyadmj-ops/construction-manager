@@ -5,8 +5,27 @@ import { useEffect } from 'react';
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     const enableInDev = process.env.NEXT_PUBLIC_ENABLE_SW === '1';
-    if (process.env.NODE_ENV !== 'production' && !enableInDev) return;
     if (!('serviceWorker' in navigator)) return;
+
+    if (process.env.NODE_ENV !== 'production' && !enableInDev) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => {
+          // no-op
+        });
+
+      if ('caches' in window) {
+        window.caches
+          .keys()
+          .then((keys) => Promise.all(keys.filter((key) => key.startsWith('master-hub-')).map((key) => window.caches.delete(key))))
+          .catch(() => {
+            // no-op
+          });
+      }
+
+      return;
+    }
 
     // ServiceWorker requires a secure context (https) except localhost.
     if (typeof window !== 'undefined') {
