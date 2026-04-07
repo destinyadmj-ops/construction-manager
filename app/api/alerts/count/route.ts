@@ -72,9 +72,13 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Failed to get alert count:', error);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to get alert count' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      ok: true,
+      total: 0,
+      depreciation: 0,
+      invoiceFailed: 0,
+      reportFailed: 0,
+      degraded: true,
+    });
   }
 }

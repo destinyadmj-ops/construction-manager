@@ -503,17 +503,35 @@ export default function AppHeader() {
   // アラート数を取得
   useEffect(() => {
     let mounted = true;
+    let initialTimer: number | null = null;
 
     const fetchAlertCount = async () => {
       setAlertLoading(true);
       try {
-        const res = await fetch('/api/alerts/count');
-        const data = await res.json();
-        if (mounted && data.ok && typeof data.total === 'number') {
-          setAlertCount(data.total);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const res = await fetch('/api/alerts/count', { cache: 'no-store' });
+            if (!res.ok) {
+              if (attempt === 0 && (res.status === 500 || res.status === 503)) {
+                await new Promise((resolve) => window.setTimeout(resolve, 350));
+                continue;
+              }
+              return;
+            }
+
+            const data = await res.json();
+            if (mounted && data.ok && typeof data.total === 'number') {
+              setAlertCount(data.total);
+            }
+            return;
+          } catch (error) {
+            if (attempt === 0) {
+              await new Promise((resolve) => window.setTimeout(resolve, 350));
+              continue;
+            }
+            console.error('Failed to fetch alert count:', error);
+          }
         }
-      } catch (error) {
-        console.error('Failed to fetch alert count:', error);
       } finally {
         if (mounted) {
           setAlertLoading(false);
@@ -521,7 +539,9 @@ export default function AppHeader() {
       }
     };
 
-    void fetchAlertCount();
+    initialTimer = window.setTimeout(() => {
+      void fetchAlertCount();
+    }, 350);
 
     // 5分ごとに更新
     const interval = setInterval(() => {
@@ -530,6 +550,9 @@ export default function AppHeader() {
 
     return () => {
       mounted = false;
+      if (initialTimer !== null) {
+        window.clearTimeout(initialTimer);
+      }
       clearInterval(interval);
     };
   }, []);
