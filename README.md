@@ -11,7 +11,29 @@
 - GitHub でリモートリポジトリを用意する
 - 会社PC・自宅PCの両方でクローンする
 - 変更同期は `git pull --rebase` を基本にする
-- 必要なら `scripts/git-auto-sync.ps1` をタスクスケジューラで定期実行する
+- 会社PC・自宅PCの両方で `npm run git:sync:setup` を 1 回ずつ実行する
+
+#### 会社PC / 自宅PC の Git 同期を自動化する
+
+`npm run git:sync:setup` を実行すると、このリポジトリに対して次を設定する。
+
+- `pull.rebase=true`
+- `rebase.autoStash=true`
+- `fetch.prune=true`
+- `rerere.enabled=true`
+- ログオン時に `MasterHub Git Sync Agent` を起動するスタートアップショートカット
+
+起動後の動作は以下。
+
+- 5分ごとに `fetch`
+- ワークツリーが安全なときだけ `pull --rebase --autostash`
+- 保存後 90 秒間変更が落ち着いたら、自動 `commit` と `push`
+
+手動起動する場合:
+
+```bash
+npm run git:sync:agent
+```
 
 ### 2. Supabase の Session Pooler 接続文字列を使う
 
@@ -64,7 +86,11 @@ npm run dev
 
 ### 6. GitHub Actions で接続・Migration 状態を確認する
 
-- repository secrets は少なくとも `SUPABASE_DATABASE_URL` と `SUPABASE_DIRECT_URL` を設定する
+- Prisma 関連 workflow の repository secrets 名は `SUPABASE_DATABASE_URL` と `SUPABASE_DIRECT_URL` に統一する
+- `SUPABASE_DATABASE_URL` は必須で、Session pooler 側の接続文字列を入れる
+- `SUPABASE_DIRECT_URL` は Direct connection 側の接続文字列で、`Prisma Migrate Deploy to Supabase` では設定しておく
+- `Check Prisma Migrations` は `SUPABASE_DIRECT_URL` 未設定時に `SUPABASE_DATABASE_URL` へフォールバックする
+- 本番 deploy 用の secrets 一覧は `DEPLOYMENT.md` を参照する
 - GitHub CLI で secrets 名を確認する場合は次を使う
 
 ```bash
@@ -81,7 +107,7 @@ gh workflow run "Prisma Migrate Deploy to Supabase"
 ```
 
 - 2026-04-02 時点の確認結果
-- `gh secret list` で `DATABASE_URL` / `SUPABASE_DATABASE_URL` / `SUPABASE_DIRECT_URL` / `PACKAGE_NAME` の存在を確認
+- `gh secret list` で少なくとも `SUPABASE_DATABASE_URL` と `SUPABASE_DIRECT_URL` の存在を確認
 - `Check Prisma Migrations` の最新成功 run で `17 migrations found in prisma/migrations` と `Database schema is up to date!` を確認
 - `Prisma Migrate Deploy to Supabase` の最新成功 run で `No pending migrations to apply.` を確認
 - つまり現在の main は 17 件の migration が存在し、Supabase 側は未適用なしで一致している
@@ -417,19 +443,24 @@ npm run start -- -H 127.0.0.1 -p 3001
 
 - prod: http://127.0.0.1:3001
 
-## 本番（Azure Windows VM + Docker Compose）
+## 本番（推奨: Supabase + Linux VPS + Docker Compose）
 
 前提:
 
-- Azure Database for PostgreSQL（マネージド）を用意し、`DATABASE_URL` を確定
-- Azure Cache for Redis を用意し、`REDIS_URL` を確定
-- Windows VM 上で Docker を使えること（例: WSL2 + Docker Engine / Docker Desktop）
+- Supabase Postgres を用意し、`DATABASE_URL` と `DIRECT_URL` を確定
+- Linux VPS 1 台で Docker / Docker Compose / Git / SSH を使えること
+- Redis はまず `docker-compose.prod.yml` の同居 Redis を使う
+- ファイル保存は Docker ボリュームに載せる
+- Cloudflare は必要なら DNS / HTTPS / WAF の前段として使う
 
-手順（VM 上で実行）:
+手順（VPS 上で実行）:
 
 1) 環境変数ファイルを作成
 
 - `.env.production.example` を参考に `.env.production` を作成（秘密情報は Git に入れない）
+- Redis を同居させる最小構成では `REDIS_URL=redis://redis:6379`
+- ファイル保存先は `MASTER_HUB_STORAGE_DIR=/data/masterhub-storage`
+- 印刷/FAX の出力先は `PRINT_OUTBOX_DIR=/data/masterhub-outbox/print` と `FAX_OUTBOX_DIR=/data/masterhub-outbox/fax`
 
 2) Web + Worker を起動
 
@@ -442,6 +473,13 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production down
 ```
+
+補足:
+
+- `docker-compose.prod.yml` は `web` / `worker` / `redis` を同時に起動する
+- `masterhub_storage` と `masterhub_outbox` の Docker ボリュームで帳票・写真・出力ファイルを保持する
+- 今のコードベースは BullMQ worker を別プロセスで動かす前提なので、Cloudflare 単体ホスティングより VPS の方が適合する
+- managed Redis を使いたくなったら、後で `REDIS_URL` だけ差し替えればよい
 
 ## Synology（Container Manager）
 

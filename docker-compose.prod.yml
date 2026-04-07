@@ -1,4 +1,11 @@
 services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - masterhub_redisdata:/data
+
   web:
     build:
       context: .
@@ -11,6 +18,11 @@ services:
       - ./.env.production
     ports:
       - "3000:3000"
+    volumes:
+      - masterhub_storage:/data/masterhub-storage
+      - masterhub_outbox:/data/masterhub-outbox
+    depends_on:
+      - redis
     restart: unless-stopped
 
   worker:
@@ -23,4 +35,14 @@ services:
         DIRECT_URL: ${DIRECT_URL}
     env_file:
       - ./.env.production
+    volumes:
+      - masterhub_storage:/data/masterhub-storage
+      - masterhub_outbox:/data/masterhub-outbox
+    depends_on:
+      - redis
     restart: unless-stopped
+
+volumes:
+  masterhub_redisdata:
+  masterhub_storage:
+  masterhub_outbox:
