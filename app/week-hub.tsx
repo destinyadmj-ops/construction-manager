@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
 import { useHeaderActions } from './header-actions';
+import { writeCachedUserCandidates } from './user-candidate-cache';
 
 type ViewMode = 'week' | 'month' | 'year';
 
@@ -891,6 +892,18 @@ function WeekHubInner() {
     if (mode === 'month') return monthData?.users ?? [];
     return yearData?.users ?? [];
   }, [data?.users, mode, monthData?.users, yearData?.users]);
+
+  useEffect(() => {
+    if (currentUsersForOrder.length === 0) return;
+    writeCachedUserCandidates(
+      currentUsersForOrder.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        kind: apiKind,
+      })),
+    );
+  }, [apiKind, currentUsersForOrder]);
 
   useEffect(() => {
     if (!userOrderLoadedRef.current) return;
@@ -4378,6 +4391,8 @@ function Row({
           onSelectUser(isSelectedUser ? null : user.id);
         }}
         data-user-row={user.id}
+        data-user-kind={apiKind}
+        data-user-label={(user.name ?? user.email ?? user.id).trim()}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
         className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black ${
@@ -4388,7 +4403,7 @@ function Row({
           className="flex items-start justify-between gap-2"
           style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
         >
-          <div className="min-w-0 truncate font-medium">{user.name ?? user.email ?? user.id}</div>
+          <div data-user-label className="min-w-0 truncate font-medium">{user.name ?? user.email ?? user.id}</div>
           {reorderMode ? (
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-1">

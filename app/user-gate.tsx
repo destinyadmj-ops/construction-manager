@@ -2,10 +2,17 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  mergeUserCandidates,
+  readCachedUserCandidates,
+  USER_CANDIDATES_UPDATED_EVENT,
+  writeCachedUserCandidates,
+  type CachedUserCandidate,
+} from './user-candidate-cache';
 
 type UserKind = 'NORMAL' | 'DAILY';
 
-type ApiUser = { id: string; name: string | null; email: string | null; kind: UserKind };
+type ApiUser = CachedUserCandidate;
 
 type LoginMemory = {
   userId: string;
@@ -127,6 +134,31 @@ function isSameDevice(memory: LoginMemory | null): memory is LoginMemory {
   );
 }
 
+function readDomUserCandidates(defaultKind: UserKind): ApiUser[] {
+  if (typeof document === 'undefined') return [];
+
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-user-row]'));
+  const candidates: ApiUser[] = [];
+
+  for (const row of rows) {
+    const id = (row.dataset.userRow ?? '').trim();
+    if (!id) continue;
+
+    const label =
+      (row.querySelector<HTMLElement>('[data-user-label]')?.textContent ?? row.dataset.userLabel ?? '').trim();
+    const kind = row.dataset.userKind === 'DAILY' ? 'DAILY' : row.dataset.userKind === 'NORMAL' ? 'NORMAL' : defaultKind;
+
+    candidates.push({
+      id,
+      name: label || null,
+      email: null,
+      kind,
+    });
+  }
+
+  return mergeUserCandidates(candidates, []);
+}
+
 export default function UserGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -137,6 +169,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [candidateRevision, setCandidateRevision] = useState(0);
 
   const [selectedExistingId, setSelectedExistingId] = useState<string>('');
 
@@ -160,6 +193,12 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     const onOpen = () => setOpen(true);
     window.addEventListener('masterHub:openUserGate', onOpen as EventListener);
     return () => window.removeEventListener('masterHub:openUserGate', onOpen as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const onUpdated = () => setCandidateRevision((current) => current + 1);
+    window.addEventListener(USER_CANDIDATES_UPDATED_EVENT, onUpdated as EventListener);
+    return () => window.removeEventListener(USER_CANDIDATES_UPDATED_EVENT, onUpdated as EventListener);
   }, []);
 
   useEffect(() => {
@@ -258,13 +297,14 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!open) return;
-    if (usersLoading) return;
 
     let cancelled = false;
     setUsersLoading(true);
     void (async () => {
       try {
         const remembered = readLoginMemory();
+        const cached = readCachedUserCandidates();
+        const domCandidates = readDomUserCandidates(currentKind);
         const r = await fetch('/api/users?kind=all', { cache: 'no-store' });
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
@@ -281,7 +321,13 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
               kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
             } satisfies ApiUser;
           })
-          .filter((x): x is ApiUser => !!x)
+          .filter((x): x is ApiUser => !!x);
+
+        const combined = mergeUserCandidates(mergeUserCandidates(parsed, cached), domCandidates);
+
+        if (combined.length > 0) writeCachedUserCandidates(combined);
+
+        const merged = combined
           .sort((a, b) => {
             const aRemembered = remembered?.userId === a.id ? 1 : 0;
             const bRemembered = remembered?.userId === b.id ? 1 : 0;
@@ -295,16 +341,31 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           });
 
         if (cancelled) return;
-        setUsers(parsed);
+        setUsers(merged);
         if (!didInitRef.current) {
           didInitRef.current = true;
-          setSelectedExistingId(remembered?.userId ?? parsed[0]?.id ?? '');
-        } else if (!selectedExistingId && parsed.length > 0) {
-          setSelectedExistingId(remembered?.userId ?? parsed[0]!.id);
+          setSelectedExistingId(remembered?.userId ?? merged[0]?.id ?? '');
+        } else if (merged.length > 0) {
+          setSelectedExistingId((current) => current || remembered?.userId || merged[0]!.id);
         }
       } catch {
         if (cancelled) return;
-        setUsers([]);
+        const remembered = readLoginMemory();
+        const cached = mergeUserCandidates(readCachedUserCandidates(), readDomUserCandidates(currentKind)).sort((a, b) => {
+          const aRemembered = remembered?.userId === a.id ? 1 : 0;
+          const bRemembered = remembered?.userId === b.id ? 1 : 0;
+          if (aRemembered !== bRemembered) return bRemembered - aRemembered;
+          const aKind = a.kind === currentKind ? 1 : 0;
+          const bKind = b.kind === currentKind ? 1 : 0;
+          if (aKind !== bKind) return bKind - aKind;
+          const aLabel = (a.name ?? a.email ?? a.id).trim();
+          const bLabel = (b.name ?? b.email ?? b.id).trim();
+          return aLabel.localeCompare(bLabel, 'ja');
+        });
+        setUsers(cached);
+        if (cached.length > 0) {
+          setSelectedExistingId((current) => current || remembered?.userId || cached[0]!.id);
+        }
       } finally {
         if (cancelled) return;
         setUsersLoading(false);
@@ -314,7 +375,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [currentKind, open, selectedExistingId, usersLoading]);
+  }, [candidateRevision, currentKind, open]);
 
   if (loading) return <>{children}</>;
 
@@ -361,6 +422,10 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
       setMe({ id: j2.user.id, name: j2.user.name, email: j2.user.email });
       writeLoginMemory(j2.user.id, j2.user.kind);
+      writeCachedUserCandidates([
+        ...users,
+        { id: j2.user.id, name: j2.user.name, email: j2.user.email, kind: j2.user.kind },
+      ]);
       setOpen(false);
       window.location.reload();
     } catch {
@@ -401,7 +466,13 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       }
 
       const userId = typeof obj?.userId === 'string' ? obj.userId : '';
-      if (userId) writeLoginMemory(userId, currentKind);
+      if (userId) {
+        writeLoginMemory(userId, currentKind);
+        writeCachedUserCandidates([
+          ...users,
+          { id: userId, name: n, email: email.trim() || null, kind: currentKind },
+        ]);
+      }
       window.location.reload();
     } catch {
       setError('通信に失敗しました');
