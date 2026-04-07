@@ -63,6 +63,8 @@ next-env.d.ts
 *.txt
 /test-results/
 /playwright-report/
+/all_data*.sql
+/users_export.csv
 
 # local helper cmd wrappers (optional)
 run-dev*.cmd
