@@ -69,6 +69,7 @@ next-env.d.ts
 
 # local helper cmd wrappers (optional)
 run-dev*.cmd
+/.ssh/
 
 # TWA generated Android project - keep sources but ignore build artifacts and keys
 /apps/twa/android/.gradle/
