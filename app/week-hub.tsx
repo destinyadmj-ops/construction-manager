@@ -2016,22 +2016,22 @@ function WeekHubInner() {
                                     <span className="ml-2 text-red-600 dark:text-red-400">!</span>
                                   ) : null}
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex shrink-0 items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600"
                                       title="請求未発行"
                                     />
                                   ) : null}
                                   {s.reportIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-orange-400 dark:bg-orange-500"
                                       title="報告未発行"
                                     />
                                   ) : null}
                                   {s.unassignedThisMonth ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600"
                                       title="未配置"
                                     />
                                   ) : null}
@@ -2044,7 +2044,7 @@ function WeekHubInner() {
                                         setSelectedSite(s);
                                         setSiteDetailOpen(true);
                                       }}
-                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
                                         badge.alert
                                           ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                           : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
@@ -2683,28 +2683,28 @@ function WeekHubInner() {
                                 <div className="min-w-0 flex-1 truncate">
                                   {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex shrink-0 items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600"
                                       title="請求未発行"
                                     />
                                   ) : null}
                                   {s.reportIssuedThisMonth === false ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500 dark:bg-yellow-600"
                                       title="報告未発行"
                                     />
                                   ) : null}
                                   {s.unassignedThisMonth ? (
                                     <span
-                                      className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600"
                                       title="未配置"
                                     />
                                   ) : null}
                                   {badge ? (
                                     <span
-                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
                                         badge.alert
                                           ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                           : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
@@ -2945,19 +2945,19 @@ function WeekHubInner() {
                                 <div className="min-w-0 flex-1 truncate">
                                   {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex shrink-0 items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
-                                    <span className="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600" title="請求未発行" />
+                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600" title="請求未発行" />
                                   ) : null}
                                   {s.reportIssuedThisMonth === false ? (
-                                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500 dark:bg-yellow-600" title="報告未発行" />
+                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500 dark:bg-yellow-600" title="報告未発行" />
                                   ) : null}
                                   {s.unassignedThisMonth ? (
-                                    <span className="h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600" title="未配置" />
+                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600" title="未配置" />
                                   ) : null}
                                   {badge ? (
                                     <span
-                                      className={`rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
+                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
                                         badge.alert
                                           ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                           : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
