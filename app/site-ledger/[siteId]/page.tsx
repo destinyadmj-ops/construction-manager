@@ -151,7 +151,7 @@ export default function SiteLedgerDetailPage() {
   const [folderExplorerOpen, setFolderExplorerOpen] = useState(false);
   const [folderDatesBusy, setFolderDatesBusy] = useState(false);
   const [folderDates, setFolderDates] = useState<
-    Array<{ dateYmd: string; photoCount: number; reportCount: number }>
+    Array<{ dateYmd: string; photoCount: number; reportCount: number; scheduleCount: number }>
   >([]);
 
   const [companyName, setCompanyName] = useState('');
@@ -366,7 +366,9 @@ export default function SiteLedgerDetailPage() {
     if (!siteId) return;
     setFolderDatesBusy(true);
     try {
-      const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}/folder/dates`, { cache: 'no-store' });
+      const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}/folder/dates?scope=history`, {
+        cache: 'no-store',
+      });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -381,10 +383,11 @@ export default function SiteLedgerDetailPage() {
           const dateYmd = typeof o.dateYmd === 'string' ? o.dateYmd : '';
           const photoCount = typeof o.photoCount === 'number' ? o.photoCount : 0;
           const reportCount = typeof o.reportCount === 'number' ? o.reportCount : 0;
+          const scheduleCount = typeof o.scheduleCount === 'number' ? o.scheduleCount : 0;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) return null;
-          return { dateYmd, photoCount, reportCount };
+          return { dateYmd, photoCount, reportCount, scheduleCount };
         })
-        .filter((x): x is { dateYmd: string; photoCount: number; reportCount: number } => !!x)
+        .filter((x): x is { dateYmd: string; photoCount: number; reportCount: number; scheduleCount: number } => !!x)
         .slice(0, 120);
       setFolderDates(parsed);
     } catch {
@@ -830,9 +833,9 @@ export default function SiteLedgerDetailPage() {
       <div className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">フォルダ（報告書 / 写真）</div>
+            <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">過去（予定 / 報告書 / 写真）</div>
             <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              現場名フォルダの中に日付フォルダを作成し、その日の報告書・写真を一覧できます。
+              予定セル入力・報告書・写真アップロードで作られた日付を一覧できます。
             </div>
           </div>
 
@@ -851,9 +854,9 @@ export default function SiteLedgerDetailPage() {
                 if (next) void loadFolderDates();
               }}
               className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              title="過去データ（エクスプローラー）"
+              title="過去データを表示"
             >
-              フォルダ
+              過去
             </button>
           </div>
         </div>
@@ -861,7 +864,7 @@ export default function SiteLedgerDetailPage() {
         {folderExplorerOpen ? (
           <div className="mt-3 rounded-md bg-zinc-50 px-3 py-3 dark:bg-zinc-900/40">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">過去データ（エクスプローラー）</div>
+              <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">過去一覧</div>
               <button
                 type="button"
                 onClick={() => void loadFolderDates()}
@@ -876,7 +879,7 @@ export default function SiteLedgerDetailPage() {
               {folderDatesBusy ? (
                 <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
               ) : folderDates.length === 0 ? (
-                <div className="text-xs text-zinc-500 dark:text-zinc-400">過去データ（日付）がありません。</div>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">過去の日付データがありません。</div>
               ) : (
                 <div className="flex flex-col gap-1">
                   {folderDates.map((d) => (
@@ -887,9 +890,16 @@ export default function SiteLedgerDetailPage() {
                       title="カーソルを合わせるとメニューが出ます"
                     >
                       <div className="min-w-0 flex-1 truncate tabular-nums">
-                        {d.dateYmd}（写真 {d.photoCount} / 報告書 {d.reportCount}）
+                        {d.dateYmd}（予定 {d.scheduleCount} / 写真 {d.photoCount} / 報告書 {d.reportCount}）
                       </div>
                       <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+                        <button
+                          type="button"
+                          className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                          onClick={() => setFolderDate(d.dateYmd)}
+                        >
+                          当日
+                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
