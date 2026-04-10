@@ -1,4 +1,11 @@
 import { prisma } from '@/server/db/prisma';
+import {
+  backfillSiteCompanyName,
+  ensurePartnerByName,
+  findMatchingSite,
+  normalizeOptionalRegistryText,
+  normalizeRegistryText,
+} from '@/server/site-registry';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -220,7 +227,7 @@ export async function POST(request: Request) {
   if (asUpdate.success) {
     const companyName =
       typeof asUpdate.data.companyName === 'string'
-        ? asUpdate.data.companyName.trim() || null
+        ? normalizeOptionalRegistryText(asUpdate.data.companyName)
         : asUpdate.data.companyName;
 
     const address =
@@ -240,6 +247,7 @@ export async function POST(request: Request) {
       typeof asUpdate.data.detail === 'string' ? asUpdate.data.detail.trim() || null : asUpdate.data.detail;
     const caution =
       typeof asUpdate.data.caution === 'string' ? asUpdate.data.caution.trim() || null : asUpdate.data.caution;
+    const normalizedName = typeof asUpdate.data.name === 'string' ? normalizeRegistryText(asUpdate.data.name) : undefined;
 
     const scheduleLabelColor = asUpdate.data.scheduleLabelColor;
 
@@ -277,11 +285,41 @@ export async function POST(request: Request) {
     if (asUpdate.data.kind) data.kind = asUpdate.data.kind;
 
     try {
+      const current = await prisma.site.findUnique({
+        where: { id: asUpdate.data.id },
+        select: { id: true, name: true, companyName: true, kind: true },
+      });
+      if (!current) {
+        return Response.json({ ok: false, error: 'Site not found' }, { status: 404 });
+      }
+
+      const nextName = normalizedName ?? current.name;
+      const nextCompanyName = asUpdate.data.companyName !== undefined ? companyName ?? null : current.companyName;
+      const nextKind = asUpdate.data.kind ?? current.kind;
+
+      const duplicate = await findMatchingSite({
+        companyName: nextCompanyName,
+        name: nextName,
+        kind: nextKind,
+        excludeId: asUpdate.data.id,
+      });
+      if (duplicate.site) {
+        return Response.json(
+          { ok: false, error: 'Duplicate site exists', site: duplicate.site, matchType: duplicate.matchType },
+          { status: 409 },
+        );
+      }
+
       const updated = await prisma.site.update({
         where: { id: asUpdate.data.id },
         data,
         select: { id: true },
       });
+
+      if (nextCompanyName) {
+        await ensurePartnerByName(nextCompanyName);
+      }
+
       return Response.json({ ok: true, site: updated });
     } catch (e) {
       return Response.json(
@@ -299,8 +337,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const companyName = asCreate.data.companyName?.trim() || null;
-  const name = asCreate.data.name.trim();
+  const companyName = normalizeOptionalRegistryText(asCreate.data.companyName);
+  const name = normalizeRegistryText(asCreate.data.name);
   const address = asCreate.data.address?.trim() || null;
   const contactName = asCreate.data.contactName?.trim() || null;
   const pace = asCreate.data.pace?.trim() || null;
@@ -314,7 +352,23 @@ export async function POST(request: Request) {
   const peopleCount = typeof asCreate.data.peopleCount === 'number' ? asCreate.data.peopleCount : null;
   const caution = asCreate.data.caution?.trim() || null;
   const scheduleLabelColor = asCreate.data.scheduleLabelColor ?? 'default';
+  const kind = asCreate.data.kind ?? 'NORMAL';
   try {
+    const duplicate = await findMatchingSite({ companyName, name, kind });
+    if (duplicate.site) {
+      await backfillSiteCompanyName(duplicate.site.id, companyName);
+      if (companyName) {
+        await ensurePartnerByName(companyName);
+      }
+      return Response.json({
+        ok: true,
+        site: { id: duplicate.site.id },
+        created: false,
+        duplicate: true,
+        matchType: duplicate.matchType,
+      });
+    }
+
     const created = await prisma.site.create({
       data: {
         companyName,
@@ -328,13 +382,17 @@ export async function POST(request: Request) {
         caution,
         scheduleLabelColor,
         depreciationThreshold: asCreate.data.depreciationThreshold ?? 10,
-          alertsEnabled: typeof asCreate.data.alertsEnabled === 'boolean' ? asCreate.data.alertsEnabled : true,
-        kind: asCreate.data.kind ?? 'NORMAL',
+        alertsEnabled: typeof asCreate.data.alertsEnabled === 'boolean' ? asCreate.data.alertsEnabled : true,
+        kind,
       },
       select: { id: true },
     });
 
-    return Response.json({ ok: true, site: created });
+    if (companyName) {
+      await ensurePartnerByName(companyName);
+    }
+
+    return Response.json({ ok: true, site: created, created: true });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'Create failed' },

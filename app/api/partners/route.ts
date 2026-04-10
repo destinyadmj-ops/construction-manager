@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { findMatchingPartner, normalizeRegistryText } from '@/server/site-registry';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -8,6 +9,7 @@ const CreateSchema = z
     name: z.string().min(1).max(200),
     email: z.string().max(320).optional().nullable(),
     fax: z.string().max(50).optional().nullable(),
+    address: z.string().max(500).optional().nullable(),
     notes: z.string().max(2000).optional().nullable(),
   })
   .strict();
@@ -18,6 +20,7 @@ const UpdateSchema = z
     name: z.string().min(1).max(200).optional(),
     email: z.string().max(320).optional().nullable(),
     fax: z.string().max(50).optional().nullable(),
+    address: z.string().max(500).optional().nullable(),
     notes: z.string().max(2000).optional().nullable(),
     outlookToEmailDefault: z.string().max(320).optional().nullable(),
     outlookSubjectReportDefault: z.string().max(200).optional().nullable(),
@@ -41,6 +44,7 @@ export async function GET() {
         name: true,
         email: true,
         fax: true,
+        address: true,
         notes: true,
         outlookToEmailDefault: true,
         outlookSubjectReportDefault: true,
@@ -71,17 +75,31 @@ export async function POST(request: Request) {
         name?: string;
         email?: string | null;
         fax?: string | null;
+        address?: string | null;
         notes?: string | null;
         outlookToEmailDefault?: string | null;
         outlookSubjectReportDefault?: string | null;
         outlookSubjectInvoiceDefault?: string | null;
       } = {};
-      if (typeof asUpdate.data.name === 'string') data.name = asUpdate.data.name.trim();
+      const normalizedName = typeof asUpdate.data.name === 'string' ? normalizeRegistryText(asUpdate.data.name) : undefined;
+      if (normalizedName) {
+        const duplicate = await findMatchingPartner(normalizedName, asUpdate.data.id);
+        if (duplicate) {
+          return Response.json(
+            { ok: false, error: 'Duplicate partner exists', partner: duplicate },
+            { status: 409 },
+          );
+        }
+        data.name = normalizedName;
+      }
       if (asUpdate.data.email !== undefined) {
         data.email = typeof asUpdate.data.email === 'string' ? asUpdate.data.email.trim() || null : null;
       }
       if (asUpdate.data.fax !== undefined) {
         data.fax = typeof asUpdate.data.fax === 'string' ? asUpdate.data.fax.trim() || null : null;
+      }
+      if (asUpdate.data.address !== undefined) {
+        data.address = typeof asUpdate.data.address === 'string' ? asUpdate.data.address.trim() || null : null;
       }
       if (asUpdate.data.notes !== undefined) {
         data.notes = typeof asUpdate.data.notes === 'string' ? asUpdate.data.notes.trim() || null : null;
@@ -129,17 +147,24 @@ export async function POST(request: Request) {
   }
 
   try {
+    const normalizedName = normalizeRegistryText(asCreate.data.name);
+    const duplicate = await findMatchingPartner(normalizedName);
+    if (duplicate) {
+      return Response.json({ ok: true, partner: duplicate, created: false, duplicate: true });
+    }
+
     const created = await prisma.partner.create({
       data: {
-        name: asCreate.data.name.trim(),
+        name: normalizedName,
         email: typeof asCreate.data.email === 'string' ? asCreate.data.email.trim() || null : null,
         fax: typeof asCreate.data.fax === 'string' ? asCreate.data.fax.trim() || null : null,
+        address: typeof asCreate.data.address === 'string' ? asCreate.data.address.trim() || null : null,
         notes: asCreate.data.notes ? asCreate.data.notes.trim() : null,
       },
-      select: { id: true, name: true, notes: true },
+      select: { id: true, name: true, address: true, notes: true },
     });
 
-    return Response.json({ ok: true, partner: created });
+    return Response.json({ ok: true, partner: created, created: true });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'Create failed' },
