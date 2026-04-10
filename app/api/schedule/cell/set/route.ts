@@ -1,4 +1,6 @@
 import { prisma } from '@/server/db/prisma';
+import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
+import { ensureSiteDayFolders } from '@/server/site-storage';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -39,11 +41,11 @@ async function resolveSiteByName(
   siteName: string,
   kind: 'NORMAL' | 'DAILY',
 ): Promise<{ id: string; name: string } | null> {
-  const name = siteName.trim();
+  const name = normalizeRegistryText(siteName);
   if (!name) return null;
 
-  const found = await prisma.site.findFirst({ where: { name, kind }, select: { id: true, name: true } });
-  if (found) return found;
+  const found = await findMatchingSite({ companyName: null, name, kind });
+  if (found.site) return { id: found.site.id, name: found.site.name };
 
   const created = await prisma.site.create({ data: { name, kind }, select: { id: true, name: true } });
   return created;
@@ -107,6 +109,17 @@ export async function POST(request: Request) {
         });
       }
     });
+
+    try {
+      if (slot1Site) {
+        await ensureSiteDayFolders({ siteId: slot1Site.id, siteName: slot1Site.name, dayYmd: day });
+      }
+      if (slot2Site) {
+        await ensureSiteDayFolders({ siteId: slot2Site.id, siteName: slot2Site.name, dayYmd: day });
+      }
+    } catch {
+      // ignore history folder creation failure
+    }
 
     return Response.json({ ok: true });
   } catch (e) {

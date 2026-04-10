@@ -1,8 +1,8 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
+import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
+import { ensureSiteDayFolders } from '@/server/site-storage';
 import { z } from 'zod';
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
 
 export const runtime = 'nodejs';
 
@@ -48,26 +48,6 @@ function addMinutes(d: Date, minutes: number) {
   return x;
 }
 
-function safePathSegment(name: string) {
-  const base = name.trim() || 'untitled';
-  return base
-    .replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_')
-    .replace(/[\s.]+$/g, '')
-    .slice(0, 80);
-}
-
-async function ensureSiteDayFolders(input: { siteId: string; siteName: string; dayYmd: string }) {
-  const baseDir = process.env.MASTER_HUB_STORAGE_DIR
-    ? path.resolve(process.env.MASTER_HUB_STORAGE_DIR)
-    : path.join(process.cwd(), '.storage');
-
-  const siteFolderBase = safePathSegment(input.siteName) || input.siteId;
-  const siteFolder = `${siteFolderBase}__${input.siteId.slice(0, 8)}`;
-  const folderRoot = path.join(baseDir, 'sites', siteFolder, input.dayYmd);
-  await mkdir(path.join(folderRoot, 'photos'), { recursive: true });
-  await mkdir(path.join(folderRoot, 'reports'), { recursive: true });
-}
-
 async function resolveSite(input: {
   siteName: string;
   kind: 'NORMAL' | 'DAILY';
@@ -75,15 +55,12 @@ async function resolveSite(input: {
   | { ok: true; site: { id: string; name: string } }
   | { ok: false; status: number; error: string; reason?: string }
 > {
-  const name = (input.siteName ?? '').trim();
+  const name = normalizeRegistryText(input.siteName ?? '');
   if (!name) return { ok: false, status: 400, error: 'siteName is required' };
 
-  const found = await prisma.site.findFirst({
-    where: { name, kind: input.kind },
-    select: { id: true, name: true },
-  });
+  const found = await findMatchingSite({ companyName: null, name, kind: input.kind });
 
-  if (found) return { ok: true, site: found };
+  if (found.site) return { ok: true, site: { id: found.site.id, name: found.site.name } };
 
   const created = await prisma.site.create({
     data: { name, kind: input.kind },
