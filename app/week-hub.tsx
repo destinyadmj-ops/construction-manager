@@ -160,6 +160,14 @@ function weekdayMon1Sun7FromYmd(ymd: string): number {
 
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
 
+function depreciationBadgeClass(alert: boolean) {
+  return `shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
+    alert
+      ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200'
+      : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
+  }`;
+}
+
 export default function WeekHub() {
   return (
     <Suspense fallback={null}>
@@ -2044,11 +2052,7 @@ function WeekHubInner() {
                                         setSelectedSite(s);
                                         setSiteDetailOpen(true);
                                       }}
-                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                        badge.alert
-                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                      }`}
+                                      className={depreciationBadgeClass(badge.alert)}
                                       title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
                                     >
                                       {badge.count}
@@ -2704,11 +2708,7 @@ function WeekHubInner() {
                                   ) : null}
                                   {badge ? (
                                     <span
-                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                        badge.alert
-                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                      }`}
+                                      className={depreciationBadgeClass(badge.alert)}
                                       onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
@@ -2957,11 +2957,7 @@ function WeekHubInner() {
                                   ) : null}
                                   {badge ? (
                                     <span
-                                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] tabular-nums ${
-                                        badge.alert
-                                          ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
-                                          : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
-                                      }`}
+                                      className={depreciationBadgeClass(badge.alert)}
                                       onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
