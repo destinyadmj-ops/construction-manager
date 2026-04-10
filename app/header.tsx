@@ -1450,21 +1450,21 @@ export default function AppHeader() {
 
             {pathname === '/' ? (
               <div className="flex flex-wrap items-center gap-2 text-[11px]" aria-label="当月アラート凡例">
-                <div className="inline-flex items-center gap-1 rounded-full border border-zinc-900 bg-white px-2 py-0.5 text-zinc-900">
+                <div className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
                     aria-hidden="true"
                   />
                   <span>請求未</span>
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-full border border-zinc-900 bg-white px-2 py-0.5 text-zinc-900">
+                <div className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/40 dark:text-orange-300">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
                     aria-hidden="true"
                   />
                   <span>報告未</span>
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-full border border-zinc-900 bg-white px-2 py-0.5 text-zinc-900">
+                <div className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-green-700 dark:border-green-900/70 dark:bg-green-950/40 dark:text-green-300">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
                     aria-hidden="true"
