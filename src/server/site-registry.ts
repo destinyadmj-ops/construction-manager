@@ -29,7 +29,7 @@ export function normalizeOptionalRegistryText(input: string | null | undefined):
 }
 
 function normalizeRegistryKey(input: string | null | undefined): string {
-  return normalizeRegistryText(input).toLocaleLowerCase('ja-JP');
+  return normalizeRegistryText(input).replace(/\s+/g, '').toLocaleLowerCase('ja-JP');
 }
 
 async function listSiteCandidates(kind: RegistrySiteKind, excludeId?: string): Promise<SiteCandidate[]> {
