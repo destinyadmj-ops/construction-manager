@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
-import { buildAutoFillTargets, buildRepeatRuleWithPace, type RepeatRule } from '@/shared/pace';
+import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -58,6 +58,7 @@ type YearSummaryApiResponse = {
 type SiteItem = {
   id: string | null;
   label: string;
+  badgeMonthVisible?: boolean;
   invoiceIssuedThisMonth?: boolean;
   reportIssuedThisMonth?: boolean;
   paceNotConsumedAlert?: boolean;
@@ -648,8 +649,11 @@ function WeekHubInner() {
 
   const visibleSites = useMemo(() => {
     const q = siteQuery.trim().toLowerCase();
-    if (!q) return sites;
-    return sites.filter((s) => s.label.toLowerCase().includes(q));
+    return sites.filter((s) => {
+      if (s.badgeMonthVisible === false) return false;
+      if (!q) return true;
+      return s.label.toLowerCase().includes(q);
+    });
   }, [siteQuery, sites]);
 
   const showCellActionMsg = useCallback((msg: string | null) => {
@@ -1157,6 +1161,7 @@ function WeekHubInner() {
             reportIssuedThisMonth?: boolean;
             repeatRule?: unknown;
             pace?: string | null;
+            paceExpectedThisMonth?: number;
             paceNotConsumedAlert?: boolean;
             unassignedThisMonth?: boolean;
           }>;
@@ -1167,6 +1172,8 @@ function WeekHubInner() {
           return {
             id: s.id,
             label,
+            badgeMonthVisible:
+              !hasConfiguredPace(s.repeatRule, s.pace) || (typeof s.paceExpectedThisMonth === 'number' && s.paceExpectedThisMonth > 0),
             invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
             reportIssuedThisMonth: s.reportIssuedThisMonth,
             paceNotConsumedAlert: s.paceNotConsumedAlert,
