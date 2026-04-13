@@ -1,15 +1,17 @@
 import { prisma } from '@/server/db/prisma';
-import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { canCurrentUserEditSchedule, requireScheduleEditor } from '@/server/auth/schedule-edit';
 
 export const runtime = 'nodejs';
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!id) {
     return Response.json({ ok: false, error: 'Missing id' }, { status: 400 });
   }
 
   try {
+    const canViewAmount = await canCurrentUserEditSchedule(request);
+
     const site = await prisma.site.findUnique({
       where: { id },
       select: {
@@ -37,7 +39,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return Response.json({ ok: false, error: 'Not found' }, { status: 404 });
     }
 
-    return Response.json({ ok: true, site });
+    return Response.json({ ok: true, site: { ...site, amount: canViewAmount ? site.amount : null } });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },

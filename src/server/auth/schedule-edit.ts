@@ -9,25 +9,29 @@ function isAdminRequest(request: Request): boolean {
   return request.headers.get('x-admin-token') === token;
 }
 
-export async function requireScheduleEditor(request: Request): Promise<Response | null> {
-  if (isAdminRequest(request)) return null;
+export async function canCurrentUserEditSchedule(request?: Request): Promise<boolean> {
+  if (request && isAdminRequest(request)) return true;
 
   const jar = await cookies();
   const userId = (jar.get(COOKIE_NAME)?.value ?? '').trim();
-  if (!userId) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!userId) return false;
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, canEditSchedule: true, canGrantScheduleEdit: true },
   });
 
-  if (!user) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  return !!user && (user.canEditSchedule || user.canGrantScheduleEdit);
+}
 
-  if (!user.canEditSchedule && !user.canGrantScheduleEdit) {
+export async function requireScheduleEditor(request: Request): Promise<Response | null> {
+  const canEdit = await canCurrentUserEditSchedule(request);
+  if (!canEdit) {
+    const jar = await cookies();
+    const userId = (jar.get(COOKIE_NAME)?.value ?? '').trim();
+    if (!userId) {
+      return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    }
     return Response.json({ ok: false, error: 'Edit permission required' }, { status: 403 });
   }
 

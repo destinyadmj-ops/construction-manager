@@ -6,6 +6,7 @@ import {
   normalizeOptionalRegistryText,
   normalizeRegistryText,
 } from '@/server/site-registry';
+import { formatPaceText } from '@/shared/pace';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
 
@@ -343,7 +344,7 @@ function buildDetailSection(rows: ImportedScheduleRow[]) {
 function summarizePace(rows: ImportedScheduleRow[]) {
   const workMonths = uniqueInOrder(rows.map((row) => row.workMonth));
   if (workMonths.length === 0) return null;
-  return limitText(workMonths.join(' / '), 200);
+  return limitText(formatPaceText(workMonths.join(' / ')), 200);
 }
 
 function aggregateRows(rows: ImportedScheduleRow[]): AggregatedSiteImport | null {

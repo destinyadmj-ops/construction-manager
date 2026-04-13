@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { Prisma } from '@/generated/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import {
   backfillSiteCompanyName,
@@ -7,17 +8,21 @@ import {
   normalizeOptionalRegistryText,
   normalizeRegistryText,
 } from '@/server/site-registry';
+import { expectedCountForMonth, formatPaceText, parseRepeatRule } from '@/shared/pace';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
 const SiteLabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
 
-type RepeatRule = {
-  intervalMonths: number;
-  weekdays: number[];
-  monthDays: number[];
-};
+const RepeatRuleSchema = z
+  .object({
+    intervalMonths: z.number().int().min(1).max(12),
+    weekdays: z.array(z.number().int().min(1).max(7)).max(7).optional().nullable(),
+    monthDays: z.array(z.number().int().min(1).max(31)).max(31).optional().nullable(),
+    monthsOfYear: z.array(z.number().int().min(1).max(12)).max(12).optional().nullable(),
+  })
+  .strict();
 
 function parseMonthParam(month: string | null): { start: Date; end: Date; key: string } | null {
   if (!month) return null;
@@ -30,43 +35,6 @@ function parseMonthParam(month: string | null): { start: Date; end: Date; key: s
   const start = new Date(y, mo - 1, 1);
   const end = new Date(y, mo, 1);
   return { start, end, key: m };
-}
-
-function parseRepeatRule(x: unknown): RepeatRule {
-  const base: RepeatRule = { intervalMonths: 1, weekdays: [], monthDays: [] };
-  if (!x || typeof x !== 'object') return base;
-  const o = x as Record<string, unknown>;
-  const intervalMonths = typeof o.intervalMonths === 'number' ? o.intervalMonths : 1;
-  const weekdays = Array.isArray(o.weekdays) ? o.weekdays.filter((n) => typeof n === 'number') : [];
-  const monthDays = Array.isArray(o.monthDays) ? o.monthDays.filter((n) => typeof n === 'number') : [];
-  return {
-    intervalMonths: Math.min(12, Math.max(1, intervalMonths || 1)),
-    weekdays: weekdays.map((n) => Math.min(7, Math.max(1, n))).sort((a, b) => a - b),
-    monthDays: monthDays.map((n) => Math.min(31, Math.max(1, n))).sort((a, b) => a - b),
-  };
-}
-
-function expectedCountForMonth(rule: unknown, monthStart: Date, monthEnd: Date): number {
-  const r = parseRepeatRule(rule);
-  const weekdaySet = new Set<number>(r.weekdays);
-  const monthDaySet = new Set<number>(r.monthDays);
-  if (weekdaySet.size === 0 && monthDaySet.size === 0) return 0;
-
-  const seen = new Set<number>();
-  const cur = new Date(monthStart);
-  cur.setHours(0, 0, 0, 0);
-  const end = new Date(monthEnd);
-  end.setHours(0, 0, 0, 0);
-  while (cur < end) {
-    const day = cur.getDate();
-    const jsDow = cur.getDay(); // 0=Sun
-    const dow = jsDow === 0 ? 7 : jsDow; // 1=Mon ... 7=Sun
-    if (monthDaySet.has(day) || weekdaySet.has(dow)) {
-      seen.add(cur.getTime());
-    }
-    cur.setDate(cur.getDate() + 1);
-  }
-  return seen.size;
 }
 
 const CreateSchema = z
@@ -83,6 +51,7 @@ const CreateSchema = z
     scheduleLabelColor: SiteLabelColorSchema.optional(),
     depreciationThreshold: z.number().int().min(1).max(999).optional(),
     alertsEnabled: z.boolean().optional(),
+    repeatRule: RepeatRuleSchema.optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
   })
   .strict();
@@ -102,6 +71,7 @@ const UpdateSchema = z
     scheduleLabelColor: SiteLabelColorSchema.optional(),
     depreciationThreshold: z.number().int().min(1).max(999).optional(),
     alertsEnabled: z.boolean().optional(),
+    repeatRule: RepeatRuleSchema.optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
   })
   .strict();
@@ -122,6 +92,7 @@ export async function GET(request: Request) {
         id: true,
         companyName: true,
         name: true,
+        pace: true,
         kind: true,
         repeatRule: true,
         caution: true,
@@ -180,13 +151,19 @@ export async function GET(request: Request) {
     }
 
     const sitesWithAlerts = sites.map((s) => {
-      const paceExpectedThisMonth = expectedCountForMonth(s.repeatRule, start, end);
+      const paceExpectedThisMonth = expectedCountForMonth({
+        rule: s.repeatRule,
+        pace: s.pace,
+        monthStart: start,
+        monthEnd: end,
+        anchorDate: s.createdAt,
+      });
       const paceActualThisMonth = workCountMap.get(s.id) ?? 0;
       const invoiceIssuedThisMonth = issuedSet.has(`${s.id}:INVOICE`);
       const reportIssuedThisMonth = issuedSet.has(`${s.id}:REPORT`);
       const paceNotConsumedAlert =
         s.alertsEnabled && paceExpectedThisMonth > 0 && paceActualThisMonth < paceExpectedThisMonth;
-      const unassignedThisMonth = s.alertsEnabled && paceActualThisMonth === 0;
+      const unassignedThisMonth = s.alertsEnabled && paceExpectedThisMonth > 0 && paceActualThisMonth === 0;
 
       return {
         ...s,
@@ -230,7 +207,7 @@ export async function POST(request: Request) {
       typeof asUpdate.data.contactName === 'string'
         ? asUpdate.data.contactName.trim() || null
         : asUpdate.data.contactName;
-    const pace = typeof asUpdate.data.pace === 'string' ? asUpdate.data.pace.trim() || null : asUpdate.data.pace;
+    const pace = typeof asUpdate.data.pace === 'string' ? formatPaceText(asUpdate.data.pace) || null : asUpdate.data.pace;
     const amount =
       typeof asUpdate.data.amount === 'string'
         ? asUpdate.data.amount.trim() || null
@@ -242,24 +219,11 @@ export async function POST(request: Request) {
     const caution =
       typeof asUpdate.data.caution === 'string' ? asUpdate.data.caution.trim() || null : asUpdate.data.caution;
     const normalizedName = typeof asUpdate.data.name === 'string' ? normalizeRegistryText(asUpdate.data.name) : undefined;
+    const repeatRule = asUpdate.data.repeatRule !== undefined ? parseRepeatRule(asUpdate.data.repeatRule) : undefined;
 
     const scheduleLabelColor = asUpdate.data.scheduleLabelColor;
 
-    const data: {
-      companyName?: string | null;
-      name?: string;
-      address?: string | null;
-      contactName?: string | null;
-      pace?: string | null;
-      amount?: string | number | null;
-      detail?: string | null;
-      peopleCount?: number | null;
-      caution?: string | null;
-      scheduleLabelColor?: string;
-      depreciationThreshold?: number;
-      alertsEnabled?: boolean;
-      kind?: 'NORMAL' | 'DAILY';
-    } = {};
+    const data: Prisma.SiteUpdateInput = {};
     if (asUpdate.data.companyName !== undefined) data.companyName = companyName ?? null;
     if (typeof asUpdate.data.name === 'string') data.name = asUpdate.data.name.trim();
     if (asUpdate.data.address !== undefined) data.address = address ?? null;
@@ -275,6 +239,10 @@ export async function POST(request: Request) {
     }
     if (typeof asUpdate.data.alertsEnabled === 'boolean') {
       data.alertsEnabled = asUpdate.data.alertsEnabled;
+    }
+    if (asUpdate.data.repeatRule !== undefined) {
+      data.repeatRule =
+        asUpdate.data.repeatRule === null ? Prisma.DbNull : ((repeatRule ?? parseRepeatRule(null)) as Prisma.InputJsonValue);
     }
     if (asUpdate.data.kind) data.kind = asUpdate.data.kind;
 
@@ -335,7 +303,7 @@ export async function POST(request: Request) {
   const name = normalizeRegistryText(asCreate.data.name);
   const address = asCreate.data.address?.trim() || null;
   const contactName = asCreate.data.contactName?.trim() || null;
-  const pace = asCreate.data.pace?.trim() || null;
+  const pace = formatPaceText(asCreate.data.pace) || null;
   const amount =
     typeof asCreate.data.amount === 'string'
       ? asCreate.data.amount.trim() || null
@@ -346,6 +314,7 @@ export async function POST(request: Request) {
   const peopleCount = typeof asCreate.data.peopleCount === 'number' ? asCreate.data.peopleCount : null;
   const caution = asCreate.data.caution?.trim() || null;
   const scheduleLabelColor = asCreate.data.scheduleLabelColor ?? 'default';
+  const repeatRule = asCreate.data.repeatRule ? parseRepeatRule(asCreate.data.repeatRule) : null;
   const kind = asCreate.data.kind ?? 'NORMAL';
   try {
     const duplicate = await findMatchingSite({ companyName, name, kind });
@@ -377,6 +346,7 @@ export async function POST(request: Request) {
         scheduleLabelColor,
         depreciationThreshold: asCreate.data.depreciationThreshold ?? 10,
         alertsEnabled: typeof asCreate.data.alertsEnabled === 'boolean' ? asCreate.data.alertsEnabled : true,
+        ...(repeatRule ? { repeatRule: repeatRule as Prisma.InputJsonValue } : {}),
         kind,
       },
       select: { id: true },
