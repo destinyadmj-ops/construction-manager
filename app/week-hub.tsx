@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
-import { buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
+import { buildRepeatRuleWithPace, type RepeatRule } from '@/shared/pace';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -60,7 +60,6 @@ type SiteItem = {
   label: string;
   invoiceIssuedThisMonth?: boolean;
   reportIssuedThisMonth?: boolean;
-  paceConfigured?: boolean;
   paceNotConsumedAlert?: boolean;
   unassignedThisMonth?: boolean;
 };
@@ -170,16 +169,14 @@ function depreciationBadgeClass(alert: boolean) {
   }`;
 }
 
-function PaceConfiguredBadge() {
-  return (
-    <span
-      className="inline-flex h-4 shrink-0 items-center rounded-md border border-sky-200 bg-sky-50 px-1 text-[9px] font-medium leading-none text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-200"
-      title="ペース設定済み"
-      aria-label="ペース設定済み"
-    >
-      ペ
-    </span>
-  );
+function mergeSiteItems(current: SiteItem[], incoming: Array<Pick<SiteItem, 'id' | 'label'>>): SiteItem[] {
+  const byId = new Map(current.filter((item) => item.id).map((item) => [item.id as string, item] as const));
+  const byLabel = new Map(current.map((item) => [item.label.trim(), item] as const));
+
+  return incoming.map((item) => {
+    const hit = (item.id ? byId.get(item.id) : undefined) ?? byLabel.get(item.label.trim());
+    return hit ? { ...hit, id: item.id, label: item.label } : { id: item.id, label: item.label };
+  });
 }
 
 export default function WeekHub() {
@@ -1180,7 +1177,6 @@ function WeekHubInner() {
             label,
             invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
             reportIssuedThisMonth: s.reportIssuedThisMonth,
-            paceConfigured: hasConfiguredPace(s.repeatRule, typeof s.pace === 'string' ? s.pace : null),
             paceNotConsumedAlert: s.paceNotConsumedAlert,
             unassignedThisMonth: s.unassignedThisMonth,
           };
@@ -1458,9 +1454,9 @@ function WeekHubInner() {
           if (!json?.ok) return;
           const fromLedger = (json.sites ?? []).map((s) => ({ id: s.id, label: s.label }));
           if (fromLedger.length > 0) {
-            setSites(fromLedger);
+            setSites((cur) => mergeSiteItems(cur, fromLedger));
           } else {
-            setSites((json.names ?? []).map((label) => ({ id: null, label })));
+            setSites((cur) => mergeSiteItems(cur, (json.names ?? []).map((label) => ({ id: null, label }))));
           }
           return;
         } catch {
@@ -2116,7 +2112,6 @@ function WeekHubInner() {
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
                                   <span className="truncate">
                                     {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
                                   </span>
@@ -2794,7 +2789,6 @@ function WeekHubInner() {
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
                                   <span className="truncate">
                                     {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
                                   </span>
@@ -3056,7 +3050,6 @@ function WeekHubInner() {
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
                                   <span className="truncate">
                                     {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
                                   </span>
