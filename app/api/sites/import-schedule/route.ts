@@ -99,7 +99,27 @@ function extractFallbackRows(grid: unknown[][]) {
     for (let column = 0; column < row.length; column++) {
       const text = normalizeRegistryText(toCellText(row[column]));
       if (!text) continue;
+type ImportedScheduleRow = {
+  companyName: string | null;
+  name: string;
+  workContent: string | null;
+  peopleCount: number | null;
+  workMonth: string | null;
+  condition1: string | null;
+  condition2: string | null;
+  condition3: string | null;
+  condition4: string | null;
+  siteType: string | null;
+};
       if (SITE_HEADERS.some((header) => text === header || text.includes(header))) {
+type AggregatedSiteImport = {
+  companyName: string | null;
+  name: string;
+  peopleCount: number | null;
+  pace: string | null;
+  detailSection: string;
+  rowCount: number;
+};
         const score = (text === '件名' || text === '現場名' ? 5 : 3) + (20 - rowIndex);
         if (score > bestScore) {
           bestScore = score;
