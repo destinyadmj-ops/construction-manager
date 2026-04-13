@@ -46,6 +46,12 @@ type PhotoFolderSummary = {
   photoCount: number;
 };
 
+type AuthMeUser = {
+  id: string;
+  canEditSchedule: boolean;
+  canGrantScheduleEdit: boolean;
+};
+
 function generateDateSearchTokens(dateYmd: string | null | undefined): string[] {
   if (!dateYmd) return [];
   const match = dateYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -97,6 +103,7 @@ export default function SiteLedgerPage() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [q, setQ] = useState('');
@@ -128,6 +135,33 @@ export default function SiteLedgerPage() {
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newName, setNewName] = useState('');
   const [newThreshold, setNewThreshold] = useState('10');
+  const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/me')
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as unknown;
+        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!mounted || o?.ok !== true) return;
+        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
+        if (!raw || typeof raw.id !== 'string') {
+          setAuthMeUser(null);
+          return;
+        }
+        setAuthMeUser({
+          id: raw.id,
+          canEditSchedule: raw.canEditSchedule === true,
+          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
+        });
+      })
+      .catch(() => {
+        if (mounted) setAuthMeUser(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadSites = useCallback(async () => {
     setStatusMsg(null);
@@ -493,11 +527,18 @@ export default function SiteLedgerPage() {
   }, [visibleSites, loadSites]);
 
   useEffect(() => {
-    setAddAction({ onClick: addSite, disabled: !newName.trim(), title: '追加（現場）' });
+    setAddAction(canEditSite ? { onClick: addSite, disabled: !newName.trim(), title: '追加（現場）' } : undefined);
     return () => {
       setAddAction(undefined);
     };
-  }, [addSite, newName, setAddAction]);
+  }, [addSite, canEditSite, newName, setAddAction]);
+
+  useEffect(() => {
+    if (!canEditSite) {
+      setSelectedSites(new Set());
+      setShowDeleteDialog(false);
+    }
+  }, [canEditSite]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -592,15 +633,17 @@ export default function SiteLedgerPage() {
                   e.currentTarget.value = '';
                 }}
               />
-              <button
-                type="button"
-                disabled={isImporting}
-                onClick={() => importInputRef.current?.click()}
-                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                title="予定表（Excel）の請求先/件名から会社と現場を取り込み"
-              >
-                予定取り込み
-              </button>
+              {canEditSite ? (
+                <button
+                  type="button"
+                  disabled={isImporting}
+                  onClick={() => importInputRef.current?.click()}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  title="予定表（Excel）の請求先/件名から会社と現場を取り込み"
+                >
+                  予定取り込み
+                </button>
+              ) : null}
             </div>
             <div className="text-xs text-zinc-600 dark:text-zinc-400">現場名検索</div>
             <input
@@ -612,6 +655,11 @@ export default function SiteLedgerPage() {
             />
           </div>
         </div>
+        {!canEditSite ? (
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+            詳細の閲覧と打刻は利用できます。追加・予定取り込み・削除は編集権限保持者のみ利用できます。
+          </div>
+        ) : null}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-black/40">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -720,7 +768,7 @@ export default function SiteLedgerPage() {
         </div>
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">現場台帳</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          一覧/追加/編集/削除（devではトークン無しでもOK）。
+          {canEditSite ? '一覧/追加/編集/削除が利用できます。' : '一覧と詳細参照が利用できます。'}
         </div>
 
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
@@ -759,65 +807,67 @@ export default function SiteLedgerPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-2">
-          <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">追加</div>
-          <input
-            value={newCompanyName}
-            onChange={(e) => setNewCompanyName(e.target.value)}
-            placeholder="会社名（任意）"
-            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-          />
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="現場名"
-            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-          />
-          <input
-            value={newThreshold}
-            onChange={(e) => setNewThreshold(e.target.value)}
-            placeholder="償却閾値（例: 10）"
-            inputMode="numeric"
-            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-          />
-          <button
-            type="button"
-            disabled={!newName.trim()}
-            onClick={() => {
-              const name = newName.trim();
-              const companyName = newCompanyName.trim() || null;
-              const threshold = Number(newThreshold);
-              void (async () => {
-                setStatusMsg(null);
-                try {
-                  const r = await fetch('/api/sites', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                      name,
-                      companyName,
-                      depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
-                    }),
-                  });
-                  const j = (await r.json().catch(() => null)) as unknown;
-                  const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-                  if (!r.ok || obj?.ok !== true) {
-                    throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+        {canEditSite ? (
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">追加</div>
+            <input
+              value={newCompanyName}
+              onChange={(e) => setNewCompanyName(e.target.value)}
+              placeholder="会社名（任意）"
+              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+            />
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="現場名"
+              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+            />
+            <input
+              value={newThreshold}
+              onChange={(e) => setNewThreshold(e.target.value)}
+              placeholder="償却閾値（例: 10）"
+              inputMode="numeric"
+              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+            />
+            <button
+              type="button"
+              disabled={!newName.trim()}
+              onClick={() => {
+                const name = newName.trim();
+                const companyName = newCompanyName.trim() || null;
+                const threshold = Number(newThreshold);
+                void (async () => {
+                  setStatusMsg(null);
+                  try {
+                    const r = await fetch('/api/sites', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({
+                        name,
+                        companyName,
+                        depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
+                      }),
+                    });
+                    const j = (await r.json().catch(() => null)) as unknown;
+                    const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+                    if (!r.ok || obj?.ok !== true) {
+                      throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+                    }
+                    setNewName('');
+                    setNewCompanyName('');
+                    setNewThreshold('10');
+                    await loadSites();
+                  } catch (e) {
+                    setStatusMsg(e instanceof Error ? `追加に失敗: ${e.message}` : '追加に失敗しました');
                   }
-                  setNewName('');
-                  setNewCompanyName('');
-                  setNewThreshold('10');
-                  await loadSites();
-                } catch (e) {
-                  setStatusMsg(e instanceof Error ? `追加に失敗: ${e.message}` : '追加に失敗しました');
-                }
-              })();
-            }}
-            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-          >
-            追加
-          </button>
-        </div>
+                })();
+              }}
+              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            >
+              追加
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-6 flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">一覧</div>
@@ -847,7 +897,7 @@ export default function SiteLedgerPage() {
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">全体を俯瞰して名前を確認できます。</div>
             </div>
             <div className="flex items-center gap-2">
-              {visibleSites.length > 0 && (
+              {canEditSite && visibleSites.length > 0 && (
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -879,13 +929,15 @@ export default function SiteLedgerPage() {
               <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
                   <div key={`grid-${s.id}`} className="relative">
-                    <input
-                      type="checkbox"
-                      checked={selectedSites.has(s.id)}
-                      onChange={(e) => handleSelectSite(s.id, e.target.checked)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute -left-1 -top-1 z-10 h-3 w-3 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
-                    />
+                    {canEditSite ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedSites.has(s.id)}
+                        onChange={(e) => handleSelectSite(s.id, e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute -left-1 -top-1 z-10 h-3 w-3 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
+                      />
+                    ) : null}
                     <button
                       type="button"
                       onClick={() =>
@@ -968,7 +1020,7 @@ export default function SiteLedgerPage() {
       </div>
 
       {/* 右下固定の削除ボタン */}
-      {selectedSites.size > 0 && (
+      {canEditSite && selectedSites.size > 0 && (
         <div className="fixed bottom-4 right-4 z-50">
           <button
             type="button"
@@ -981,7 +1033,7 @@ export default function SiteLedgerPage() {
       )}
 
       {/* 削除確認ダイアログ */}
-      {showDeleteDialog && (
+      {canEditSite && showDeleteDialog && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-black">
             <div className="text-center">

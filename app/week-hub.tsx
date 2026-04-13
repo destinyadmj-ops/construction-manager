@@ -1725,14 +1725,17 @@ function WeekHubInner() {
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={() => setReorderMode((v) => !v)}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              aria-pressed={reorderMode}
-            >
-              {reorderMode ? '並べ替え: ON' : '並べ替え'}
-            </button>
+            {hasScheduleEditPermission ? (
+              <button
+                type="button"
+                onClick={() => setReorderMode((v) => !v)}
+                disabled={!editActive}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-pressed={reorderMode}
+              >
+                {reorderMode ? '並べ替え: ON' : '並べ替え'}
+              </button>
+            ) : null}
 
             {selectedUserId ? (
               <button
@@ -2000,17 +2003,10 @@ function WeekHubInner() {
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
                 OK
-              {hasScheduleEditPermission ? (
-                <button
-                  type="button"
-                  onClick={() => setReorderMode((v) => !v)}
-                  disabled={!editActive}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  aria-pressed={reorderMode}
-                >
-                  {reorderMode ? '並べ替え: ON' : '並べ替え'}
-                </button>
-              ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowEditPassword(false)}
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
                 キャンセル
@@ -4441,12 +4437,7 @@ function Row({
   const isSelectedUser = selectedUserId === user.id;
 
   const renderSlotLabel = useCallback(
-    (
-      value: string | null,
-      color: 'default' | 'red',
-      className: string,
-      fontSize: string,
-    ) => {
+    (value: string | null, className: string, fontSize: string) => {
       if (!value) return <div className={className} style={{ fontSize }} />;
       if (!onOpenSiteFromCell) {
         return (
@@ -4899,7 +4890,6 @@ function Row({
                 <>
                   {renderSlotLabel(
                     slot1,
-                    c1,
                     `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                       c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
                     }`,
@@ -4907,7 +4897,6 @@ function Row({
                   )}
                   {renderSlotLabel(
                     slot2,
-                    c2,
                     `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                       c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
                     }`,
