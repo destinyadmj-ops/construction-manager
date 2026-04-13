@@ -656,6 +656,16 @@ function WeekHubInner() {
     });
   }, [siteQuery, sites]);
 
+  useEffect(() => {
+    const sp = new URLSearchParams({ kind: scheduleKind });
+    if (selectedUserId) sp.set('userId', selectedUserId);
+    const qs = sp.toString();
+    for (const site of visibleSites.slice(0, 12)) {
+      if (!site.id) continue;
+      router.prefetch(`/site-ledger/${encodeURIComponent(site.id)}?${qs}`);
+    }
+  }, [router, scheduleKind, selectedUserId, visibleSites]);
+
   const showCellActionMsg = useCallback((msg: string | null) => {
     if (cellActionMsgTimer.current) {
       window.clearTimeout(cellActionMsgTimer.current);

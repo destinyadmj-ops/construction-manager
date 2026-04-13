@@ -373,6 +373,12 @@ export default function SiteLedgerPage() {
         });
   }, [q, sites]);
 
+  useEffect(() => {
+    for (const site of visibleSites.slice(0, 12)) {
+      router.prefetch(`/site-ledger/${encodeURIComponent(site.id)}?month=${encodeURIComponent(deprMonth)}`);
+    }
+  }, [deprMonth, router, visibleSites]);
+
       const filteredPhotoSites = useMemo(() => {
         const needle = photoQuery.trim().toLowerCase();
         if (!needle) return photoSites;
