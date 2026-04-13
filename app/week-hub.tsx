@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
+import { buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -122,12 +123,6 @@ function slotsEqual(a: CellSlots, b: CellSlots) {
   return a[0] === b[0] && a[1] === b[1];
 }
 
-type RepeatRule = {
-  intervalMonths: number;
-  weekdays: number[];
-  monthDays: number[];
-};
-
 function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -173,14 +168,6 @@ function depreciationBadgeClass(alert: boolean) {
       ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200'
       : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
   }`;
-}
-
-function hasConfiguredRepeatRule(rule: unknown) {
-  if (!rule || typeof rule !== 'object') return false;
-  const value = rule as { weekdays?: unknown; monthDays?: unknown };
-  const weekdays = Array.isArray(value.weekdays) ? value.weekdays.filter((item) => typeof item === 'number') : [];
-  const monthDays = Array.isArray(value.monthDays) ? value.monthDays.filter((item) => typeof item === 'number') : [];
-  return weekdays.length > 0 || monthDays.length > 0;
 }
 
 function PaceConfiguredBadge() {
@@ -880,6 +867,7 @@ function WeekHubInner() {
     intervalMonths: 1,
     weekdays: [],
     monthDays: [],
+    monthsOfYear: [],
   });
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
@@ -1179,6 +1167,7 @@ function WeekHubInner() {
             invoiceIssuedThisMonth?: boolean;
             reportIssuedThisMonth?: boolean;
             repeatRule?: unknown;
+            pace?: string | null;
             paceNotConsumedAlert?: boolean;
             unassignedThisMonth?: boolean;
           }>;
@@ -1191,7 +1180,7 @@ function WeekHubInner() {
             label,
             invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
             reportIssuedThisMonth: s.reportIssuedThisMonth,
-            paceConfigured: hasConfiguredRepeatRule(s.repeatRule),
+            paceConfigured: hasConfiguredPace(s.repeatRule, typeof s.pace === 'string' ? s.pace : null),
             paceNotConsumedAlert: s.paceNotConsumedAlert,
             unassignedThisMonth: s.unassignedThisMonth,
           };
@@ -1537,7 +1526,13 @@ function WeekHubInner() {
         if (!r.ok) return null;
         return (await r.json()) as {
           ok: true;
-          sites: Array<{ id: string; repeatRule: unknown; createdAt: string | Date; contactName?: string | null }>;
+          sites: Array<{
+            id: string;
+            pace?: string | null;
+            repeatRule: unknown;
+            createdAt: string | Date;
+            contactName?: string | null;
+          }>;
         };
       })
       .then((json) => {
@@ -1545,12 +1540,7 @@ function WeekHubInner() {
         const found = json.sites.find((s) => s.id === selectedSite.id);
         setSelectedSiteCreatedAt(found?.createdAt ? String(found.createdAt) : null);
         setContactNameInput(typeof found?.contactName === 'string' ? found.contactName : '');
-        const rr = (found?.repeatRule ?? null) as Partial<RepeatRule> | null;
-        setRepeatRule({
-          intervalMonths: typeof rr?.intervalMonths === 'number' ? rr.intervalMonths : 1,
-          weekdays: Array.isArray(rr?.weekdays) ? (rr!.weekdays as number[]) : [],
-          monthDays: Array.isArray(rr?.monthDays) ? (rr!.monthDays as number[]) : [],
-        });
+        setRepeatRule(buildRepeatRuleWithPace(found?.repeatRule ?? null, typeof found?.pace === 'string' ? found.pace : null));
       })
       .catch(() => {
         // ignore
@@ -1583,6 +1573,10 @@ function WeekHubInner() {
       }
     }
 
+    if (repeatRule.monthsOfYear.length > 0 && !repeatRule.monthsOfYear.includes(mm)) {
+      return { status: 'interval-mismatch' as const, targets: [] as string[] };
+    }
+
     const weekdays = repeatRule.weekdays ?? [];
     const monthDays = repeatRule.monthDays ?? [];
     if (weekdays.length === 0 && monthDays.length === 0) {
@@ -1597,7 +1591,7 @@ function WeekHubInner() {
       if (monthDays.includes(day) || weekdays.includes(wd)) targets.push(ymd);
     }
     return { status: 'ok' as const, targets };
-  }, [autoFillMonth, repeatRule.intervalMonths, repeatRule.weekdays, repeatRule.monthDays, selectedSite?.id, selectedSiteCreatedAt]);
+  }, [autoFillMonth, repeatRule.intervalMonths, repeatRule.monthsOfYear, repeatRule.weekdays, repeatRule.monthDays, selectedSite?.id, selectedSiteCreatedAt]);
 
   const autoFillUserIdByContact = useMemo(() => {
     const contact = contactNameInput.trim();

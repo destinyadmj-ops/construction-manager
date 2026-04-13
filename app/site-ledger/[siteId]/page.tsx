@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../../header-actions';
-
-type RepeatRule = {
-  intervalMonths: number;
-  weekdays: number[];
-  monthDays: number[];
-};
+import { buildRepeatRuleWithPace, formatPaceFromMonths, formatPaceText, parseRepeatRule, type RepeatRule } from '@/shared/pace';
 
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
 
@@ -53,20 +48,6 @@ function ymdInTokyo(d: Date) {
   } catch {
     return d.toISOString().slice(0, 10);
   }
-}
-
-function parseRepeatRule(x: unknown): RepeatRule {
-  const base: RepeatRule = { intervalMonths: 1, weekdays: [], monthDays: [] };
-  if (!x || typeof x !== 'object') return base;
-  const o = x as Record<string, unknown>;
-  const intervalMonths = typeof o.intervalMonths === 'number' ? o.intervalMonths : 1;
-  const weekdays = Array.isArray(o.weekdays) ? o.weekdays.filter((n) => typeof n === 'number') : [];
-  const monthDays = Array.isArray(o.monthDays) ? o.monthDays.filter((n) => typeof n === 'number') : [];
-  return {
-    intervalMonths: Math.min(12, Math.max(1, intervalMonths || 1)),
-    weekdays: weekdays.map((n) => Math.min(7, Math.max(1, n))).sort((a, b) => a - b),
-    monthDays: monthDays.map((n) => Math.min(31, Math.max(1, n))).sort((a, b) => a - b),
-  };
 }
 
 type ApiSite = {
@@ -174,12 +155,34 @@ export default function SiteLedgerDetailPage() {
   const [alertsEnabled, setAlertsEnabled] = useState(true);
 
   const [paceSettingOpen, setPaceSettingOpen] = useState(false);
-  const [repeatRule, setRepeatRule] = useState<RepeatRule>({ intervalMonths: 1, weekdays: [], monthDays: [] });
+  const [repeatRule, setRepeatRule] = useState<RepeatRule>({
+    intervalMonths: 1,
+    weekdays: [],
+    monthDays: [],
+    monthsOfYear: [],
+  });
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
   const canSave = useMemo(() => canEditSite && name.trim().length > 0 && !!siteId, [canEditSite, name, siteId]);
+
+  const updatePace = useCallback((nextValue: string) => {
+    setPace(nextValue);
+    setRepeatRule((current) => ({
+      ...current,
+      monthsOfYear: buildRepeatRuleWithPace(current, nextValue).monthsOfYear,
+    }));
+  }, []);
+
+  const commitPaceFormat = useCallback(() => {
+    const formatted = formatPaceText(pace);
+    setPace(formatted);
+    setRepeatRule((current) => ({
+      ...current,
+      monthsOfYear: buildRepeatRuleWithPace(current, formatted).monthsOfYear,
+    }));
+  }, [pace]);
 
   useEffect(() => {
     let mounted = true;
@@ -257,12 +260,15 @@ export default function SiteLedgerDetailPage() {
         throw new Error('Not found');
       }
 
+      const parsedRule = parseRepeatRule(parsed.repeatRule);
+      const formattedPace = formatPaceText(parsed.pace ?? formatPaceFromMonths(parsedRule.monthsOfYear));
+
       setSite(parsed);
       setCompanyName(parsed.companyName ?? '');
       setName(parsed.name);
       setAddress(parsed.address ?? '');
       setAmount(parsed.amount === null || parsed.amount === undefined ? '' : String(parsed.amount));
-      setPace(parsed.pace ?? '');
+      setPace(formattedPace);
       setPeopleCount(parsed.peopleCount === null || parsed.peopleCount === undefined ? '' : String(parsed.peopleCount));
       setDetail(parsed.detail ?? '');
       setCaution(parsed.caution ?? '');
@@ -270,7 +276,7 @@ export default function SiteLedgerDetailPage() {
       setThreshold(String(parsed.depreciationThreshold ?? 10));
       setAlertsEnabled(!!parsed.alertsEnabled);
 
-      setRepeatRule(parseRepeatRule(parsed.repeatRule));
+      setRepeatRule(parsedRule);
     } catch (e) {
       setSite(null);
       setStatusMsg(e instanceof Error ? `読み込みに失敗: ${e.message}` : '読み込みに失敗しました');
@@ -462,6 +468,8 @@ export default function SiteLedgerDetailPage() {
     if (!siteId) return;
     const nm = name.trim();
     if (!nm) return;
+    const normalizedPace = formatPaceText(pace);
+    const nextRepeatRule = buildRepeatRuleWithPace(repeatRule, normalizedPace);
 
     setStatusMsg(null);
     try {
@@ -474,7 +482,7 @@ export default function SiteLedgerDetailPage() {
           name: nm,
           companyName: companyName.trim() || null,
           address: address.trim() || null,
-          pace: pace.trim() || null,
+          pace: normalizedPace || null,
           amount: amount.trim() || null,
           peopleCount: (() => {
             const v = peopleCount.trim();
@@ -487,6 +495,7 @@ export default function SiteLedgerDetailPage() {
           scheduleLabelColor,
           depreciationThreshold: Number.isFinite(th) ? th : undefined,
           alertsEnabled: !!alertsEnabled,
+          repeatRule: nextRepeatRule,
         }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
@@ -494,12 +503,13 @@ export default function SiteLedgerDetailPage() {
       if (!r.ok || obj?.ok !== true) {
         throw new Error((obj?.error as string) || `HTTP ${r.status}`);
       }
+      setPace(normalizedPace);
       setStatusMsg('保存しました');
       await load();
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
-  }, [address, alertsEnabled, amount, caution, companyName, detail, load, name, pace, peopleCount, scheduleLabelColor, siteId, threshold]);
+  }, [address, alertsEnabled, amount, caution, companyName, detail, load, name, pace, peopleCount, repeatRule, scheduleLabelColor, siteId, threshold]);
 
   const remove = useCallback(async () => {
     if (!siteId || !site) return;
@@ -522,19 +532,22 @@ export default function SiteLedgerDetailPage() {
 
   const saveRepeatRule = useCallback(async () => {
     if (!siteId) return;
+    const normalizedPace = formatPaceText(pace);
+    const nextRepeatRule = buildRepeatRuleWithPace(repeatRule, normalizedPace);
     setIsSavingRule(true);
     setStatusMsg(null);
     try {
       const r = await fetch('/api/sites/repeat-rule', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ siteId, repeatRule }),
+        body: JSON.stringify({ siteId, pace: normalizedPace || null, repeatRule: nextRepeatRule }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
         throw new Error((obj?.error as string) || `HTTP ${r.status}`);
       }
+      setPace(normalizedPace);
       setStatusMsg('ペース（リピート）を保存しました');
       await load();
     } catch (e) {
@@ -542,7 +555,7 @@ export default function SiteLedgerDetailPage() {
     } finally {
       setIsSavingRule(false);
     }
-  }, [load, repeatRule, siteId]);
+  }, [load, pace, repeatRule, siteId]);
 
   useEffect(() => {
     void load();
@@ -651,18 +664,18 @@ export default function SiteLedgerDetailPage() {
 
         {!canEditSite ? (
           <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-            打刻と参照は利用できます。編集・削除・写真アップロードは編集権限保持者のみ利用できます。
+            金額は編集権限保持者のみに表示されます。編集・削除・写真アップロードは編集権限保持者のみ利用できます。
           </div>
         ) : null}
 
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
         {loading ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
 
-        <fieldset disabled={!canEditSite} className={!canEditSite ? 'opacity-60' : ''}>
         <div className="mt-4 space-y-2">
           <input
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="会社名（任意）"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
@@ -670,6 +683,7 @@ export default function SiteLedgerDetailPage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              readOnly={!canEditSite}
               placeholder="現場名"
               className="flex-1 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
             />
@@ -678,6 +692,7 @@ export default function SiteLedgerDetailPage() {
               <select
                 value={scheduleLabelColor}
                 onChange={(e) => setScheduleLabelColor(isSiteLabelColor(e.target.value) ? e.target.value : 'default')}
+                disabled={!canEditSite}
                 className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
               >
                 <option value="default">通常</option>
@@ -694,11 +709,12 @@ export default function SiteLedgerDetailPage() {
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="現場住所"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {!isMobile && (
+            {canEditSite && !isMobile ? (
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -706,13 +722,7 @@ export default function SiteLedgerDetailPage() {
                 inputMode="numeric"
                 className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
               />
-            )}
-            <input
-              value={pace}
-              onChange={(e) => setPace(e.target.value)}
-              placeholder="ペース"
-              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-            />
+            ) : null}
           </div>
 
           <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
@@ -722,6 +732,9 @@ export default function SiteLedgerDetailPage() {
                 <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                   月スパン/曜日/日付を指定して、当月の未消化判定に使います。
                 </div>
+                {pace ? (
+                  <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">月指定: {formatPaceText(pace)}</div>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -739,7 +752,7 @@ export default function SiteLedgerDetailPage() {
                   <select
                     value={repeatRule.intervalMonths}
                     onChange={(e) => setRepeatRule((r) => ({ ...r, intervalMonths: Number(e.target.value) || 1 }))}
-                    disabled={!siteId}
+                    disabled={!siteId || !canEditSite}
                     className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs disabled:opacity-60 dark:border-zinc-800 dark:bg-black"
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
@@ -748,6 +761,21 @@ export default function SiteLedgerDetailPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">ペース（月指定）</div>
+                  <input
+                    value={pace}
+                    onChange={(e) => updatePace(e.target.value)}
+                    onBlur={commitPaceFormat}
+                    readOnly={!canEditSite}
+                    placeholder="1月、3月、5月 / 毎月"
+                    className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                  />
+                  <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    1,3,5 のような入力でも保存時に 1月、3月、5月 へ整形します。
+                  </div>
                 </div>
 
                 <div>
@@ -760,6 +788,7 @@ export default function SiteLedgerDetailPage() {
                         <button
                           key={label}
                           type="button"
+                          disabled={!canEditSite}
                           onClick={() =>
                             setRepeatRule((r) => ({
                               ...r,
@@ -790,6 +819,7 @@ export default function SiteLedgerDetailPage() {
                         <button
                           key={n}
                           type="button"
+                          disabled={!canEditSite}
                           onClick={() =>
                             setRepeatRule((r) => ({
                               ...r,
@@ -813,7 +843,7 @@ export default function SiteLedgerDetailPage() {
 
                 <button
                   type="button"
-                  disabled={!siteId || isSavingRule}
+                  disabled={!siteId || isSavingRule || !canEditSite}
                   onClick={() => void saveRepeatRule()}
                   className="w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                 >
@@ -825,6 +855,7 @@ export default function SiteLedgerDetailPage() {
           <input
             value={peopleCount}
             onChange={(e) => setPeopleCount(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="人数"
             inputMode="numeric"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -832,6 +863,7 @@ export default function SiteLedgerDetailPage() {
           <textarea
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="詳細"
             rows={4}
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -839,6 +871,7 @@ export default function SiteLedgerDetailPage() {
           <textarea
             value={caution}
             onChange={(e) => setCaution(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="注意事項"
             rows={4}
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -847,6 +880,7 @@ export default function SiteLedgerDetailPage() {
           <input
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
+            readOnly={!canEditSite}
             placeholder="月回数"
             inputMode="numeric"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -857,6 +891,7 @@ export default function SiteLedgerDetailPage() {
               type="checkbox"
               checked={alertsEnabled}
               onChange={(e) => setAlertsEnabled(e.target.checked)}
+              disabled={!canEditSite}
               className="h-4 w-4"
             />
             アラートを有効にする（OFFで意図しないアラートを抑制）
@@ -873,7 +908,6 @@ export default function SiteLedgerDetailPage() {
             </button>
           </div>
         </div>
-        </fieldset>
       </div>
 
       <div className="mt-6">
