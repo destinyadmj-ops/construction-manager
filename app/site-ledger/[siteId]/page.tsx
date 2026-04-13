@@ -207,8 +207,15 @@ export default function SiteLedgerDetailPage() {
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
-  const canSave = useMemo(() => canEditSite && name.trim().length > 0 && !!siteId, [canEditSite, name, siteId]);
+  const hasEditPermission = useMemo(
+    () => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit),
+    [authMeUser],
+  );
+  const isDetailReadOnly = isMobile || !hasEditPermission;
+  const canSave = useMemo(() => !isMobile && hasEditPermission && name.trim().length > 0 && !!siteId, [hasEditPermission, isMobile, name, siteId]);
+  const canUploadPhotos = isMobile || hasEditPermission;
+  const canManageFolders = !isMobile && hasEditPermission;
+  const showAmountField = isMobile || hasEditPermission;
 
   const updatePace = useCallback((nextValue: string) => {
     setPace(nextValue);
@@ -655,9 +662,9 @@ export default function SiteLedgerDetailPage() {
   }, [month, siteId]);
 
   useEffect(() => {
-    setSaveAction(canEditSite ? { onClick: save, disabled: !canSave, title: '現場詳細を保存' } : undefined);
+    setSaveAction(!isMobile && hasEditPermission ? { onClick: save, disabled: !canSave, title: '現場詳細を保存' } : undefined);
     return () => setSaveAction(undefined);
-  }, [canEditSite, canSave, save, setSaveAction]);
+  }, [canSave, hasEditPermission, isMobile, save, setSaveAction]);
 
   return (
     <main className="mx-auto w-full max-w-screen-lg px-4 py-4 lg:px-6">
@@ -666,7 +673,7 @@ export default function SiteLedgerDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                {canEditSite ? '現場詳細（編集）' : '現場詳細'}
+                {isMobile ? '現場詳細（確認）' : hasEditPermission ? '現場詳細（編集）' : '現場詳細'}
               </h1>
               {monthAlert ? (
                 <div className="flex items-center gap-1">
@@ -692,7 +699,7 @@ export default function SiteLedgerDetailPage() {
             >
               一覧へ戻る
             </button>
-            {canEditSite ? (
+            {!isMobile && hasEditPermission ? (
               <button
                 type="button"
                 onClick={() => void save()}
@@ -705,7 +712,11 @@ export default function SiteLedgerDetailPage() {
           </div>
         </div>
 
-        {!canEditSite ? (
+        {isMobile ? (
+          <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+            スマホでは現場詳細は確認のみです。打刻と写真アップロードは利用できます。
+          </div>
+        ) : !hasEditPermission ? (
           <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
             金額は編集権限保持者のみに表示されます。編集・削除・写真アップロードは編集権限保持者のみ利用できます。
           </div>
@@ -718,7 +729,7 @@ export default function SiteLedgerDetailPage() {
           <input
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            readOnly={!canEditSite}
+            readOnly={isDetailReadOnly}
             placeholder="会社名（任意）"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
@@ -726,7 +737,7 @@ export default function SiteLedgerDetailPage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              readOnly={!canEditSite}
+              readOnly={isDetailReadOnly}
               placeholder="現場名"
               className="flex-1 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
             />
@@ -735,7 +746,7 @@ export default function SiteLedgerDetailPage() {
               <select
                 value={scheduleLabelColor}
                 onChange={(e) => setScheduleLabelColor(isSiteLabelColor(e.target.value) ? e.target.value : 'default')}
-                disabled={!canEditSite}
+                disabled={isDetailReadOnly}
                 className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
               >
                 <option value="default">通常</option>
@@ -752,15 +763,16 @@ export default function SiteLedgerDetailPage() {
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            readOnly={!canEditSite}
+            readOnly={isDetailReadOnly}
             placeholder="現場住所"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {canEditSite && !isMobile ? (
+            {showAmountField ? (
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                readOnly={isDetailReadOnly}
                 placeholder="金額"
                 inputMode="numeric"
                 className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -795,7 +807,7 @@ export default function SiteLedgerDetailPage() {
                   <select
                     value={repeatRule.intervalMonths}
                     onChange={(e) => setRepeatRule((r) => ({ ...r, intervalMonths: Number(e.target.value) || 1 }))}
-                    disabled={!siteId || !canEditSite}
+                    disabled={!siteId || isDetailReadOnly}
                     className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs disabled:opacity-60 dark:border-zinc-800 dark:bg-black"
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
@@ -812,7 +824,7 @@ export default function SiteLedgerDetailPage() {
                     value={pace}
                     onChange={(e) => updatePace(e.target.value)}
                     onBlur={commitPaceFormat}
-                    readOnly={!canEditSite}
+                    readOnly={isDetailReadOnly}
                     placeholder="1月、3月、5月 / 毎月"
                     className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                   />
@@ -831,7 +843,7 @@ export default function SiteLedgerDetailPage() {
                         <button
                           key={label}
                           type="button"
-                          disabled={!canEditSite}
+                          disabled={isDetailReadOnly}
                           onClick={() =>
                             setRepeatRule((r) => ({
                               ...r,
@@ -862,7 +874,7 @@ export default function SiteLedgerDetailPage() {
                         <button
                           key={n}
                           type="button"
-                          disabled={!canEditSite}
+                          disabled={isDetailReadOnly}
                           onClick={() =>
                             setRepeatRule((r) => ({
                               ...r,
@@ -886,7 +898,7 @@ export default function SiteLedgerDetailPage() {
 
                 <button
                   type="button"
-                  disabled={!siteId || isSavingRule || !canEditSite}
+                  disabled={!siteId || isSavingRule || isDetailReadOnly}
                   onClick={() => void saveRepeatRule()}
                   className="w-full rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                 >
@@ -900,7 +912,7 @@ export default function SiteLedgerDetailPage() {
               <input
                 value={peopleCount}
                 onChange={(e) => setPeopleCount(e.target.value.replace(/[^\d]/g, ''))}
-                readOnly={!canEditSite}
+                readOnly={isDetailReadOnly}
                 placeholder="人数"
                 inputMode="numeric"
                 size={Math.max(peopleCount.length, 2)}
@@ -912,7 +924,7 @@ export default function SiteLedgerDetailPage() {
           <textarea
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
-            readOnly={!canEditSite}
+            readOnly={isDetailReadOnly}
             placeholder="詳細"
             rows={4}
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -920,7 +932,7 @@ export default function SiteLedgerDetailPage() {
           <textarea
             value={caution}
             onChange={(e) => setCaution(e.target.value)}
-            readOnly={!canEditSite}
+            readOnly={isDetailReadOnly}
             placeholder="注意事項"
             rows={4}
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -929,7 +941,7 @@ export default function SiteLedgerDetailPage() {
           <input
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
-            readOnly={!canEditSite}
+            readOnly={isDetailReadOnly}
             placeholder="月回数"
             inputMode="numeric"
             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -940,7 +952,7 @@ export default function SiteLedgerDetailPage() {
               type="checkbox"
               checked={alertsEnabled}
               onChange={(e) => setAlertsEnabled(e.target.checked)}
-              disabled={!canEditSite}
+              disabled={isDetailReadOnly}
               className="h-4 w-4"
             />
             アラートを有効にする（OFFで意図しないアラートを抑制）
@@ -950,7 +962,7 @@ export default function SiteLedgerDetailPage() {
             <button
               type="button"
               onClick={() => void remove()}
-              disabled={!site || !canEditSite}
+              disabled={!site || !hasEditPermission || isMobile}
               className="mh-btn-danger"
             >
               削除
@@ -1141,7 +1153,7 @@ export default function SiteLedgerDetailPage() {
           </div>
         </div>
 
-        {canEditSite ? (
+        {canManageFolders ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
@@ -1163,7 +1175,7 @@ export default function SiteLedgerDetailPage() {
           <div className="mt-3 flex flex-col gap-2">
             <button
               type="button"
-              disabled={!canEditSite || photoBusy || !siteId}
+              disabled={!canUploadPhotos || photoBusy || !siteId}
               onClick={() => {
                 try {
                   photoInputRef.current?.click();
@@ -1180,7 +1192,7 @@ export default function SiteLedgerDetailPage() {
               type="file"
               accept="image/*"
               multiple
-              disabled={!canEditSite}
+              disabled={!canUploadPhotos}
               onChange={(e) => {
                 const files = e.target.files;
                 setPhotoFiles(files);
@@ -1190,7 +1202,7 @@ export default function SiteLedgerDetailPage() {
               className="hidden"
             />
             <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              {canEditSite ? 'ファイルを選択すると自動でアップロードします。' : '写真アップロードは編集権限保持者のみ利用できます。'}
+              {canUploadPhotos ? 'ファイルを選択すると自動でアップロードします。' : '写真アップロードは編集権限保持者のみ利用できます。'}
             </div>
           </div>
           <div className="mt-3">

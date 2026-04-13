@@ -3,6 +3,11 @@ import { cookies } from 'next/headers';
 
 const COOKIE_NAME = 'masterHub.uid';
 
+export function isMobileRequest(request: Request): boolean {
+  const userAgent = (request.headers.get('user-agent') ?? '').toLowerCase();
+  return /android|iphone|ipad|ipod|mobile/.test(userAgent);
+}
+
 function isAdminRequest(request: Request): boolean {
   const token = process.env.ADMIN_TOKEN;
   if (!token) return process.env.NODE_ENV !== 'production';
