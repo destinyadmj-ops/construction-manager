@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const siteId = (url.searchParams.get('siteId') ?? '').trim();
   const month = (url.searchParams.get('month') ?? '').trim();
+  const entryKind = (url.searchParams.get('kind') ?? '').trim().toLowerCase() === 'daily' ? 'DAILY' : 'NORMAL';
 
   if (!siteId) {
     return Response.json({ ok: false, error: 'siteId is required' }, { status: 400 });
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
     const count = await prisma.workEntry.count({
       where: {
         siteId,
+        kind: entryKind,
         startAt: { gte: since, lt: until },
       },
     });
