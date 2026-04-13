@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -84,6 +85,9 @@ const UploadQuerySchema = z
   .partial();
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
+
   const userId = await requireUser();
   if (!userId) return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 

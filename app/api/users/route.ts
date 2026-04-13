@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -6,12 +7,6 @@ export const runtime = 'nodejs';
 const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, max-age=0, must-revalidate',
 };
-
-function isAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
 
 function toReadableDbErrorMessage(error: unknown): string {
   const msg = error instanceof Error ? error.message : 'DB unavailable';
@@ -75,9 +70,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const json = await request.json().catch(() => null);
   const parsed = CreateSchema.safeParse(json ?? {});
@@ -121,9 +115,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const json = await request.json().catch(() => null);
   const parsed = UpdateSchema.safeParse(json ?? {});
@@ -156,9 +149,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const url = new URL(request.url);
   const idFromQuery = (url.searchParams.get('id') ?? '').trim();

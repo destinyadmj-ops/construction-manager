@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   return cellPost(
     new Request(request.url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: request.headers,
       body: JSON.stringify({
         userId: parsed.data.userId,
         day: parsed.data.day,

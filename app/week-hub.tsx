@@ -16,6 +16,12 @@ type CellBg = 'default' | 'soft';
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
+type AuthMeUser = {
+  id: string;
+  canEditSchedule: boolean;
+  canGrantScheduleEdit: boolean;
+};
+
 type ApiCell = {
   // Up to 2 slots. Each slot is a short label.
   slot1: string | null;
@@ -214,6 +220,7 @@ function WeekHubInner() {
   const [editConfigured, setEditConfigured] = useState(false);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editActive, setEditActive] = useState(false);
+  const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editPasswordMsg, setEditPasswordMsg] = useState<string | null>(null);
@@ -301,6 +308,7 @@ function WeekHubInner() {
 
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
   const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
+  const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
 
   const gridPrefsKey = useMemo(() => {
     return `week-hub:${scheduleKind}:${mode}:gridPrefs`;
@@ -479,6 +487,32 @@ function WeekHubInner() {
       })
       .catch(() => {
         // ignore
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/me')
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as unknown;
+        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!mounted || o?.ok !== true) return;
+        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
+        if (!raw || typeof raw.id !== 'string') {
+          setAuthMeUser(null);
+          return;
+        }
+        setAuthMeUser({
+          id: raw.id,
+          canEditSchedule: raw.canEditSchedule === true,
+          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
+        });
+      })
+      .catch(() => {
+        if (mounted) setAuthMeUser(null);
       });
     return () => {
       mounted = false;
@@ -671,7 +705,21 @@ function WeekHubInner() {
     return null;
   }, [pickSiteFromInput, selectedSite, showCellActionMsg]);
 
-  const cellActionButtons = (
+  const openSiteDetailFromCell = useCallback(
+    (siteName: string) => {
+      const site = resolveSiteFromText(siteName);
+      if (!site?.id) {
+        showCellActionMsg('該当する現場詳細を開けませんでした');
+        return;
+      }
+      const sp = new URLSearchParams({ kind: scheduleKind });
+      if (selectedUserId) sp.set('userId', selectedUserId);
+      router.push(`/site-ledger/${encodeURIComponent(site.id)}?${sp.toString()}#punch`);
+    },
+    [resolveSiteFromText, router, scheduleKind, selectedUserId, showCellActionMsg],
+  );
+
+  const cellActionButtons = hasScheduleEditPermission ? (
     <div className="ml-1 flex items-center gap-1">
       <span className="text-xs text-zinc-500 dark:text-zinc-400">セル操作</span>
       <div className="flex max-w-[60vw] items-center gap-1 overflow-x-auto">
@@ -823,7 +871,7 @@ function WeekHubInner() {
         ) : null}
       </div>
     </div>
-  );
+  ) : null;
   const modeTabsRef = useRef<HTMLDivElement | null>(null);
   const [selectedSiteCreatedAt, setSelectedSiteCreatedAt] = useState<string | null>(null);
   const [newSiteName, setNewSiteName] = useState('');
@@ -1788,14 +1836,30 @@ function WeekHubInner() {
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (!editActive && reorderMode) setReorderMode(false);
+  }, [editActive, reorderMode]);
+
+  useEffect(() => {
+    if (!hasScheduleEditPermission) {
+      setEditActive(false);
+      setReorderMode(false);
+      setShowEditPassword(false);
+    }
+  }, [hasScheduleEditPermission]);
+
   const beginEdit = useCallback(() => {
     setEditPasswordMsg(null);
+    if (!hasScheduleEditPermission) {
+      showCellActionMsg('編集権限がありません');
+      return;
+    }
     if (editEnabled) {
       setEditActive(true);
       return;
     }
     setShowEditPassword(true);
-  }, [editEnabled]);
+  }, [editEnabled, hasScheduleEditPermission, showCellActionMsg]);
 
   const submitEditPassword = useCallback(async () => {
     setEditPasswordMsg(null);
@@ -1824,8 +1888,14 @@ function WeekHubInner() {
   useEffect(() => {
     setAddAction({
       onClick: beginEdit,
-      disabled: editActive,
-      title: editEnabled ? '編集を開始' : editConfigured ? '編集（パスワード）' : '編集',
+      disabled: editActive || !hasScheduleEditPermission,
+      title: !hasScheduleEditPermission
+        ? '編集権限がありません'
+        : editEnabled
+          ? '編集を開始'
+          : editConfigured
+            ? '編集（パスワード）'
+            : '編集',
     });
 
     setSaveAction(
@@ -1861,7 +1931,18 @@ function WeekHubInner() {
       setSaveAction(undefined);
       setHistoryMenu(undefined);
     };
-  }, [beginEdit, editActive, editConfigured, editEnabled, setAddAction, setHistoryMenu, setSaveAction, undoStack, userLabelById]);
+  }, [
+    beginEdit,
+    editActive,
+    editConfigured,
+    editEnabled,
+    hasScheduleEditPermission,
+    setAddAction,
+    setHistoryMenu,
+    setSaveAction,
+    undoStack,
+    userLabelById,
+  ]);
 
   useEffect(() => {
     const canUndo = undoStack.length > 0 && !isUndoRedoBusy;
@@ -1919,14 +2000,17 @@ function WeekHubInner() {
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
                 OK
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowEditPassword(false);
-                  setEditPassword('');
-                  setEditPasswordMsg(null);
-                }}
+              {hasScheduleEditPermission ? (
+                <button
+                  type="button"
+                  onClick={() => setReorderMode((v) => !v)}
+                  disabled={!editActive}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  aria-pressed={reorderMode}
+                >
+                  {reorderMode ? '並べ替え: ON' : '並べ替え'}
+                </button>
+              ) : null}
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
                 キャンセル
@@ -2132,6 +2216,13 @@ function WeekHubInner() {
                     選択中の現場をもう一度クリックで詳細へ
                   </div>
 
+                {!hasScheduleEditPermission ? (
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+                    現場追加、ペース設定、自動入力は編集権限保持者のみ利用できます。
+                  </div>
+                ) : null}
+
+                <fieldset disabled={!hasScheduleEditPermission} className={!hasScheduleEditPermission ? 'opacity-60' : ''}>
                 <div
                   id="site-ledger"
                   className="mt-3 scroll-mt-20 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
@@ -2529,6 +2620,7 @@ function WeekHubInner() {
                     ) : null}
                   </div>
                 </div>
+                </fieldset>
                 </div>
               </div>
 
@@ -2552,6 +2644,7 @@ function WeekHubInner() {
                   onToday={() => setCursorDate(new Date())}
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
+                  onOpenSiteFromCell={openSiteDetailFromCell}
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
@@ -2821,6 +2914,7 @@ function WeekHubInner() {
                   cellBg={cellBg}
                   selectedSite={selectedSite}
                   onEnsureSite={ensureSelectedSite}
+                  onOpenSiteFromCell={openSiteDetailFromCell}
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
@@ -3117,6 +3211,13 @@ function WeekHubInner() {
                 </button>
               </div>
 
+              {!hasScheduleEditPermission ? (
+                <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+                  この現場の編集は、編集権限保持者のみ利用できます。
+                </div>
+              ) : null}
+
+              <fieldset disabled={!hasScheduleEditPermission} className={!hasScheduleEditPermission ? 'opacity-60' : ''}>
               <div className="mt-4 rounded-md border border-zinc-200 bg-white px-3 py-3 text-xs dark:border-zinc-800 dark:bg-black">
                 <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">担当者</div>
                 <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -3293,6 +3394,7 @@ function WeekHubInner() {
                 現場ID: {selectedSite?.id ?? '（なし）'}
                 {selectedSiteCreatedAt ? ` / 作成: ${String(selectedSiteCreatedAt).slice(0, 10)}` : ''}
               </div>
+              </fieldset>
             </div>
           </div>
         ) : null}
@@ -3319,6 +3421,7 @@ function WeekGrid({
   onToday,
   selectedSite,
   onEnsureSite,
+  onOpenSiteFromCell,
   cellClickAction,
   cellTextColor,
   isEditable,
@@ -3363,6 +3466,7 @@ function WeekGrid({
   onToday: () => void;
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
+  onOpenSiteFromCell: (siteName: string) => void;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
@@ -3598,6 +3702,7 @@ function WeekGrid({
                   scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
                   onEnsureSite={onEnsureSite}
+                  onOpenSiteFromCell={onOpenSiteFromCell}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
@@ -3633,7 +3738,7 @@ function WeekGrid({
             })
           )}
 
-          <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} />
+          {isEditable ? <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} /> : null}
         </div>
       </div>
     </div>
@@ -3656,6 +3761,7 @@ function MonthGrid({
   cellBg,
   selectedSite,
   onEnsureSite,
+  onOpenSiteFromCell,
   cellClickAction,
   cellTextColor,
   isEditable,
@@ -3686,6 +3792,7 @@ function MonthGrid({
   cellBg: CellBg;
   selectedSite: SiteItem | null;
   onEnsureSite: () => Promise<SiteItem | null>;
+  onOpenSiteFromCell: (siteName: string) => void;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
@@ -3887,6 +3994,7 @@ function MonthGrid({
                   scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
                   onEnsureSite={onEnsureSite}
+                  onOpenSiteFromCell={onOpenSiteFromCell}
                   selectedUserId={selectedUserId}
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
@@ -3911,7 +4019,7 @@ function MonthGrid({
             })
           )}
 
-          <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} />
+          {isEditable ? <AddUserRow dayLabels={dayLabels} cellMinH={cellMinH} onCreateUser={onCreateUser} /> : null}
         </div>
       </div>
     </div>
@@ -4259,6 +4367,7 @@ function Row({
   scheduleKind,
   selectedSite,
   onEnsureSite,
+  onOpenSiteFromCell,
   selectedUserId,
   cellClickAction,
   cellTextColor,
@@ -4297,6 +4406,7 @@ function Row({
   scheduleKind: ScheduleKind;
   selectedSite: SiteItem | null;
   onEnsureSite?: () => Promise<SiteItem | null>;
+  onOpenSiteFromCell?: (siteName: string) => void;
   selectedUserId: string | null;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
@@ -4329,6 +4439,40 @@ function Row({
   suggestionLoading?: boolean;
 }) {
   const isSelectedUser = selectedUserId === user.id;
+
+  const renderSlotLabel = useCallback(
+    (
+      value: string | null,
+      color: 'default' | 'red',
+      className: string,
+      fontSize: string,
+    ) => {
+      if (!value) return <div className={className} style={{ fontSize }} />;
+      if (!onOpenSiteFromCell) {
+        return (
+          <div className={className} style={{ fontSize }}>
+            {value}
+          </div>
+        );
+      }
+      return (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenSiteFromCell(value);
+          }}
+          className={`${className} w-full text-left hover:underline`}
+          style={{ fontSize }}
+          title="現場詳細を開く"
+        >
+          {value}
+        </button>
+      );
+    },
+    [onOpenSiteFromCell],
+  );
 
   const formatCellActionReason = (
     reason: unknown,
@@ -4545,9 +4689,10 @@ function Row({
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
 
         return (
-          <button
+          <div
             key={d.key}
-            type="button"
+            role="button"
+            tabIndex={0}
             data-testid={`cell-${user.id}-${d.key}`}
             data-cell-day={d.key}
             draggable={isEditable && Boolean(slot1 || slot2)}
@@ -4628,6 +4773,30 @@ function Row({
               setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
               setEditingInput?.(slot1 ?? '');
               setSiteSuggestions?.([]);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              if (!isEditable) {
+                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
+                return;
+              }
+              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
+                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+                setEditingInput?.(slot1 ?? '');
+                setSiteSuggestions?.([]);
+                onSetSelectedCell?.(null);
+              } else if (selectedSite || cellClickAction === 'swap') {
+                const beforeFallback: CellSlots = [slot1, slot2];
+                void runCellAction({
+                  day: d.key,
+                  action: cellClickAction,
+                  color: cellTextColor,
+                  beforeFallback,
+                });
+              } else {
+                onSetSelectedCell?.({ userId: user.id, day: d.key });
+              }
             }}
             className={`border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
               isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
@@ -4728,26 +4897,26 @@ function Row({
               ) : (
                 // 通常表示
                 <>
-                  <div
-                    className={`whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                  {renderSlotLabel(
+                    slot1,
+                    c1,
+                    `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                       c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
-                    }`}
-                    style={{ fontSize: 'var(--weekhub-cell-font-size, 12px)' }}
-                  >
-                    {slot1 ?? ''}
-                  </div>
-                  <div
-                    className={`mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                    }`,
+                    'var(--weekhub-cell-font-size, 12px)',
+                  )}
+                  {renderSlotLabel(
+                    slot2,
+                    c2,
+                    `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                       c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
-                    }`}
-                    style={{ fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)' }}
-                  >
-                    {slot2 ?? ''}
-                  </div>
+                    }`,
+                    'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
+                  )}
                 </>
               )}
             </div>
-          </button>
+          </div>
         );
       })}
     </>

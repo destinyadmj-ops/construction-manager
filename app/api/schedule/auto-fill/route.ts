@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -40,6 +41,9 @@ function monthIndex(yy: number, mm1to12: number) {
 
 export async function POST(request: Request) {
   try {
+    const authError = await requireScheduleEditor(request);
+    if (authError) return authError;
+
     const json = await request.json().catch(() => null);
     const parsed = BodySchema.safeParse(json ?? {});
     if (!parsed.success) {

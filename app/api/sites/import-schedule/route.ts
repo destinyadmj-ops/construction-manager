@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import {
   backfillSiteCompanyName,
   ensurePartnerByName,
@@ -10,12 +11,6 @@ import { z } from 'zod';
 import * as XLSX from 'xlsx';
 
 export const runtime = 'nodejs';
-
-function isAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
 
 const QuerySchema = z
   .object({
@@ -221,9 +216,8 @@ function extractSiteRowsFromGrid(grid: unknown[][]) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const url = new URL(request.url);
   const parsedQuery = QuerySchema.safeParse(Object.fromEntries(url.searchParams.entries()));

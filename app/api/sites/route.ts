@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import {
   backfillSiteCompanyName,
   ensurePartnerByName,
@@ -104,12 +105,6 @@ const UpdateSchema = z
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
   })
   .strict();
-
-function isAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
 
 export async function GET(request: Request) {
   try {
@@ -217,9 +212,8 @@ export async function GET(request: Request) {
 
 // Minimal helper for creating sites without Prisma Studio.
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const json = await request.json().catch(() => null);
 
