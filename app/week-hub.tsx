@@ -63,6 +63,10 @@ type SiteItem = {
   reportIssuedThisMonth?: boolean;
   paceNotConsumedAlert?: boolean;
   unassignedThisMonth?: boolean;
+  pace?: string | null;
+  repeatRule?: unknown;
+  contactName?: string | null;
+  createdAt?: string | null;
 };
 
 type CellSlots = [string | null, string | null];
@@ -453,30 +457,14 @@ function WeekHubInner() {
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/auth/edit-mode')
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as unknown;
-        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!mounted) return;
-        if (o?.ok !== true) return;
-        setEditConfigured(o?.configured === true);
-        setEditEnabled(o?.enabled === true);
-      })
-      .catch(() => {
-        // ignore
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     fetch('/api/auth/me')
       .then(async (r) => {
         const j = (await r.json().catch(() => null)) as unknown;
         const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
         if (!mounted || o?.ok !== true) return;
+        const editMode = o.editMode && typeof o.editMode === 'object' ? (o.editMode as Record<string, unknown>) : null;
+        setEditConfigured(editMode?.configured === true);
+        setEditEnabled(editMode ? editMode.enabled === true : true);
         const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
         if (!raw || typeof raw.id !== 'string') {
           setAuthMeUser(null);
@@ -1167,16 +1155,29 @@ function WeekHubInner() {
             id: string;
             companyName?: string | null;
             name: string;
+            contactName?: string | null;
+            createdAt?: string;
+            depreciationThreshold?: number;
+            alertsEnabled?: boolean;
             invoiceIssuedThisMonth?: boolean;
             reportIssuedThisMonth?: boolean;
             repeatRule?: unknown;
             pace?: string | null;
             paceExpectedThisMonth?: number;
+            paceActualThisMonth?: number;
             paceNotConsumedAlert?: boolean;
             unassignedThisMonth?: boolean;
           }>;
         };
         if (!json?.ok) return;
+        const nextDeprMap: Record<string, { count: number; threshold: number; alert: boolean }> = {};
+        for (const s of json.sites) {
+          const count = typeof s.paceActualThisMonth === 'number' ? s.paceActualThisMonth : 0;
+          const threshold = typeof s.depreciationThreshold === 'number' ? s.depreciationThreshold : 10;
+          const alertsEnabled = s.alertsEnabled ?? true;
+          nextDeprMap[s.id] = { count, threshold, alert: alertsEnabled ? count >= threshold : false };
+        }
+        setSiteDeprMap(nextDeprMap);
         setSites(json.sites.map((s) => {
           const label = s.companyName ? `${s.companyName} / ${s.name}` : s.name;
           return {
@@ -1188,6 +1189,10 @@ function WeekHubInner() {
             reportIssuedThisMonth: s.reportIssuedThisMonth,
             paceNotConsumedAlert: s.paceNotConsumedAlert,
             unassignedThisMonth: s.unassignedThisMonth,
+            pace: s.pace,
+            repeatRule: s.repeatRule,
+            contactName: typeof s.contactName === 'string' ? s.contactName : null,
+            createdAt: typeof s.createdAt === 'string' ? s.createdAt : null,
           };
         }));
         return;
@@ -1479,79 +1484,43 @@ function WeekHubInner() {
       }
     };
 
-    const timer = window.setTimeout(() => {
-      void loadScheduleSites();
-    }, 350);
+    const win = window as Window & typeof globalThis & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    let timer: number | null = null;
+    let idleHandle: number | null = null;
+
+    if (typeof win.requestIdleCallback === 'function') {
+      idleHandle = win.requestIdleCallback(() => {
+        void loadScheduleSites();
+      }, { timeout: 1500 });
+    } else {
+      timer = window.setTimeout(() => {
+        void loadScheduleSites();
+      }, 1000);
+    }
 
     return () => {
       controller.abort();
-      window.clearTimeout(timer);
+      if (timer !== null) window.clearTimeout(timer);
+      if (idleHandle !== null && typeof win.cancelIdleCallback === 'function') {
+        win.cancelIdleCallback(idleHandle);
+      }
     };
   }, [kindQuery]);
 
   useEffect(() => {
-    const ids = sites.map((s) => s.id).filter((x): x is string => Boolean(x));
-    if (ids.length === 0) {
-      setSiteDeprMap({});
+    if (!selectedSite?.id) {
+      setSelectedSiteCreatedAt(null);
+      setContactNameInput('');
       return;
     }
-
-    const controller = new AbortController();
-    fetch(`/api/sites/depreciation-counts?month=${encodeURIComponent(deprMonth)}&${kindQuery}`, {
-      signal: controller.signal,
-    })
-      .then(async (r) => {
-        const json = (await r.json().catch(() => null)) as
-          | {
-              ok: true;
-              month: string;
-              items: Array<{ siteId: string; count: number; threshold: number; alert: boolean }>;
-            }
-          | { ok: false; error?: string }
-          | null;
-        if (!r.ok || !json || !json.ok) return;
-        const next: Record<string, { count: number; threshold: number; alert: boolean }> = {};
-        for (const it of json.items) {
-          next[it.siteId] = { count: it.count, threshold: it.threshold, alert: it.alert };
-        }
-        setSiteDeprMap(next);
-      })
-      .catch(() => {
-        // ignore
-      });
-
-    return () => controller.abort();
-  }, [deprMonth, kindQuery, sites]);
-
-  useEffect(() => {
-    if (!selectedSite?.id) return;
-    const controller = new AbortController();
-    fetch('/api/sites', { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) return null;
-        return (await r.json()) as {
-          ok: true;
-          sites: Array<{
-            id: string;
-            pace?: string | null;
-            repeatRule: unknown;
-            createdAt: string | Date;
-            contactName?: string | null;
-          }>;
-        };
-      })
-      .then((json) => {
-        if (!json?.ok) return;
-        const found = json.sites.find((s) => s.id === selectedSite.id);
-        setSelectedSiteCreatedAt(found?.createdAt ? String(found.createdAt) : null);
-        setContactNameInput(typeof found?.contactName === 'string' ? found.contactName : '');
-        setRepeatRule(buildRepeatRuleWithPace(found?.repeatRule ?? null, typeof found?.pace === 'string' ? found.pace : null));
-      })
-      .catch(() => {
-        // ignore
-      });
-    return () => controller.abort();
-  }, [selectedSite?.id]);
+    setSelectedSiteCreatedAt(selectedSite.createdAt ? String(selectedSite.createdAt) : null);
+    setContactNameInput(typeof selectedSite.contactName === 'string' ? selectedSite.contactName : '');
+    setRepeatRule(buildRepeatRuleWithPace(selectedSite.repeatRule ?? null, typeof selectedSite.pace === 'string' ? selectedSite.pace : null));
+  }, [selectedSite]);
 
   const autoFillPreview = useMemo(() => {
     if (!selectedSite?.id) {

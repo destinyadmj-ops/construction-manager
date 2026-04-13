@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/prisma';
 import { canRestoreUserLogin, rememberUserLoginDevice } from '@/server/auth/login-memory';
+import { getCookieName as getEditModeCookieName, isEditModeConfigured, validateEditCookieValue } from '@/server/auth/edit-mode';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -30,15 +31,17 @@ export async function GET() {
   try {
     const jar = await cookies();
     const userId = (jar.get(COOKIE_NAME)?.value ?? '').trim();
-    if (!userId) return Response.json({ ok: true, user: null });
+    const editConfigured = isEditModeConfigured();
+    const editEnabled = editConfigured ? validateEditCookieValue(jar.get(getEditModeCookieName())?.value) : true;
+    if (!userId) return Response.json({ ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } });
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, email: true, kind: true, canEditSchedule: true, canGrantScheduleEdit: true },
     });
 
-    if (!user) return Response.json({ ok: true, user: null });
-    return Response.json({ ok: true, user });
+    if (!user) return Response.json({ ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } });
+    return Response.json({ ok: true, user, editMode: { configured: editConfigured, enabled: editEnabled } });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
