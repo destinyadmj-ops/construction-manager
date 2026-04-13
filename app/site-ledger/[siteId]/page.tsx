@@ -870,14 +870,19 @@ export default function SiteLedgerDetailPage() {
               </div>
             ) : null}
           </div>
-          <input
-            value={peopleCount}
-            onChange={(e) => setPeopleCount(e.target.value)}
-            readOnly={!canEditSite}
-            placeholder="人数"
-            inputMode="numeric"
-            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-          />
+          <div className="relative">
+            <input
+              value={peopleCount}
+              onChange={(e) => setPeopleCount(e.target.value)}
+              readOnly={!canEditSite}
+              placeholder="人数"
+              inputMode="numeric"
+              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 pr-8 text-xs dark:border-zinc-800 dark:bg-black"
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-zinc-500 dark:text-zinc-400">
+              人
+            </span>
+          </div>
           <textarea
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
