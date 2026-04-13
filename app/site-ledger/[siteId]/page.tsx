@@ -53,26 +53,68 @@ function ymdInTokyo(d: Date) {
 const IMPORT_DETAIL_SECTION_START = '【定期スケジュール取込】';
 const IMPORT_DETAIL_SECTION_END = '【/定期スケジュール取込】';
 
-function normalizeImportedDetailMarkers(value: string | null | undefined) {
-  if (typeof value !== 'string') return '';
-  const lines = value.replace(/\r\n?/g, '\n').split('\n');
-  const normalized: string[] = [];
-  let lastMarker: string | null = null;
+function normalizeDetailText(value: string | null | undefined) {
+  return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : '';
+}
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === IMPORT_DETAIL_SECTION_START || trimmed === IMPORT_DETAIL_SECTION_END) {
-      if (lastMarker === trimmed) continue;
-      lastMarker = trimmed;
-      normalized.push(trimmed);
-      continue;
-    }
+function stripImportedDetailMarkerLines(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value);
+  if (!normalized) return '';
+  return normalized
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed !== IMPORT_DETAIL_SECTION_START && trimmed !== IMPORT_DETAIL_SECTION_END;
+    })
+    .join('\n')
+    .trim();
+}
 
-    lastMarker = null;
-    normalized.push(line);
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function splitDetailForEditor(value: string | null | undefined) {
+  const normalized = normalizeDetailText(value);
+  if (!normalized) {
+    return { visible: '', importedBody: '' };
   }
 
-  return normalized.join('\n').trim();
+  const blockPattern = new RegExp(
+    `${escapeRegExp(IMPORT_DETAIL_SECTION_START)}\\n?([\\s\\S]*?)\\n?${escapeRegExp(IMPORT_DETAIL_SECTION_END)}`,
+    'g',
+  );
+
+  const importedBodies: string[] = [];
+  const manualWithoutBlocks = normalized.replace(blockPattern, (_match, body: string) => {
+    const cleaned = stripImportedDetailMarkerLines(body);
+    if (cleaned) importedBodies.push(cleaned);
+    return '';
+  });
+
+  const manual = stripImportedDetailMarkerLines(manualWithoutBlocks);
+  const importedBody = importedBodies.join('\n\n').trim();
+  const visible = [manual, importedBody].filter(Boolean).join('\n\n').trim();
+
+  return { visible, importedBody };
+}
+
+function buildDetailForSave(visibleValue: string, importedBodyValue: string) {
+  const visible = stripImportedDetailMarkerLines(visibleValue);
+  const importedBody = stripImportedDetailMarkerLines(importedBodyValue);
+  if (!importedBody) return visible;
+  if (!visible) {
+    return `${IMPORT_DETAIL_SECTION_START}\n${importedBody}\n${IMPORT_DETAIL_SECTION_END}`;
+  }
+
+  const index = visible.lastIndexOf(importedBody);
+  if (index < 0) return visible;
+
+  const before = normalizeDetailText(visible.slice(0, index));
+  const after = normalizeDetailText(visible.slice(index + importedBody.length));
+  const wrappedImported = `${IMPORT_DETAIL_SECTION_START}\n${importedBody}\n${IMPORT_DETAIL_SECTION_END}`;
+
+  return [before, wrappedImported, after].filter(Boolean).join('\n\n').trim();
 }
 
 function formatClockTimeTokyo(value: string | null) {
@@ -192,6 +234,7 @@ export default function SiteLedgerDetailPage() {
   const [pace, setPace] = useState('');
   const [peopleCount, setPeopleCount] = useState('');
   const [detail, setDetail] = useState('');
+  const [detailImportedBody, setDetailImportedBody] = useState('');
   const [caution, setCaution] = useState('');
   const [scheduleLabelColor, setScheduleLabelColor] = useState<SiteLabelColor>('default');
   const [threshold, setThreshold] = useState('10');
@@ -320,7 +363,9 @@ export default function SiteLedgerDetailPage() {
       setAmount(parsed.amount === null || parsed.amount === undefined ? '' : String(parsed.amount));
       setPace(formattedPace);
       setPeopleCount(parsed.peopleCount === null || parsed.peopleCount === undefined ? '' : String(parsed.peopleCount));
-      setDetail(normalizeImportedDetailMarkers(parsed.detail));
+      const detailParts = splitDetailForEditor(parsed.detail);
+      setDetail(detailParts.visible);
+      setDetailImportedBody(detailParts.importedBody);
       setCaution(parsed.caution ?? '');
       setScheduleLabelColor(isSiteLabelColor(parsed.scheduleLabelColor) ? parsed.scheduleLabelColor : 'default');
       setThreshold(String(parsed.depreciationThreshold ?? 10));
@@ -540,7 +585,7 @@ export default function SiteLedgerDetailPage() {
             const n = Number(v);
             return Number.isFinite(n) ? n : null;
           })(),
-          detail: normalizeImportedDetailMarkers(detail) || null,
+          detail: buildDetailForSave(detail, detailImportedBody) || null,
           caution: caution.trim() || null,
           scheduleLabelColor,
           depreciationThreshold: Number.isFinite(th) ? th : undefined,
@@ -559,7 +604,7 @@ export default function SiteLedgerDetailPage() {
     } catch (e) {
       setStatusMsg(e instanceof Error ? `保存に失敗: ${e.message}` : '保存に失敗しました');
     }
-  }, [address, alertsEnabled, amount, caution, companyName, detail, load, name, pace, peopleCount, repeatRule, scheduleLabelColor, siteId, threshold]);
+  }, [address, alertsEnabled, amount, caution, companyName, detail, detailImportedBody, load, name, pace, peopleCount, repeatRule, scheduleLabelColor, siteId, threshold]);
 
   const remove = useCallback(async () => {
     if (!siteId || !site) return;
