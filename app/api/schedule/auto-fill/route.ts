@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { buildAutoFillTargets } from '@/shared/pace';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -8,6 +9,7 @@ const BodySchema = z
   .object({
     userId: z.string().min(1),
     siteId: z.string().min(1),
+    kind: z.enum(['NORMAL', 'DAILY']).optional(),
     month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
     days: z
       .array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
@@ -30,15 +32,6 @@ function toYmd(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function getWeekdayMon1Sun7(d: Date): number {
-  const dow0Sun = d.getDay();
-  return dow0Sun === 0 ? 7 : dow0Sun;
-}
-
-function monthIndex(yy: number, mm1to12: number) {
-  return yy * 12 + (mm1to12 - 1);
-}
-
 export async function POST(request: Request) {
   try {
     const authError = await requireScheduleEditor(request);
@@ -53,7 +46,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { userId, siteId, month, days } = parsed.data;
+    const { userId, siteId, kind, month, days } = parsed.data;
+    const workEntryKind = kind ?? 'NORMAL';
 
     if ((!month || month.length === 0) && (!days || days.length === 0)) {
       return Response.json({ ok: false, error: 'month or days is required' }, { status: 400 });
@@ -64,7 +58,7 @@ export async function POST(request: Request) {
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      select: { id: true, name: true, repeatRule: true, createdAt: true },
+      select: { id: true, name: true, pace: true, repeatRule: true, createdAt: true },
     });
     if (!site) return Response.json({ ok: false, error: 'Site not found' }, { status: 404 });
 
@@ -74,30 +68,19 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: 'month or days is required' }, { status: 400 });
     }
 
-    const [yy, mm] = monthToUse.split('-').map((x) => Number(x));
-    const monthStart = new Date(yy, mm - 1, 1, 0, 0, 0, 0);
-    const nextMonth = new Date(yy, mm, 1, 0, 0, 0, 0);
+    const preview = buildAutoFillTargets({
+      rule: site.repeatRule,
+      pace: site.pace,
+      month: monthToUse,
+      anchorDate: site.createdAt,
+      days: normalizedDays,
+    });
 
-    const rr = (site.repeatRule ?? null) as
-      | {
-          intervalMonths?: number;
-          weekdays?: number[];
-          monthDays?: number[];
-        }
-      | null;
+    if (preview.status === 'invalid-month') {
+      return Response.json({ ok: false, error: 'month must be YYYY-MM' }, { status: 400 });
+    }
 
-    const intervalMonthsRaw = typeof rr?.intervalMonths === 'number' ? rr!.intervalMonths : 1;
-    const intervalMonths =
-      Number.isFinite(intervalMonthsRaw) && intervalMonthsRaw >= 1 ? intervalMonthsRaw : 1;
-
-    const weekdays = Array.isArray(rr?.weekdays) ? rr!.weekdays : [];
-    const monthDays = Array.isArray(rr?.monthDays) ? rr!.monthDays : [];
-
-  // Apply intervalMonths using the Site.createdAt month as an anchor.
-  // Example: createdAt in Dec (diff=0) with intervalMonths=2 => Dec/Feb/... are active; Jan is not.
-    const anchor = new Date(site.createdAt);
-    const diff = monthIndex(yy, mm) - monthIndex(anchor.getFullYear(), anchor.getMonth() + 1);
-    if (intervalMonths > 1 && ((diff % intervalMonths) + intervalMonths) % intervalMonths !== 0) {
+    if (preview.status === 'interval-mismatch') {
       return Response.json({
         ok: true,
         created: 0,
@@ -106,9 +89,13 @@ export async function POST(request: Request) {
       });
     }
 
-    if (weekdays.length === 0 && monthDays.length === 0) {
+    if (preview.status === 'no-repeat') {
       return Response.json({ ok: true, created: 0, skipped: 0, reason: 'リピート条件が未設定です' });
     }
+
+    const [yy, mm] = monthToUse.split('-').map((x) => Number(x));
+    const monthStart = new Date(yy, mm - 1, 1, 0, 0, 0, 0);
+    const nextMonth = new Date(yy, mm, 1, 0, 0, 0, 0);
 
     const existingRange = normalizedDays
       ? {
@@ -125,6 +112,7 @@ export async function POST(request: Request) {
       where: {
         userId,
         siteId,
+        kind: workEntryKind,
         startAt: existingRange,
       },
       select: { startAt: true },
@@ -132,23 +120,7 @@ export async function POST(request: Request) {
 
     const existingDays = new Set(existing.map((e) => toYmd(e.startAt)));
 
-    const targets: string[] = [];
-    if (normalizedDays) {
-      for (const ymd of normalizedDays) {
-        const d = startOfDayLocal(ymd);
-        const dayNum = d.getDate();
-        const weekday = getWeekdayMon1Sun7(d);
-        const matches = monthDays.includes(dayNum) || weekdays.includes(weekday);
-        if (matches) targets.push(ymd);
-      }
-    } else {
-      for (let d = new Date(monthStart); d < nextMonth; d.setDate(d.getDate() + 1)) {
-        const dayNum = d.getDate();
-        const weekday = getWeekdayMon1Sun7(d);
-        const matches = monthDays.includes(dayNum) || weekdays.includes(weekday);
-        if (matches) targets.push(toYmd(d));
-      }
-    }
+    const targets = preview.targets;
 
     const toCreate = targets.filter((ymd) => !existingDays.has(ymd));
 
@@ -160,6 +132,7 @@ export async function POST(request: Request) {
       data: toCreate.map((ymd) => ({
         userId,
         siteId,
+        kind: workEntryKind,
         startAt: startOfDayLocal(ymd),
         summary: site.name,
         accountingMeta: { siteName: site.name },

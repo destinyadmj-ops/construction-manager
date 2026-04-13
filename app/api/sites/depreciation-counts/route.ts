@@ -11,6 +11,7 @@ function startOfDay(d: Date) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const month = (url.searchParams.get('month') ?? '').trim();
+  const entryKind = (url.searchParams.get('kind') ?? '').trim().toLowerCase() === 'daily' ? 'DAILY' : 'NORMAL';
 
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return Response.json({ ok: false, error: 'month must be YYYY-MM' }, { status: 400 });
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
 
   try {
     const sites = await prisma.site.findMany({
+      where: { kind: entryKind },
       orderBy: [{ companyName: 'asc' }, { name: 'asc' }],
       take: 1000,
       select: { id: true, depreciationThreshold: true, alertsEnabled: true },
@@ -35,6 +37,7 @@ export async function GET(request: Request) {
             by: ['siteId'],
             where: {
               siteId: { in: ids },
+              kind: entryKind,
               startAt: { gte: since, lt: until },
             },
             _count: { _all: true },

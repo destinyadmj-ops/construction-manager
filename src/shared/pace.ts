@@ -97,10 +97,119 @@ export function parseRepeatRule(value: unknown): RepeatRule {
 
 export function buildRepeatRuleWithPace(rule: unknown, pace: string | null | undefined): RepeatRule {
   const parsed = parseRepeatRule(rule);
+  const paceMonths = parsePaceMonths(pace);
   return {
     ...parsed,
-    monthsOfYear: parsePaceMonths(pace),
+    monthsOfYear: paceMonths.length > 0 ? paceMonths : parsed.monthsOfYear,
   };
+}
+
+function monthIndexFromYearMonth(yy: number, mm1to12: number) {
+  return yy * 12 + (mm1to12 - 1);
+}
+
+function isMonthActiveForRule(rule: RepeatRule, yy: number, mm1to12: number, anchorDate?: Date | string | null) {
+  if (rule.monthsOfYear.length > 0 && !rule.monthsOfYear.includes(mm1to12)) {
+    return false;
+  }
+
+  if (rule.intervalMonths > 1 && anchorDate) {
+    const anchor = new Date(anchorDate);
+    if (!Number.isNaN(anchor.getTime())) {
+      const diff = monthIndexFromYearMonth(yy, mm1to12) - monthIndex(anchor);
+      if (((diff % rule.intervalMonths) + rule.intervalMonths) % rule.intervalMonths !== 0) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function parseMonthKey(month: string | null | undefined) {
+  const normalized = normalizeText(month);
+  if (!/^\d{4}-\d{2}$/.test(normalized)) return null;
+
+  const [yyStr, mmStr] = normalized.split('-');
+  const yy = Number(yyStr);
+  const mm = Number(mmStr);
+  if (!Number.isFinite(yy) || !Number.isFinite(mm) || mm < 1 || mm > 12) return null;
+  return { yy, mm };
+}
+
+function normalizeCandidateDays(days: string[] | null | undefined) {
+  if (!Array.isArray(days)) return [] as string[];
+  return Array.from(new Set(days.filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)))).sort();
+}
+
+export type AutoFillTargetStatus = 'invalid-month' | 'interval-mismatch' | 'no-repeat' | 'ok';
+
+export function buildAutoFillTargets(options: {
+  rule: unknown;
+  pace?: string | null;
+  month?: string | null;
+  anchorDate?: Date | string | null;
+  days?: string[] | null;
+}) {
+  const mergedRule = buildRepeatRuleWithPace(options.rule, options.pace);
+  const weekdays = mergedRule.weekdays ?? [];
+  const monthDays = mergedRule.monthDays ?? [];
+
+  if (weekdays.length === 0 && monthDays.length === 0) {
+    return { status: 'no-repeat' as AutoFillTargetStatus, targets: [] as string[] };
+  }
+
+  const candidateDays = normalizeCandidateDays(options.days);
+  if (candidateDays.length > 0) {
+    const targets: string[] = [];
+    let hasActiveMonth = false;
+
+    for (const ymd of candidateDays) {
+      const date = new Date(`${ymd}T00:00:00`);
+      if (Number.isNaN(date.getTime())) continue;
+
+      const yy = date.getFullYear();
+      const mm = date.getMonth() + 1;
+      if (!isMonthActiveForRule(mergedRule, yy, mm, options.anchorDate)) continue;
+
+      hasActiveMonth = true;
+      const monthDay = date.getDate();
+      const jsDow = date.getDay();
+      const weekday = jsDow === 0 ? 7 : jsDow;
+      if (monthDays.includes(monthDay) || weekdays.includes(weekday)) {
+        targets.push(ymd);
+      }
+    }
+
+    if (!hasActiveMonth) {
+      return { status: 'interval-mismatch' as AutoFillTargetStatus, targets: [] as string[] };
+    }
+
+    return { status: 'ok' as AutoFillTargetStatus, targets };
+  }
+
+  const parsedMonth = parseMonthKey(options.month);
+  if (!parsedMonth) {
+    return { status: 'invalid-month' as AutoFillTargetStatus, targets: [] as string[] };
+  }
+
+  if (!isMonthActiveForRule(mergedRule, parsedMonth.yy, parsedMonth.mm, options.anchorDate)) {
+    return { status: 'interval-mismatch' as AutoFillTargetStatus, targets: [] as string[] };
+  }
+
+  const dim = new Date(parsedMonth.yy, parsedMonth.mm, 0).getDate();
+  const targets: string[] = [];
+  for (let day = 1; day <= dim; day += 1) {
+    const ymd = `${parsedMonth.yy}-${String(parsedMonth.mm).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const date = new Date(`${ymd}T00:00:00`);
+    const jsDow = date.getDay();
+    const weekday = jsDow === 0 ? 7 : jsDow;
+    if (monthDays.includes(day) || weekdays.includes(weekday)) {
+      targets.push(ymd);
+    }
+  }
+
+  return { status: 'ok' as AutoFillTargetStatus, targets };
 }
 
 function monthIndex(date: Date) {
