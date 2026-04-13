@@ -3,6 +3,24 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+function formatClockTimeTokyo(value: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(11, 16) || '—';
+  }
+  try {
+    return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  } catch {
+    return value.slice(11, 16) || '—';
+  }
+}
+
 type InvoiceSearchItem = {
   siteId: string;
   siteLabel: string;
@@ -134,7 +152,7 @@ export default function SiteFoldersPage() {
                 return (
                   <div key={emp.id} className="mb-1">
                     {emp.name}：
-                    {clocks.length === 0 ? '（打刻なし）' : clocks.map(tc => `IN:${tc.inAt.slice(11,16)}${tc.outAt ? ' / OUT:' + tc.outAt.slice(11,16) : ''}${tc.note ? ' / ' + tc.note : ''}`).join(' , ')}
+                    {clocks.length === 0 ? '（打刻なし）' : clocks.map(tc => `IN:${formatClockTimeTokyo(tc.inAt)}${tc.outAt ? ' / OUT:' + formatClockTimeTokyo(tc.outAt) : ''}${tc.note ? ' / ' + tc.note : ''}`).join(' , ')}
                   </div>
                 );
               })}

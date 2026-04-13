@@ -50,6 +50,24 @@ function ymdInTokyo(d: Date) {
   }
 }
 
+function formatClockTimeTokyo(value: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(11, 16) || '—';
+  }
+  try {
+    return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  } catch {
+    return value.slice(11, 16) || '—';
+  }
+}
+
 type ApiSite = {
   id: string;
   companyName: string | null;
@@ -1050,7 +1068,7 @@ export default function SiteLedgerDetailPage() {
                     className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black/60"
                   >
                     <div className="min-w-0 flex-1 truncate">
-                      入: {t.inAt.slice(11, 16)} / 出: {t.outAt ? t.outAt.slice(11, 16) : '—'}
+                      入: {formatClockTimeTokyo(t.inAt)} / 出: {formatClockTimeTokyo(t.outAt)}
                       {t.note ? ` / ${t.note}` : ''}
                     </div>
                   </div>
