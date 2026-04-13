@@ -308,7 +308,8 @@ export default function SiteLedgerDetailPage() {
     setStatusMsg(null);
     setLoading(true);
     try {
-      const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}`);
+      const query = month ? `?month=${encodeURIComponent(month)}` : '';
+      const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}${query}`);
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -355,6 +356,9 @@ export default function SiteLedgerDetailPage() {
 
       const parsedRule = parseRepeatRule(parsed.repeatRule);
       const formattedPace = formatPaceText(parsed.pace ?? formatPaceFromMonths(parsedRule.monthsOfYear));
+      const rawMonthAlert = obj?.monthAlert && typeof obj.monthAlert === 'object'
+        ? (obj.monthAlert as Record<string, unknown>)
+        : null;
 
       setSite(parsed);
       setCompanyName(parsed.companyName ?? '');
@@ -370,15 +374,25 @@ export default function SiteLedgerDetailPage() {
       setScheduleLabelColor(isSiteLabelColor(parsed.scheduleLabelColor) ? parsed.scheduleLabelColor : 'default');
       setThreshold(String(parsed.depreciationThreshold ?? 10));
       setAlertsEnabled(!!parsed.alertsEnabled);
+      setMonthAlert(
+        rawMonthAlert
+          ? {
+              invoiceMissing: rawMonthAlert.invoiceMissing === true,
+              reportMissing: rawMonthAlert.reportMissing === true,
+              unassigned: rawMonthAlert.unassigned === true,
+            }
+          : null,
+      );
 
       setRepeatRule(parsedRule);
     } catch (e) {
       setSite(null);
+      setMonthAlert(null);
       setStatusMsg(e instanceof Error ? `読み込みに失敗: ${e.message}` : '読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [month, siteId]);
   const loadFolder = useCallback(async () => {
     if (!siteId) return;
     setFolderBusy(true);
@@ -666,45 +680,6 @@ export default function SiteLedgerDetailPage() {
     );
     setIsMobile(isMobileDevice);
   }, []);
-
-  useEffect(() => {
-    const m = month;
-    if (!m || !siteId) {
-      setMonthAlert(null);
-      return;
-    }
-    let canceled = false;
-    async function run(monthStr: string) {
-      try {
-        const r = await fetch(`/api/sites?month=${encodeURIComponent(monthStr)}`, { cache: 'no-store' });
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) {
-          if (!canceled) setMonthAlert(null);
-          return;
-        }
-        const sites = Array.isArray(obj.sites) ? (obj.sites as Array<Record<string, unknown>>) : [];
-        const found = sites.find((x) => x?.id === siteId);
-        if (!canceled) {
-          setMonthAlert(
-            found
-              ? {
-                  invoiceMissing: found.invoiceIssuedThisMonth === false,
-                  reportMissing: found.reportIssuedThisMonth === false,
-                  unassigned: found.unassignedThisMonth === true,
-                }
-              : null,
-          );
-        }
-      } catch {
-        if (!canceled) setMonthAlert(null);
-      }
-    }
-    void run(m);
-    return () => {
-      canceled = true;
-    };
-  }, [month, siteId]);
 
   useEffect(() => {
     setSaveAction(!isMobile && hasEditPermission ? { onClick: save, disabled: !canSave, title: '現場詳細を保存' } : undefined);
