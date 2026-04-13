@@ -53,6 +53,7 @@ type SiteItem = {
   label: string;
   invoiceIssuedThisMonth?: boolean;
   reportIssuedThisMonth?: boolean;
+  paceConfigured?: boolean;
   paceNotConsumedAlert?: boolean;
   unassignedThisMonth?: boolean;
 };
@@ -166,6 +167,26 @@ function depreciationBadgeClass(alert: boolean) {
       ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200'
       : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
   }`;
+}
+
+function hasConfiguredRepeatRule(rule: unknown) {
+  if (!rule || typeof rule !== 'object') return false;
+  const value = rule as { weekdays?: unknown; monthDays?: unknown };
+  const weekdays = Array.isArray(value.weekdays) ? value.weekdays.filter((item) => typeof item === 'number') : [];
+  const monthDays = Array.isArray(value.monthDays) ? value.monthDays.filter((item) => typeof item === 'number') : [];
+  return weekdays.length > 0 || monthDays.length > 0;
+}
+
+function PaceConfiguredBadge() {
+  return (
+    <span
+      className="inline-flex h-4 shrink-0 items-center rounded-md border border-sky-200 bg-sky-50 px-1 text-[9px] font-medium leading-none text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-200"
+      title="ペース設定済み"
+      aria-label="ペース設定済み"
+    >
+      ペ
+    </span>
+  );
 }
 
 export default function WeekHub() {
@@ -1109,6 +1130,7 @@ function WeekHubInner() {
             name: string;
             invoiceIssuedThisMonth?: boolean;
             reportIssuedThisMonth?: boolean;
+            repeatRule?: unknown;
             paceNotConsumedAlert?: boolean;
             unassignedThisMonth?: boolean;
           }>;
@@ -1121,6 +1143,7 @@ function WeekHubInner() {
             label,
             invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
             reportIssuedThisMonth: s.reportIssuedThisMonth,
+            paceConfigured: hasConfiguredRepeatRule(s.repeatRule),
             paceNotConsumedAlert: s.paceNotConsumedAlert,
             unassignedThisMonth: s.unassignedThisMonth,
           };
@@ -2018,8 +2041,11 @@ function WeekHubInner() {
                               } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1 truncate">
-                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                <div className="min-w-0 flex flex-1 items-center gap-1">
+                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
+                                  <span className="truncate">
+                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                  </span>
                                   {s.label.includes('!') ? (
                                     <span className="ml-2 text-red-600 dark:text-red-400">!</span>
                                   ) : null}
@@ -2684,8 +2710,11 @@ function WeekHubInner() {
                               } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1 truncate">
-                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                <div className="min-w-0 flex flex-1 items-center gap-1">
+                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
+                                  <span className="truncate">
+                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                  </span>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
@@ -2942,8 +2971,11 @@ function WeekHubInner() {
                               } ${editActive ? 'cursor-move' : ''}`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1 truncate">
-                                  {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                <div className="min-w-0 flex flex-1 items-center gap-1">
+                                  {s.paceConfigured ? <PaceConfiguredBadge /> : null}
+                                  <span className="truncate">
+                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
+                                  </span>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
                                   {s.invoiceIssuedThisMonth === false ? (
