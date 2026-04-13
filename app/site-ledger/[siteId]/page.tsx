@@ -118,6 +118,12 @@ type TimeClockItem = {
   note: string | null;
 };
 
+type AuthMeUser = {
+  id: string;
+  canEditSchedule: boolean;
+  canGrantScheduleEdit: boolean;
+};
+
 export default function SiteLedgerDetailPage() {
   const { setSaveAction } = useHeaderActions();
   const router = useRouter();
@@ -136,6 +142,7 @@ export default function SiteLedgerDetailPage() {
 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
   const [site, setSite] = useState<ApiSite | null>(null);
   const [monthAlert, setMonthAlert] = useState<SiteMonthAlert | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -171,7 +178,34 @@ export default function SiteLedgerDetailPage() {
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const canSave = useMemo(() => name.trim().length > 0 && !!siteId, [name, siteId]);
+  const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
+  const canSave = useMemo(() => canEditSite && name.trim().length > 0 && !!siteId, [canEditSite, name, siteId]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/me')
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as unknown;
+        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!mounted || o?.ok !== true) return;
+        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
+        if (!raw || typeof raw.id !== 'string') {
+          setAuthMeUser(null);
+          return;
+        }
+        setAuthMeUser({
+          id: raw.id,
+          canEditSchedule: raw.canEditSchedule === true,
+          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
+        });
+      })
+      .catch(() => {
+        if (mounted) setAuthMeUser(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -565,9 +599,9 @@ export default function SiteLedgerDetailPage() {
   }, [month, siteId]);
 
   useEffect(() => {
-    setSaveAction({ onClick: save, disabled: !canSave, title: '現場詳細を保存' });
+    setSaveAction(canEditSite ? { onClick: save, disabled: !canSave, title: '現場詳細を保存' } : undefined);
     return () => setSaveAction(undefined);
-  }, [canSave, save, setSaveAction]);
+  }, [canEditSite, canSave, save, setSaveAction]);
 
   return (
     <main className="mx-auto w-full max-w-screen-lg px-4 py-4 lg:px-6">
@@ -575,7 +609,9 @@ export default function SiteLedgerDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">現場詳細（編集）</h1>
+              <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                {canEditSite ? '現場詳細（編集）' : '現場詳細'}
+              </h1>
               {monthAlert ? (
                 <div className="flex items-center gap-1">
                   {monthAlert.invoiceMissing ? (
@@ -600,20 +636,29 @@ export default function SiteLedgerDetailPage() {
             >
               一覧へ戻る
             </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={!canSave}
-              className="mh-btn-primary"
-            >
-              保存
-            </button>
+            {canEditSite ? (
+              <button
+                type="button"
+                onClick={() => void save()}
+                disabled={!canSave}
+                className="mh-btn-primary"
+              >
+                保存
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {!canEditSite ? (
+          <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+            打刻と参照は利用できます。編集・削除・写真アップロードは編集権限保持者のみ利用できます。
+          </div>
+        ) : null}
 
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
         {loading ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
 
+        <fieldset disabled={!canEditSite} className={!canEditSite ? 'opacity-60' : ''}>
         <div className="mt-4 space-y-2">
           <input
             value={companyName}
@@ -821,13 +866,14 @@ export default function SiteLedgerDetailPage() {
             <button
               type="button"
               onClick={() => void remove()}
-              disabled={!site}
+              disabled={!site || !canEditSite}
               className="mh-btn-danger"
             >
               削除
             </button>
           </div>
         </div>
+        </fieldset>
       </div>
 
       <div className="mt-6">
@@ -1012,52 +1058,17 @@ export default function SiteLedgerDetailPage() {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-xs text-white hover:bg-blue-600"
-            onClick={() => router.push(`/site-ledger/${encodeURIComponent(siteId)}/folders`)}
-          >
-            フォルダ管理
-          </button>
-        </div>
-        {/* 打刻UI: 出勤/退勤ボタン・履歴表示 */}
-        <div className="mt-3 rounded-md border border-zinc-200 bg-white/60 px-3 py-3 dark:border-zinc-800 dark:bg-black/60">
-          <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">打刻</div>
-          <div className="mt-2 flex gap-2">
+        {canEditSite ? (
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={punchBusy || !siteId}
-              onClick={() => {/* 出勤打刻処理: 実装はAPI連携 */}}
-              className="rounded-md border border-green-400 bg-green-50 px-3 py-2 text-xs text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-xs text-white hover:bg-blue-600"
+              onClick={() => router.push(`/site-ledger/${encodeURIComponent(siteId)}/folders`)}
             >
-              出勤
-            </button>
-            <button
-              type="button"
-              disabled={punchBusy || !siteId}
-              onClick={() => {/* 退勤打刻処理: 実装はAPI連携 */}}
-              className="rounded-md border border-blue-400 bg-blue-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              退勤
+              フォルダ管理
             </button>
           </div>
-          <div className="mt-3">
-            {timeClocks.length === 0 ? (
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">本日の打刻履歴はありません。</div>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {timeClocks.map((tc) => (
-                  <div key={tc.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-green-700">出勤: {tc.inAt}</span>
-                    {tc.outAt && <span className="text-blue-700">退勤: {tc.outAt}</span>}
-                    {tc.note && <span className="text-zinc-500">({tc.note})</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        ) : null}
 
         <div
           id="photos"
@@ -1069,7 +1080,7 @@ export default function SiteLedgerDetailPage() {
           <div className="mt-3 flex flex-col gap-2">
             <button
               type="button"
-              disabled={photoBusy || !siteId}
+              disabled={!canEditSite || photoBusy || !siteId}
               onClick={() => {
                 try {
                   photoInputRef.current?.click();
@@ -1086,6 +1097,7 @@ export default function SiteLedgerDetailPage() {
               type="file"
               accept="image/*"
               multiple
+              disabled={!canEditSite}
               onChange={(e) => {
                 const files = e.target.files;
                 setPhotoFiles(files);
@@ -1094,7 +1106,9 @@ export default function SiteLedgerDetailPage() {
               }}
               className="hidden"
             />
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">ファイルを選択すると自動でアップロードします。</div>
+            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              {canEditSite ? 'ファイルを選択すると自動でアップロードします。' : '写真アップロードは編集権限保持者のみ利用できます。'}
+            </div>
           </div>
           <div className="mt-3">
             {folderBusy ? (
