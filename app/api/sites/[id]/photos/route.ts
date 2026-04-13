@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/prisma';
-import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { canCurrentUserEditSchedule, isMobileRequest } from '@/server/auth/schedule-edit';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -85,8 +85,10 @@ const UploadQuerySchema = z
   .partial();
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authError = await requireScheduleEditor(request);
-  if (authError) return authError;
+  const canUpload = isMobileRequest(request) || (await canCurrentUserEditSchedule(request));
+  if (!canUpload) {
+    return Response.json({ ok: false, error: 'Edit permission required' }, { status: 403 });
+  }
 
   const userId = await requireUser();
   if (!userId) return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });

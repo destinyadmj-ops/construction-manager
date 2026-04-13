@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/prisma';
-import { canCurrentUserEditSchedule, requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { canCurrentUserEditSchedule, isMobileRequest, requireScheduleEditor } from '@/server/auth/schedule-edit';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +10,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   }
 
   try {
-    const canViewAmount = await canCurrentUserEditSchedule(request);
+    const canViewAmount = isMobileRequest(request) || (await canCurrentUserEditSchedule(request));
 
     const site = await prisma.site.findUnique({
       where: { id },
