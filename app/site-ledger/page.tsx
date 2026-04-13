@@ -431,11 +431,12 @@ export default function SiteLedgerPage() {
         if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
         const created = typeof obj?.created === 'number' ? (obj.created as number) : 0;
         const matched = typeof obj?.matched === 'number' ? (obj.matched as number) : 0;
+        const updated = typeof obj?.updated === 'number' ? (obj.updated as number) : 0;
         const total = typeof obj?.total === 'number' ? (obj.total as number) : 0;
         const partnersCreated = typeof obj?.partnersCreated === 'number' ? (obj.partnersCreated as number) : 0;
         const companyBackfilled = typeof obj?.companyBackfilled === 'number' ? (obj.companyBackfilled as number) : 0;
         setImportMsg(
-          `予定取り込み: 現場 ${created}件追加 / 既存 ${matched}件 / 会社 ${partnersCreated}件連携 / 会社補完 ${companyBackfilled}件 / ${total}件抽出`,
+          `予定取り込み: 現場 ${created}件追加 / 既存 ${matched}件 / 詳細更新 ${updated}件 / 会社 ${partnersCreated}件連携 / 会社補完 ${companyBackfilled}件 / ${total}件抽出`,
         );
         await loadSites();
       } catch (e) {
@@ -616,7 +617,7 @@ export default function SiteLedgerPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">現場台帳</div>
-            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">現場名で検索して詳細へ移動できます。Excel 取込は請求先=会社名、件名=現場名です。</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">現場名で検索して詳細へ移動できます。Excel 取込は請求先=会社名、件名=現場名、人数=人数欄、作業月=ペース、条件1-4/種別=詳細です。</div>
             {importMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{importMsg}</div> : null}
           </div>
 
@@ -639,7 +640,7 @@ export default function SiteLedgerPage() {
                   disabled={isImporting}
                   onClick={() => importInputRef.current?.click()}
                   className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  title="予定表（Excel）の請求先/件名から会社と現場を取り込み"
+                  title="予定表（Excel）の請求先/件名/人数/作業月/条件/種別を現場詳細へ取り込み"
                 >
                   予定取り込み
                 </button>
