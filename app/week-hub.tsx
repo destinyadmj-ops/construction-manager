@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
-import { buildRepeatRuleWithPace, type RepeatRule } from '@/shared/pace';
+import { buildAutoFillTargets, buildRepeatRuleWithPace, type RepeatRule } from '@/shared/pace';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -143,14 +143,6 @@ function addDays(input: Date, days: number) {
   const d = new Date(input);
   d.setDate(d.getDate() + days);
   return d;
-}
-
-function monthIndex(yy: number, mm1to12: number) {
-  return yy * 12 + (mm1to12 - 1);
-}
-
-function daysInMonth(yy: number, mm1to12: number) {
-  return new Date(yy, mm1to12, 0).getDate();
 }
 
 function weekdayMon1Sun7FromYmd(ymd: string): number {
@@ -1548,46 +1540,12 @@ function WeekHubInner() {
     if (!selectedSite?.id) {
       return { status: 'no-site' as const, targets: [] as string[] };
     }
-
-    const [yyStr, mmStr] = autoFillMonth.split('-');
-    const yy = Number(yyStr);
-    const mm = Number(mmStr);
-    if (!Number.isFinite(yy) || !Number.isFinite(mm) || mm < 1 || mm > 12) {
-      return { status: 'invalid-month' as const, targets: [] as string[] };
-    }
-
-    const intervalMonths =
-      Number.isFinite(repeatRule.intervalMonths) && repeatRule.intervalMonths >= 1
-        ? repeatRule.intervalMonths
-        : 1;
-
-    if (intervalMonths > 1 && selectedSiteCreatedAt) {
-      const anchor = new Date(selectedSiteCreatedAt);
-      const diff = monthIndex(yy, mm) - monthIndex(anchor.getFullYear(), anchor.getMonth() + 1);
-      if (((diff % intervalMonths) + intervalMonths) % intervalMonths !== 0) {
-        return { status: 'interval-mismatch' as const, targets: [] as string[] };
-      }
-    }
-
-    if (repeatRule.monthsOfYear.length > 0 && !repeatRule.monthsOfYear.includes(mm)) {
-      return { status: 'interval-mismatch' as const, targets: [] as string[] };
-    }
-
-    const weekdays = repeatRule.weekdays ?? [];
-    const monthDays = repeatRule.monthDays ?? [];
-    if (weekdays.length === 0 && monthDays.length === 0) {
-      return { status: 'no-repeat' as const, targets: [] as string[] };
-    }
-
-    const dim = daysInMonth(yy, mm);
-    const targets: string[] = [];
-    for (let day = 1; day <= dim; day += 1) {
-      const ymd = `${yy}-${pad2(mm)}-${pad2(day)}`;
-      const wd = weekdayMon1Sun7FromYmd(ymd);
-      if (monthDays.includes(day) || weekdays.includes(wd)) targets.push(ymd);
-    }
-    return { status: 'ok' as const, targets };
-  }, [autoFillMonth, repeatRule.intervalMonths, repeatRule.monthsOfYear, repeatRule.weekdays, repeatRule.monthDays, selectedSite?.id, selectedSiteCreatedAt]);
+    return buildAutoFillTargets({
+      rule: repeatRule,
+      month: autoFillMonth,
+      anchorDate: selectedSiteCreatedAt,
+    });
+  }, [autoFillMonth, repeatRule, selectedSite?.id, selectedSiteCreatedAt]);
 
   const autoFillUserIdByContact = useMemo(() => {
     const contact = contactNameInput.trim();
@@ -1631,6 +1589,26 @@ function WeekHubInner() {
       };
     });
   }, [monthData]);
+
+  const weekVisiblePaceTargets = useMemo(() => {
+    if (!selectedSite?.id || !effectiveAutoFillUserId) return new Set<string>();
+    const result = buildAutoFillTargets({
+      rule: repeatRule,
+      days: dayLabels.map((day) => day.key),
+      anchorDate: selectedSiteCreatedAt,
+    });
+    return new Set(result.status === 'ok' ? result.targets : []);
+  }, [dayLabels, effectiveAutoFillUserId, repeatRule, selectedSite?.id, selectedSiteCreatedAt]);
+
+  const monthVisiblePaceTargets = useMemo(() => {
+    if (!selectedSite?.id || !effectiveAutoFillUserId) return new Set<string>();
+    const result = buildAutoFillTargets({
+      rule: repeatRule,
+      days: monthDayLabels.map((day) => day.key),
+      anchorDate: selectedSiteCreatedAt,
+    });
+    return new Set(result.status === 'ok' ? result.targets : []);
+  }, [effectiveAutoFillUserId, monthDayLabels, repeatRule, selectedSite?.id, selectedSiteCreatedAt]);
 
   const monthWeekTabs = useMemo(() => {
     const monthStart = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
@@ -2628,6 +2606,8 @@ function WeekHubInner() {
                   onNextMonth={goNextMonth}
                   onToday={() => setCursorDate(new Date())}
                   selectedSite={selectedSite}
+                  paceTargetDays={weekVisiblePaceTargets}
+                  paceTargetUserId={effectiveAutoFillUserId}
                   onEnsureSite={ensureSelectedSite}
                   onOpenSiteFromCell={openSiteDetailFromCell}
                   cellClickAction={cellClickAction}
@@ -2897,6 +2877,8 @@ function WeekHubInner() {
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
                   selectedSite={selectedSite}
+                  paceTargetDays={monthVisiblePaceTargets}
+                  paceTargetUserId={effectiveAutoFillUserId}
                   onEnsureSite={ensureSelectedSite}
                   onOpenSiteFromCell={openSiteDetailFromCell}
                   cellClickAction={cellClickAction}
@@ -3403,6 +3385,8 @@ function WeekGrid({
   onNextMonth,
   onToday,
   selectedSite,
+  paceTargetDays,
+  paceTargetUserId,
   onEnsureSite,
   onOpenSiteFromCell,
   cellClickAction,
@@ -3448,6 +3432,8 @@ function WeekGrid({
   onNextMonth: () => void;
   onToday: () => void;
   selectedSite: SiteItem | null;
+  paceTargetDays: ReadonlySet<string>;
+  paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   onOpenSiteFromCell: (siteName: string) => void;
   cellClickAction: CellClickAction;
@@ -3684,6 +3670,8 @@ function WeekGrid({
                   apiKind={apiKind}
                   scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
+                  paceTargetDays={paceTargetDays}
+                  paceTargetUserId={paceTargetUserId}
                   onEnsureSite={onEnsureSite}
                   onOpenSiteFromCell={onOpenSiteFromCell}
                   selectedUserId={selectedUserId}
@@ -3743,6 +3731,8 @@ function MonthGrid({
   cellMinHComfortable,
   cellBg,
   selectedSite,
+  paceTargetDays,
+  paceTargetUserId,
   onEnsureSite,
   onOpenSiteFromCell,
   cellClickAction,
@@ -3774,6 +3764,8 @@ function MonthGrid({
   cellMinHComfortable: number;
   cellBg: CellBg;
   selectedSite: SiteItem | null;
+  paceTargetDays: ReadonlySet<string>;
+  paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
   onOpenSiteFromCell: (siteName: string) => void;
   cellClickAction: CellClickAction;
@@ -3976,6 +3968,8 @@ function MonthGrid({
                   apiKind={apiKind}
                   scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
+                  paceTargetDays={paceTargetDays}
+                  paceTargetUserId={paceTargetUserId}
                   onEnsureSite={onEnsureSite}
                   onOpenSiteFromCell={onOpenSiteFromCell}
                   selectedUserId={selectedUserId}
@@ -4358,6 +4352,8 @@ function Row({
   cellMinH,
   isEditable,
   onSelectUser,
+  paceTargetDays,
+  paceTargetUserId,
   onNotify,
   onCellHistory,
   onAssigned,
@@ -4397,6 +4393,8 @@ function Row({
   cellMinH: number;
   isEditable: boolean;
   onSelectUser: (userId: string | null) => void;
+  paceTargetDays?: ReadonlySet<string>;
+  paceTargetUserId?: string | null;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
   onAssigned: () => void | Promise<void>;
@@ -4665,6 +4663,7 @@ function Row({
         const c1 = cell?.color1 ?? 'default';
         const c2 = cell?.color2 ?? 'default';
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
+        const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
         return (
           <div
@@ -4776,12 +4775,18 @@ function Row({
                 onSetSelectedCell?.({ userId: user.id, day: d.key });
               }
             }}
-            className={`border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
+            title={isPaceTarget ? 'ペース対象日' : undefined}
+            className={`relative border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
               isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
             } ${selectedCell?.userId === user.id && selectedCell?.day === d.key ? 'ring-2 ring-blue-500 ring-inset' : ''} ${
               rowCellClassName ?? ''
+            } ${isPaceTarget ? 'shadow-[inset_0_0_0_1px_rgba(245,158,11,0.6)]' : ''} ${
+              isPaceTarget && !slot1 && !slot2 ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
             } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
           >
+            {isPaceTarget ? (
+              <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
+            ) : null}
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {editingCell?.userId === user.id && editingCell?.day === d.key ? (
                 // 入力モード

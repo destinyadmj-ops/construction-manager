@@ -50,6 +50,31 @@ function ymdInTokyo(d: Date) {
   }
 }
 
+const IMPORT_DETAIL_SECTION_START = '【定期スケジュール取込】';
+const IMPORT_DETAIL_SECTION_END = '【/定期スケジュール取込】';
+
+function normalizeImportedDetailMarkers(value: string | null | undefined) {
+  if (typeof value !== 'string') return '';
+  const lines = value.replace(/\r\n?/g, '\n').split('\n');
+  const normalized: string[] = [];
+  let lastMarker: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === IMPORT_DETAIL_SECTION_START || trimmed === IMPORT_DETAIL_SECTION_END) {
+      if (lastMarker === trimmed) continue;
+      lastMarker = trimmed;
+      normalized.push(trimmed);
+      continue;
+    }
+
+    lastMarker = null;
+    normalized.push(line);
+  }
+
+  return normalized.join('\n').trim();
+}
+
 function formatClockTimeTokyo(value: string | null) {
   if (!value) return '—';
   const date = new Date(value);
@@ -288,7 +313,7 @@ export default function SiteLedgerDetailPage() {
       setAmount(parsed.amount === null || parsed.amount === undefined ? '' : String(parsed.amount));
       setPace(formattedPace);
       setPeopleCount(parsed.peopleCount === null || parsed.peopleCount === undefined ? '' : String(parsed.peopleCount));
-      setDetail(parsed.detail ?? '');
+      setDetail(normalizeImportedDetailMarkers(parsed.detail));
       setCaution(parsed.caution ?? '');
       setScheduleLabelColor(isSiteLabelColor(parsed.scheduleLabelColor) ? parsed.scheduleLabelColor : 'default');
       setThreshold(String(parsed.depreciationThreshold ?? 10));
@@ -508,7 +533,7 @@ export default function SiteLedgerDetailPage() {
             const n = Number(v);
             return Number.isFinite(n) ? n : null;
           })(),
-          detail: detail.trim() || null,
+          detail: normalizeImportedDetailMarkers(detail) || null,
           caution: caution.trim() || null,
           scheduleLabelColor,
           depreciationThreshold: Number.isFinite(th) ? th : undefined,
@@ -870,18 +895,19 @@ export default function SiteLedgerDetailPage() {
               </div>
             ) : null}
           </div>
-          <div className="relative">
-            <input
-              value={peopleCount}
-              onChange={(e) => setPeopleCount(e.target.value)}
-              readOnly={!canEditSite}
-              placeholder="人数"
-              inputMode="numeric"
-              className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 pr-8 text-xs dark:border-zinc-800 dark:bg-black"
-            />
-            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-zinc-500 dark:text-zinc-400">
-              人
-            </span>
+          <div className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+            <div className="inline-flex max-w-full items-center gap-0.5">
+              <input
+                value={peopleCount}
+                onChange={(e) => setPeopleCount(e.target.value.replace(/[^\d]/g, ''))}
+                readOnly={!canEditSite}
+                placeholder="人数"
+                inputMode="numeric"
+                size={Math.max(peopleCount.length, 2)}
+                className="min-w-[3ch] max-w-full bg-transparent outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+              />
+              {peopleCount ? <span className="shrink-0 text-zinc-500 dark:text-zinc-400">人</span> : null}
+            </div>
           </div>
           <textarea
             value={detail}

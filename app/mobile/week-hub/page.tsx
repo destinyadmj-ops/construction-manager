@@ -112,7 +112,7 @@ function MobileWeekHubInner() {
   }, []);
 
   const handleSiteClick = useCallback((siteId: string) => {
-    router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=normal`);
+    router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=normal#punch`);
   }, [router]);
 
   return (
@@ -166,7 +166,7 @@ function MobileWeekHubInner() {
               >
                 <div className="font-medium">{site.label}</div>
                 <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  タップして詳細を表示
+                  タップして打刻・詳細を表示
                 </div>
               </button>
             ))}
