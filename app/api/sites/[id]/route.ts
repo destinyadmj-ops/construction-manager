@@ -1,12 +1,7 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 
 export const runtime = 'nodejs';
-
-function isAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -52,9 +47,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const { id } = await context.params;
   if (!id) {

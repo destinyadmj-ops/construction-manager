@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { findMatchingPartner, normalizeRegistryText } from '@/server/site-registry';
 import { z } from 'zod';
 
@@ -28,12 +29,6 @@ const UpdateSchema = z
   })
   .strict();
 
-function isAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
-
 export async function GET() {
   try {
     const partners = await prisma.partner.findMany({
@@ -62,9 +57,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
 
   const json = await request.json().catch(() => null);
 

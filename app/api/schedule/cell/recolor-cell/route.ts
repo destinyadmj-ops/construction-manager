@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
+import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -38,6 +39,9 @@ function addDays(d: Date, days: number) {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireScheduleEditor(request);
+  if (authError) return authError;
+
   const json = await request.json().catch(() => null);
   const parsed = BodySchema.safeParse(json ?? {});
   if (!parsed.success) {
