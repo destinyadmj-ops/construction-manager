@@ -71,6 +71,30 @@ function normalizeMultilineText(value: string | null | undefined): string | null
   return normalized || null;
 }
 
+function normalizeImportedDetailMarkers(value: string | null | undefined): string | null {
+  const normalized = normalizeMultilineText(value);
+  if (!normalized) return null;
+
+  const lines = normalized.split('\n');
+  const result: string[] = [];
+  let lastMarker: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === DETAIL_SECTION_START || trimmed === DETAIL_SECTION_END) {
+      if (lastMarker === trimmed) continue;
+      lastMarker = trimmed;
+      result.push(trimmed);
+      continue;
+    }
+
+    lastMarker = null;
+    result.push(line);
+  }
+
+  return normalizeMultilineText(result.join('\n'));
+}
+
 function limitText(value: string | null | undefined, maxLength: number): string | null {
   const normalized = normalizeMultilineText(value);
   if (!normalized) return null;
@@ -411,17 +435,18 @@ function escapeRegExp(value: string) {
 }
 
 function mergeImportedDetail(existingDetail: string | null | undefined, detailSection: string | null | undefined) {
-  const existing = normalizeMultilineText(existingDetail);
-  const imported = normalizeMultilineText(detailSection);
+  const existing = normalizeImportedDetailMarkers(existingDetail);
+  const imported = normalizeImportedDetailMarkers(detailSection);
   if (!imported) return existing;
   if (!existing) return imported;
 
   const sectionPattern = new RegExp(
     `${escapeRegExp(DETAIL_SECTION_START)}[\\s\\S]*?${escapeRegExp(DETAIL_SECTION_END)}`,
-    'm',
+    'g',
   );
-  if (sectionPattern.test(existing)) {
-    return normalizeMultilineText(existing.replace(sectionPattern, imported));
+  const withoutImported = normalizeMultilineText(existing.replace(sectionPattern, ''));
+  if (withoutImported !== existing) {
+    return withoutImported ? normalizeMultilineText(`${withoutImported}\n\n${imported}`) : imported;
   }
 
   return normalizeMultilineText(`${existing}\n\n${imported}`);
