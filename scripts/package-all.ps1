@@ -5,7 +5,8 @@ param(
     [switch]$DesktopOnly,
     [switch]$MobileOnly,
     [switch]$WebOnly,
-    [string]$DesktopUrl = "http://localhost:3001"
+    [string]$DesktopUrl = "http://localhost:3001",
+    [string]$DesktopReleaseUrl = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -30,7 +31,7 @@ if (-not $MobileOnly -and -not $DesktopOnly) {
 # Package Desktop
 if (-not $MobileOnly -and -not $WebOnly) {
     Write-Host "`n[Desktop] Packaging Electron app..." -ForegroundColor Yellow
-    & "$PSScriptRoot/package-desktop.ps1" -SkipBuild -MasterHubUrl $DesktopUrl
+    & "$PSScriptRoot/package-desktop.ps1" -SkipBuild -MasterHubUrl $DesktopUrl -DesktopReleaseUrl $DesktopReleaseUrl
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[Desktop] Packaging failed!" -ForegroundColor Red
     } else {

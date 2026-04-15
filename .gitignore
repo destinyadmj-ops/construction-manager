@@ -81,6 +81,7 @@ run-dev*.cmd
 
 # Electron build outputs
 /apps/desktop/dist/
+/apps/desktop/build/runtime-config.json
 
 # stray local debug capture
 utputFormat
