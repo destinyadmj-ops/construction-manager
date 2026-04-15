@@ -2,6 +2,18 @@ const { app, BrowserWindow, Menu, dialog, shell, clipboard, nativeTheme } = requ
 const path = require('node:path');
 const fs = require('node:fs');
 
+function normalizeHttpUrl(raw) {
+  const s = (raw || '').trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 function normalizeBaseUrl(raw) {
   const s = (raw || '').trim();
   if (!s) return 'http://127.0.0.1:3000/';
@@ -16,7 +28,41 @@ function normalizeBaseUrl(raw) {
   }
 }
 
-const DEFAULT_URL = normalizeBaseUrl(process.env.MASTER_HUB_URL);
+function readRuntimeConfig() {
+  const p = path.join(__dirname, 'build', 'runtime-config.json');
+  try {
+    if (!fs.existsSync(p)) return {};
+    const raw = fs.readFileSync(p, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function parseVersion(raw) {
+  return String(raw || '0.0.0')
+    .split(/[.+-]/)[0]
+    .split('.')
+    .map((part) => Number.parseInt(part, 10) || 0);
+}
+
+function compareVersions(a, b) {
+  const left = parseVersion(a);
+  const right = parseVersion(b);
+  const len = Math.max(left.length, right.length);
+  for (let i = 0; i < len; i += 1) {
+    const l = left[i] || 0;
+    const r = right[i] || 0;
+    if (l > r) return 1;
+    if (l < r) return -1;
+  }
+  return 0;
+}
+
+const RUNTIME_CONFIG = readRuntimeConfig();
+const DEFAULT_URL = normalizeBaseUrl(process.env.MASTER_HUB_URL || RUNTIME_CONFIG.masterHubUrl);
 const DEFAULT_ORIGIN = (() => {
   try {
     return new URL(DEFAULT_URL).origin;
@@ -24,6 +70,9 @@ const DEFAULT_ORIGIN = (() => {
     return 'http://127.0.0.1:3000';
   }
 })();
+const DEFAULT_RELEASE_URL =
+  normalizeHttpUrl(process.env.MASTER_HUB_UPDATE_URL || RUNTIME_CONFIG.desktopReleaseUrl) ||
+  `${DEFAULT_ORIGIN}/api/desktop-release`;
 
 async function fetchJson(url) {
   if (typeof fetch !== 'function') return null;
@@ -39,15 +88,78 @@ async function fetchJson(url) {
   }
 }
 
+async function checkForUpdates(win, { silentIfCurrent = false } = {}) {
+  const releaseJson = await fetchJson(DEFAULT_RELEASE_URL);
+  const release =
+    releaseJson &&
+    releaseJson.ok &&
+    releaseJson.release &&
+    typeof releaseJson.release === 'object' &&
+    !Array.isArray(releaseJson.release)
+      ? releaseJson.release
+      : null;
+
+  if (!release || typeof release.version !== 'string') {
+    if (silentIfCurrent) return;
+    await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: '更新確認',
+      message: '更新情報を取得できませんでした。',
+      detail: `更新確認URL: ${DEFAULT_RELEASE_URL}`,
+    });
+    return;
+  }
+
+  const currentVersion = app.getVersion();
+  if (compareVersions(release.version, currentVersion) <= 0) {
+    if (silentIfCurrent) return;
+    await dialog.showMessageBox(win, {
+      type: 'info',
+      title: '更新確認',
+      message: 'このデスクトップ版は最新です。',
+      detail: `現在のバージョン: ${currentVersion}`,
+    });
+    return;
+  }
+
+  const downloadUrl = typeof release.downloadUrl === 'string' ? release.downloadUrl.trim() : '';
+  const detail = [
+    `現在: v${currentVersion}`,
+    `最新: v${release.version}`,
+    downloadUrl ? `配布URL: ${downloadUrl}` : '配布URL: 未設定',
+    typeof release.notes === 'string' && release.notes.trim() ? `メモ: ${release.notes.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const hasDownload = downloadUrl.length > 0;
+  const buttons = hasDownload ? ['ダウンロード', '閉じる'] : ['閉じる'];
+  const result = await dialog.showMessageBox(win, {
+    type: 'info',
+    title: '更新があります',
+    message: '新しいデスクトップ版が利用できます。',
+    detail,
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  });
+
+  if (hasDownload && result.response === 0) {
+    void shell.openExternal(downloadUrl);
+  }
+}
+
 async function showAbout(win) {
   const webVersion = await fetchJson(`${DEFAULT_ORIGIN}/api/version`);
   const info = webVersion && webVersion.ok && webVersion.info ? webVersion.info : null;
 
   const lines = [
     `URL: ${DEFAULT_URL}`,
+    `Desktop: v${app.getVersion()}`,
     `Electron: ${process.versions.electron}`,
     `Chrome: ${process.versions.chrome}`,
     `Node: ${process.versions.node}`,
+    `Release info: ${DEFAULT_RELEASE_URL}`,
   ];
   if (info && typeof info === 'object') {
     if (typeof info.name === 'string' && typeof info.version === 'string') {
@@ -90,6 +202,10 @@ function createAppMenu(win) {
         {
           label: 'ブラウザで開く',
           click: () => shell.openExternal(DEFAULT_URL),
+        },
+        {
+          label: '更新を確認',
+          click: () => void checkForUpdates(win),
         },
         { type: 'separator' },
         {
@@ -145,6 +261,14 @@ function createWindow() {
       return { action: 'deny' };
     }
   });
+
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      void checkForUpdates(win, { silentIfCurrent: true });
+    }, 1500);
+  });
+
+  return win;
 }
 
 app.whenReady().then(() => {

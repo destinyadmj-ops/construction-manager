@@ -39,6 +39,11 @@ npm run package:desktop
 .\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com"
 ```
 
+**更新確認先も明示したい場合:**
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopReleaseUrl "https://your-server.com/api/desktop-release"
+```
+
 ### 出力
 
 - **場所:** `apps/desktop/dist/`
@@ -49,7 +54,21 @@ npm run package:desktop
 
 1. `Master Hub-Setup-0.1.0.exe` をユーザーに配布
 2. インストーラを実行（ワンクリックインストール）
-3. デフォルトURL: `http://localhost:3001`（環境変数 `MASTER_HUB_URL` で変更可能）
+3. 配布版はビルド時に埋め込んだURLへ接続（未指定時は `http://localhost:3001`）
+
+### 配布後の更新運用
+
+- Web / API 側の修正は Vultr 上のアプリ更新だけで反映される
+- Electron 側の更新は新しい exe を再配布する
+- アプリ内の「更新を確認」は `/api/desktop-release` を見て、新しい exe のダウンロードURLへ誘導できる
+
+Vultr 側の環境変数例:
+
+```env
+DESKTOP_APP_VERSION="0.1.1"
+DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
+DESKTOP_APP_RELEASE_NOTES="帳票と割当ロジックの修正"
+```
 
 ### カスタマイズ
 
