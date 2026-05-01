@@ -4691,7 +4691,7 @@ function Row({
           day: input.day,
           kind: apiKind,
           action: input.action,
-          siteId: input.siteName ? null : (input.siteId ?? resolvedSite?.id ?? null),
+          siteId: input.siteId ?? resolvedSite?.id ?? null,
           siteName: resolvedSiteName,
           color: input.color,
         }),
