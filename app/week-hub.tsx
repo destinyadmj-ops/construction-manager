@@ -339,7 +339,7 @@ export default function WeekHub() {
 }
 
 function WeekHubInner() {
-  const { setAddAction, setHistoryAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const { setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
@@ -406,7 +406,6 @@ function WeekHubInner() {
   const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
-  const [isScheduleHistoryOpen, setIsScheduleHistoryOpen] = useState(false);
   const [scheduleHistoryItems, setScheduleHistoryItems] = useState<ScheduleChangeHistoryItem[]>([]);
   const [scheduleHistoryTotal, setScheduleHistoryTotal] = useState(0);
   const [scheduleHistoryLoading, setScheduleHistoryLoading] = useState(false);
@@ -1151,11 +1150,6 @@ function WeekHubInner() {
     }
   }, [apiKind]);
 
-  useEffect(() => {
-    if (!isScheduleHistoryOpen) return;
-    void loadScheduleHistory();
-  }, [isScheduleHistoryOpen, loadScheduleHistory]);
-
   const filteredScheduleHistoryItems = useMemo(() => {
     const query = scheduleHistorySearch.trim().toLowerCase();
     return scheduleHistoryItems.filter((item) => {
@@ -1176,6 +1170,39 @@ function WeekHubInner() {
         .includes(query);
     });
   }, [scheduleHistoryItems, scheduleHistorySearch, scheduleHistoryTargetFilter]);
+
+  const scheduleHistoryPanel = useMemo(
+    () =>
+      hasScheduleEditPermission
+        ? {
+            widthClassName: 'w-[min(96vw,1100px)] max-w-[calc(100vw-1rem)]',
+            content: (
+              <ScheduleHistoryPanel
+                embedded
+                items={filteredScheduleHistoryItems}
+                total={scheduleHistoryTotal}
+                loading={scheduleHistoryLoading}
+                error={scheduleHistoryError}
+                search={scheduleHistorySearch}
+                onSearchChange={setScheduleHistorySearch}
+                targetFilter={scheduleHistoryTargetFilter}
+                onTargetFilterChange={setScheduleHistoryTargetFilter}
+                onRefresh={() => void loadScheduleHistory()}
+              />
+            ),
+          }
+        : undefined,
+    [
+      filteredScheduleHistoryItems,
+      hasScheduleEditPermission,
+      loadScheduleHistory,
+      scheduleHistoryError,
+      scheduleHistoryLoading,
+      scheduleHistorySearch,
+      scheduleHistoryTargetFilter,
+      scheduleHistoryTotal,
+    ],
+  );
 
   const userLabelById = useMemo(() => {
     const pools: ApiUser[] = [
@@ -2197,7 +2224,9 @@ function WeekHubInner() {
     setHistoryAction(
       hasScheduleEditPermission
         ? {
-            onClick: () => setIsScheduleHistoryOpen(true),
+            onClick: () => {
+              void loadScheduleHistory();
+            },
             disabled: false,
             title: '編集履歴一覧',
           }
@@ -2207,7 +2236,15 @@ function WeekHubInner() {
     return () => {
       setHistoryAction(undefined);
     };
-  }, [hasScheduleEditPermission, setHistoryAction]);
+  }, [hasScheduleEditPermission, loadScheduleHistory, setHistoryAction]);
+
+  useEffect(() => {
+    setHistoryPanel(scheduleHistoryPanel);
+
+    return () => {
+      setHistoryPanel(undefined);
+    };
+  }, [scheduleHistoryPanel, setHistoryPanel]);
 
   useEffect(() => {
     const canUndo = undoStack.length > 0 && !isUndoRedoBusy;
@@ -3425,21 +3462,6 @@ function WeekHubInner() {
             </div>
           )}
         </div>
-
-        {isScheduleHistoryOpen ? (
-          <ScheduleHistoryDialog
-            items={filteredScheduleHistoryItems}
-            total={scheduleHistoryTotal}
-            loading={scheduleHistoryLoading}
-            error={scheduleHistoryError}
-            search={scheduleHistorySearch}
-            onSearchChange={setScheduleHistorySearch}
-            targetFilter={scheduleHistoryTargetFilter}
-            onTargetFilterChange={setScheduleHistoryTargetFilter}
-            onClose={() => setIsScheduleHistoryOpen(false)}
-            onRefresh={() => void loadScheduleHistory()}
-          />
-        ) : null}
 
         {siteDetailOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -5220,7 +5242,8 @@ function Row({
   );
 }
 
-function ScheduleHistoryDialog({
+function ScheduleHistoryPanel({
+  embedded,
   items,
   total,
   loading,
@@ -5229,9 +5252,9 @@ function ScheduleHistoryDialog({
   onSearchChange,
   targetFilter,
   onTargetFilterChange,
-  onClose,
   onRefresh,
 }: {
+  embedded?: boolean;
   items: ScheduleChangeHistoryItem[];
   total: number;
   loading: boolean;
@@ -5240,14 +5263,14 @@ function ScheduleHistoryDialog({
   onSearchChange: (value: string) => void;
   targetFilter: 'all' | 'スケジュール' | 'カラー';
   onTargetFilterChange: (value: 'all' | 'スケジュール' | 'カラー') => void;
-  onClose: () => void;
   onRefresh: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" aria-label="close" onClick={onClose} className="absolute inset-0 bg-black/40" />
-
-      <div className="relative flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+      <div
+        className={embedded
+          ? 'flex max-h-[70vh] flex-col overflow-hidden'
+          : 'relative flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black'}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
           <div>
             <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">スケジュール変更履歴</div>
@@ -5260,13 +5283,6 @@ function ScheduleHistoryDialog({
               className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
             >
               再読込
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-            >
-              閉じる
             </button>
           </div>
         </div>
@@ -5327,6 +5343,5 @@ function ScheduleHistoryDialog({
           ) : null}
         </div>
       </div>
-    </div>
   );
 }
