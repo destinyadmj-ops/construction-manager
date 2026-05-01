@@ -1420,6 +1420,30 @@ function WeekHubInner() {
     setIsUndoRedoBusy(true);
     try {
       const slots = target === 'before' ? entry.before : entry.after;
+      const rollbackSlots = target === 'before' ? entry.after : entry.before;
+      const visibleCell =
+        mode === 'week'
+          ? data?.grid[entry.userId]?.[entry.day]
+          : mode === 'month'
+            ? monthData?.grid[entry.userId]?.[entry.day]
+            : null;
+      const rollbackCell = cloneApiCell(
+        visibleCell ?? {
+          slot1: rollbackSlots[0],
+          slot2: rollbackSlots[1],
+          color1: 'default',
+          color2: 'default',
+        },
+      );
+      const targetCell = cloneApiCell({
+        slot1: slots[0],
+        slot2: slots[1],
+        color1: 'default',
+        color2: 'default',
+      });
+
+      updateVisibleCell({ userId: entry.userId, day: entry.day, cell: targetCell });
+
       const r = await fetch('/api/schedule/cell/set', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1429,6 +1453,8 @@ function WeekHubInner() {
           kind: apiKind,
           slot1: slots[0],
           slot2: slots[1],
+          slot1Color: 'default',
+          slot2Color: 'default',
         }),
       });
       const json = (await r.json().catch(() => null)) as
@@ -1436,19 +1462,31 @@ function WeekHubInner() {
         | { ok: false; error?: string }
         | null;
       if (!r.ok || !json || !('ok' in json) || json.ok !== true) {
+        updateVisibleCell({ userId: entry.userId, day: entry.day, cell: rollbackCell });
         const msg = json && 'ok' in json && json.ok === false ? json.error : undefined;
         showCellActionMsg(msg ? `Undo/Redoに失敗: ${msg}` : `Undo/Redoに失敗（HTTP ${r.status}）`);
         return false;
       }
-      await refreshCurrentView();
+      void refreshCurrentView();
       return true;
     } catch {
+      const rollbackSlots = target === 'before' ? entry.after : entry.before;
+      updateVisibleCell({
+        userId: entry.userId,
+        day: entry.day,
+        cell: cloneApiCell({
+          slot1: rollbackSlots[0],
+          slot2: rollbackSlots[1],
+          color1: 'default',
+          color2: 'default',
+        }),
+      });
       showCellActionMsg('Undo/Redoの通信に失敗しました');
       return false;
     } finally {
       setIsUndoRedoBusy(false);
     }
-  }, [apiKind, refreshCurrentView, showCellActionMsg]);
+  }, [apiKind, data?.grid, mode, monthData?.grid, refreshCurrentView, showCellActionMsg, updateVisibleCell]);
 
   const undo = useCallback(async () => {
     const last = undoStack[undoStack.length - 1];
@@ -2585,10 +2623,7 @@ function WeekHubInner() {
                             });
                           }
 
-                          const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
-                          );
-                          if (res.ok) setData((await res.json()) as ApiResponse);
+                          void refreshCurrentView();
                         } finally {
                           setIsAutoFilling(false);
                         }
@@ -2633,10 +2668,7 @@ function WeekHubInner() {
                             });
                           }
 
-                          const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
-                          );
-                          if (res.ok) setData((await res.json()) as ApiResponse);
+                          void refreshCurrentView();
                         } finally {
                           setIsAutoFilling(false);
                         }
@@ -2690,10 +2722,7 @@ function WeekHubInner() {
                             reason: errorCount > 0 ? `一部失敗: ${errorCount}人` : undefined,
                           });
 
-                          const res = await fetch(
-                            `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
-                          );
-                          if (res.ok) setData((await res.json()) as ApiResponse);
+                          void refreshCurrentView();
                         } finally {
                           setIsAutoFilling(false);
                         }
