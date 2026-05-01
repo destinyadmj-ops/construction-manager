@@ -2735,7 +2735,6 @@ function WeekHubInner() {
                   weekStart={weekStart}
                   monthWeekTabs={monthWeekTabs}
                   apiKind={apiKind}
-                  scheduleKind={scheduleKind}
                   gridLayout={gridLayout}
                   cellMinW={cellMinW}
                   cellMinHCompact={cellMinHCompact}
@@ -2757,6 +2756,7 @@ function WeekHubInner() {
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
+                  onPreviewCellChange={updateVisibleCell}
                   historyHover={historyHover}
                   onAssigned={async () => {
                     if (selectedSite?.label) {
@@ -3010,7 +3010,6 @@ function WeekHubInner() {
                   dayLabels={monthDayLabels}
                   data={monthData}
                   apiKind={apiKind}
-                  scheduleKind={scheduleKind}
                   gridLayout={gridLayout}
                   cellMinW={cellMinW}
                   cellMinHCompact={cellMinHCompact}
@@ -3028,6 +3027,7 @@ function WeekHubInner() {
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
                   onCellHistory={pushHistory}
+                  onPreviewCellChange={updateVisibleCell}
                   historyHover={historyHover}
                   onAssigned={async () => {
                     if (selectedSite?.label) {
@@ -3514,7 +3514,6 @@ function WeekGrid({
   weekStart,
   monthWeekTabs,
   apiKind,
-  scheduleKind,
   gridLayout,
   cellMinW,
   cellMinHCompact,
@@ -3536,6 +3535,7 @@ function WeekGrid({
   onSelectUser,
   onNotify,
   onCellHistory,
+  onPreviewCellChange,
   onAssigned,
   historyHover,
   userOrder,
@@ -3561,7 +3561,6 @@ function WeekGrid({
   weekStart: Date;
   monthWeekTabs: { monthKey: string; tabs: Date[] };
   apiKind: 'NORMAL' | 'DAILY';
-  scheduleKind: ScheduleKind;
   gridLayout: GridLayout;
   cellMinW: number;
   cellMinHCompact: number;
@@ -3583,6 +3582,7 @@ function WeekGrid({
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
+  onPreviewCellChange?: (input: { userId: string; day: string; cell: ApiCell }) => void;
   onAssigned: () => void | Promise<void>;
   historyHover: { userId: string; day: string } | null;
   userOrder: string[];
@@ -3808,7 +3808,6 @@ function WeekGrid({
                   dayLabels={dayLabels}
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
-                  scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
                   paceTargetDays={paceTargetDays}
                   paceTargetUserId={paceTargetUserId}
@@ -3823,6 +3822,7 @@ function WeekGrid({
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
+                  onPreviewCellChange={onPreviewCellChange}
                   onAssigned={onAssigned}
                   historyHover={historyHover}
                   reorderMode={reorderMode}
@@ -3864,7 +3864,6 @@ function MonthGrid({
   dayLabels,
   data,
   apiKind,
-  scheduleKind,
   gridLayout,
   cellMinW,
   cellMinHCompact,
@@ -3882,6 +3881,7 @@ function MonthGrid({
   onSelectUser,
   onNotify,
   onCellHistory,
+  onPreviewCellChange,
   onAssigned,
   historyHover,
   userOrder,
@@ -3897,7 +3897,6 @@ function MonthGrid({
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: MonthApiResponse | null;
   apiKind: 'NORMAL' | 'DAILY';
-  scheduleKind: ScheduleKind;
   gridLayout: GridLayout;
   cellMinW: number;
   cellMinHCompact: number;
@@ -3915,6 +3914,7 @@ function MonthGrid({
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
+  onPreviewCellChange?: (input: { userId: string; day: string; cell: ApiCell }) => void;
   onAssigned: () => void | Promise<void>;
   historyHover: { userId: string; day: string } | null;
   userOrder: string[];
@@ -4106,7 +4106,6 @@ function MonthGrid({
                   dayLabels={dayLabels}
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
-                  scheduleKind={scheduleKind}
                   selectedSite={selectedSite}
                   paceTargetDays={paceTargetDays}
                   paceTargetUserId={paceTargetUserId}
@@ -4121,6 +4120,7 @@ function MonthGrid({
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
+                  onPreviewCellChange={onPreviewCellChange}
                   onAssigned={onAssigned}
                   historyHover={historyHover}
                   reorderMode={reorderMode}
@@ -4481,7 +4481,6 @@ function Row({
   dayLabels,
   grid,
   apiKind,
-  scheduleKind,
   selectedSite,
   onEnsureSite,
   onOpenSiteFromCell,
@@ -4496,6 +4495,7 @@ function Row({
   paceTargetUserId,
   onNotify,
   onCellHistory,
+  onPreviewCellChange,
   onAssigned,
   historyHover,
   reorderMode,
@@ -4522,7 +4522,6 @@ function Row({
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   grid: Record<string, ApiCell>;
   apiKind: 'NORMAL' | 'DAILY';
-  scheduleKind: ScheduleKind;
   selectedSite: SiteItem | null;
   onEnsureSite?: () => Promise<SiteItem | null>;
   onOpenSiteFromCell?: (siteName: string) => void;
@@ -4537,6 +4536,7 @@ function Row({
   paceTargetUserId?: string | null;
   onNotify?: (msg: string | null) => void;
   onCellHistory?: (entry: CellHistoryEntry) => void;
+  onPreviewCellChange?: (input: { userId: string; day: string; cell: ApiCell }) => void;
   onAssigned: () => void | Promise<void>;
   historyHover: { userId: string; day: string } | null;
   reorderMode?: boolean;
@@ -4644,25 +4644,29 @@ function Row({
       }
     }
 
+    const currentCell = grid[input.day];
+    const beforeCell = cloneApiCell({
+      slot1: input.beforeFallback[0],
+      slot2: input.beforeFallback[1],
+      color1: currentCell?.color1 ?? 'default',
+      color2: currentCell?.color2 ?? 'default',
+    });
+    const resolvedSiteName = input.siteName ?? resolvedSite?.label ?? null;
+    const preview = previewCellAction({
+      cell: beforeCell,
+      action: input.action,
+      siteName: resolvedSiteName,
+      color: input.color,
+    });
+
+    if (!preview.changed) {
+      onNotify?.(formatCellActionReason(preview.reason, input.action) ?? '反映されませんでした');
+      return;
+    }
+
+    onPreviewCellChange?.({ userId: user.id, day: input.day, cell: preview.cell });
+
     try {
-      const snapshot = async (): Promise<CellSlots | null> => {
-        try {
-          const rs = await fetch(
-            `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(input.day)}&kind=${encodeURIComponent(scheduleKind)}`,
-          );
-          const js = (await rs.json().catch(() => null)) as
-            | { ok: true; slots: [string | null, string | null] }
-            | { ok: false; error?: string }
-            | null;
-          if (!rs.ok || !js || !('ok' in js) || js.ok !== true) return null;
-          return [js.slots?.[0] ?? null, js.slots?.[1] ?? null];
-        } catch {
-          return null;
-        }
-      };
-
-      const before = (await snapshot()) ?? input.beforeFallback;
-
       const r = await fetch('/api/schedule/cell', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -4672,7 +4676,7 @@ function Row({
           kind: apiKind,
           action: input.action,
           siteId: input.siteName ? null : (input.siteId ?? resolvedSite?.id ?? null),
-          siteName: input.siteName ?? resolvedSite?.label ?? null,
+          siteName: resolvedSiteName,
           color: input.color,
         }),
       });
@@ -4689,38 +4693,38 @@ function Row({
       const json = (await r.json().catch(() => null)) as CellApiOk | CellApiErr | null;
 
       if (!r.ok || !json || json.ok !== true) {
+        onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
         const error = json && json.ok === false ? json.error : undefined;
         onNotify?.(error ? `操作に失敗しました: ${error}` : `操作に失敗しました（HTTP ${r.status}）`);
         return;
       }
 
       if (!json.changed) {
+        onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
         onNotify?.(formatCellActionReason(json.reason, input.action) ?? '反映されませんでした');
         return;
       }
 
-      const after = await snapshot();
-      if (after) {
-        onCellHistory?.({
-          kind: 'cell',
-          userId: user.id,
-          day: input.day,
-          before,
-          after,
-          // eslint-disable-next-line react-hooks/purity -- executed from an event-triggered async action
-          at: Date.now(),
-        });
-      }
+      onCellHistory?.({
+        kind: 'cell',
+        userId: user.id,
+        day: input.day,
+        before: [beforeCell.slot1, beforeCell.slot2],
+        after: [preview.cell.slot1, preview.cell.slot2],
+        // eslint-disable-next-line react-hooks/purity -- executed from an event-triggered async action
+        at: Date.now(),
+      });
 
       onNotify?.(
         formatCellActionSuccess({
           action: json.action ?? input.action,
-          toggled: json.toggled,
-          replaced: json.replaced,
+          toggled: json.toggled ?? preview.toggled,
+          replaced: json.replaced ?? preview.replaced,
         }),
       );
-      await onAssigned();
+      void Promise.resolve(onAssigned()).catch(() => undefined);
     } catch {
+      onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
       onNotify?.('通信に失敗しました');
     }
   };
@@ -4946,6 +4950,9 @@ function Row({
                           // 最初の候補を選択
                           const site = siteSuggestions[0];
                           const beforeFallback: CellSlots = [slot1, slot2];
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
                           void runCellAction({
                             day: d.key,
                             action: 'toggle',
@@ -4953,24 +4960,20 @@ function Row({
                             siteId: site.id,
                             siteName: site.label,
                             beforeFallback,
-                          }).then(() => {
-                            setEditingCell?.(null);
-                            setEditingInput?.('');
-                            setSiteSuggestions?.([]);
                           });
                         } else if (editingInput?.trim()) {
                           // 直接入力
+                          const siteName = editingInput.trim();
                           const beforeFallback: CellSlots = [slot1, slot2];
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
                           void runCellAction({
                             day: d.key,
                             action: 'toggle',
                             color: cellTextColor,
-                            siteName: editingInput.trim(),
+                            siteName,
                             beforeFallback,
-                          }).then(() => {
-                            setEditingCell?.(null);
-                            setEditingInput?.('');
-                            setSiteSuggestions?.([]);
                           });
                         }
                       }
@@ -4992,6 +4995,9 @@ function Row({
                             e.preventDefault();
                             e.stopPropagation();
                             const beforeFallback: CellSlots = [slot1, slot2];
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
                             void runCellAction({
                               day: d.key,
                               action: 'toggle',
@@ -4999,10 +5005,6 @@ function Row({
                               siteId: site.id,
                               siteName: site.label,
                               beforeFallback,
-                            }).then(() => {
-                              setEditingCell?.(null);
-                              setEditingInput?.('');
-                              setSiteSuggestions?.([]);
                             });
                           }}
                           className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
