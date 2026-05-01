@@ -5,10 +5,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$cmdPath = Join-Path $repoRoot 'run-dev-keep-bg.cmd'
+$cmdPath = Join-Path $repoRoot 'run-dev-keep-agent.cmd'
 
 if (-not (Test-Path $cmdPath)) {
-  throw "run-dev-keep-bg.cmd not found: $cmdPath"
+  throw "run-dev-keep-agent.cmd not found: $cmdPath"
 }
 
 $startupDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
@@ -36,7 +36,7 @@ $shortcut.TargetPath = "$env:WINDIR\System32\cmd.exe"
 $shortcut.Arguments = "/c """"$cmdPath"""""
 $shortcut.WorkingDirectory = $repoRoot
 $shortcut.WindowStyle = 1
-$shortcut.Description = 'Auto-start Master Hub dev server (dev:keep:bg) on logon'
+$shortcut.Description = 'Auto-start Master Hub dev server supervisor agent on logon'
 $shortcut.Save()
 
 Write-Host "Installed startup shortcut: $shortcutPath"
