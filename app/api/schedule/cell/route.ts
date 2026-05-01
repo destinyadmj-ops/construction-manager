@@ -1,6 +1,11 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import {
+  createScheduleCellSnapshot,
+  createScheduleCellSnapshotFromWorkEntries,
+  recordScheduleChangeHistory,
+} from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import { z } from 'zod';
@@ -110,7 +115,7 @@ export async function POST(request: Request) {
 
   const kind = parsed.data.kind ?? 'NORMAL';
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } });
   if (!user) {
     return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
   }
@@ -121,8 +126,10 @@ export async function POST(request: Request) {
   const existing = await prisma.workEntry.findMany({
     where: { userId, kind, startAt: { gte: startAt, lt: until } },
     orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, startAt: true, siteId: true, accountingMeta: true },
+    select: { id: true, startAt: true, siteId: true, summary: true, accountingMeta: true },
   });
+  const targetUserLabel = user.name ?? user.email ?? user.id;
+  const beforeSnapshot = createScheduleCellSnapshotFromWorkEntries(existing);
 
   if (action === 'swap') {
     if (existing.length < 2) {
@@ -139,6 +146,22 @@ export async function POST(request: Request) {
       await tx.workEntry.update({ where: { id: a.id }, data: { startAt: tmp } });
       await tx.workEntry.update({ where: { id: b.id }, data: { startAt: addMinutes(startAt, 0) } });
       await tx.workEntry.update({ where: { id: a.id }, data: { startAt: addMinutes(startAt, 1) } });
+    });
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'スケジュール',
+      before: beforeSnapshot,
+      after: createScheduleCellSnapshot({
+        slot1: beforeSnapshot.slot2,
+        slot1Color: beforeSnapshot.slot2Color,
+        slot2: beforeSnapshot.slot1,
+        slot2Color: beforeSnapshot.slot1Color,
+      }),
     });
 
     return Response.json({ ok: true, action, changed: true });
@@ -164,6 +187,7 @@ export async function POST(request: Request) {
   };
 
   const hit = existing.find((e) => (e.siteId ?? null) === site.id);
+  const hitIndex = hit ? existing.findIndex((entry) => entry.id === hit.id) : -1;
 
   if (action === 'recolor') {
     if (typeof requestedColor !== 'string') {
@@ -177,18 +201,72 @@ export async function POST(request: Request) {
       },
       select: { id: true },
     });
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'カラー',
+      before: beforeSnapshot,
+      after:
+        hitIndex === 0
+          ? { ...beforeSnapshot, slot1Color: requestedColor }
+          : { ...beforeSnapshot, slot2Color: requestedColor },
+    });
     return Response.json({ ok: true, action, changed: true });
   }
 
   if (action === 'remove') {
     if (!hit) return Response.json({ ok: true, action, changed: false, reason: 'not-found' });
     await prisma.workEntry.delete({ where: { id: hit.id } });
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'スケジュール',
+      before: beforeSnapshot,
+      after:
+        hitIndex === 0
+          ? createScheduleCellSnapshot({
+              slot1: beforeSnapshot.slot2,
+              slot1Color: beforeSnapshot.slot2Color,
+            })
+          : createScheduleCellSnapshot({
+              slot1: beforeSnapshot.slot1,
+              slot1Color: beforeSnapshot.slot1Color,
+            }),
+    });
     return Response.json({ ok: true, action, changed: true });
   }
 
   if (action === 'toggle') {
     if (hit) {
       await prisma.workEntry.delete({ where: { id: hit.id } });
+
+      await recordScheduleChangeHistory({
+        request,
+        kind,
+        targetUserId: user.id,
+        targetUserLabel,
+        dayYmd: day,
+        targetLabel: 'スケジュール',
+        before: beforeSnapshot,
+        after:
+          hitIndex === 0
+            ? createScheduleCellSnapshot({
+                slot1: beforeSnapshot.slot2,
+                slot1Color: beforeSnapshot.slot2Color,
+              })
+            : createScheduleCellSnapshot({
+                slot1: beforeSnapshot.slot1,
+                slot1Color: beforeSnapshot.slot1Color,
+              }),
+      });
       return Response.json({ ok: true, action, changed: true, toggled: 'off' });
     }
     // If it's already full (2 slots), toggle acts like replacing slot2 so a click always reflects.
@@ -211,6 +289,22 @@ export async function POST(request: Request) {
         } catch {
           // ignore
         }
+
+        await recordScheduleChangeHistory({
+          request,
+          kind,
+          targetUserId: user.id,
+          targetUserLabel,
+          dayYmd: day,
+          targetLabel: 'スケジュール',
+          before: beforeSnapshot,
+          after: createScheduleCellSnapshot({
+            slot1: beforeSnapshot.slot1,
+            slot1Color: beforeSnapshot.slot1Color,
+            slot2: site.name,
+            slot2Color: requestedColor ?? 'default',
+          }),
+        });
 
         return Response.json({ ok: true, action, changed: true, replaced: 'slot2', entry: updated });
       }
@@ -242,6 +336,25 @@ export async function POST(request: Request) {
     } catch {
       // ignore
     }
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'スケジュール',
+      before: beforeSnapshot,
+      after:
+        existing.length === 0
+          ? createScheduleCellSnapshot({ slot1: site.name, slot1Color: requestedColor ?? 'default' })
+          : createScheduleCellSnapshot({
+              slot1: beforeSnapshot.slot1,
+              slot1Color: beforeSnapshot.slot1Color,
+              slot2: site.name,
+              slot2Color: requestedColor ?? 'default',
+            }),
+    });
 
     return Response.json({ ok: true, action, changed: true, entry });
   }
@@ -279,6 +392,25 @@ export async function POST(request: Request) {
     } catch {
       // ignore
     }
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'スケジュール',
+      before: beforeSnapshot,
+      after:
+        beforeSnapshot.slot1
+          ? createScheduleCellSnapshot({
+              slot1: beforeSnapshot.slot1,
+              slot1Color: beforeSnapshot.slot1Color,
+              slot2: site.name,
+              slot2Color: requestedColor ?? 'default',
+            })
+          : createScheduleCellSnapshot({ slot1: site.name, slot1Color: requestedColor ?? 'default' }),
+    });
 
     return Response.json({ ok: true, action, changed: true, entry: updated });
   }
