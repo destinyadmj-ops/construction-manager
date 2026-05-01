@@ -6,14 +6,14 @@ import { resolve } from 'path';
 dotenv.config({ path: resolve(__dirname, '../.env') });
 dotenv.config({ path: resolve(__dirname, '../.env.local'), override: true });
 
-if (!process.env.DIRECT_URL && process.env.DATABASE_URL) {
-	process.env.DIRECT_URL = process.env.DATABASE_URL;
+const prismaDatasourceUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+
+if (!prismaDatasourceUrl) {
+	throw new Error('DIRECT_URL or DATABASE_URL is not set');
 }
 
 export default defineConfig({
-	engine: 'classic',
 	datasource: {
-		url: process.env.DATABASE_URL!,
-		directUrl: process.env.DIRECT_URL,
+		url: prismaDatasourceUrl,
 	},
 });
