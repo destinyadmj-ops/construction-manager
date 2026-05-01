@@ -14,8 +14,9 @@ export type HeaderHistoryHover = { userId: string; day: string };
 export type HeaderHistoryItem = {
   key: string;
   at: number;
+  beforeLabel: string;
+  afterLabel: string;
   editorLabel: string;
-  siteLabel: string;
   hover: HeaderHistoryHover;
 };
 
