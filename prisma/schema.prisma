@@ -5,6 +5,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum IntegrationProvider {
@@ -73,6 +75,8 @@ model User {
   integrations   IntegrationAccount[]
   loginMemories  UserLoginMemory[]
   uiSettings     UserUiSetting[]
+  targetScheduleChanges ScheduleChangeHistory[] @relation("TargetUserScheduleChangeHistory")
+  editorScheduleChanges ScheduleChangeHistory[] @relation("EditorUserScheduleChangeHistory")
 
   siteMemberships SiteMember[]
   timeClocks      TimeClock[]
@@ -93,8 +97,39 @@ model UserLoginMemory {
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleChangeHistories ScheduleChangeHistory[]
 
   @@index([userId, lastSeenAt])
+}
+
+model ScheduleChangeHistory {
+  id                String   @id @default(cuid())
+  kind              WorkEntryKind @default(NORMAL)
+  targetUserId      String
+  editorUserId      String?
+  editorLoginMemoryId String?
+  dayYmd            String
+  projectLabel      String   @default("")
+  targetLabel       String   @default("")
+  beforeValue       String   @default("")
+  afterValue        String   @default("")
+  editorLabel       String   @default("")
+  editorIpHash      String?
+  editorUserAgentHash String?
+  editorHost        String   @default("")
+  editorPlatform    String   @default("")
+  editorLanguage    String   @default("")
+  editorTimeZone    String   @default("")
+  createdAt         DateTime @default(now())
+
+  targetUser User @relation("TargetUserScheduleChangeHistory", fields: [targetUserId], references: [id], onDelete: Cascade)
+  editorUser User? @relation("EditorUserScheduleChangeHistory", fields: [editorUserId], references: [id], onDelete: SetNull)
+  editorLoginMemory UserLoginMemory? @relation(fields: [editorLoginMemoryId], references: [id], onDelete: SetNull)
+
+  @@index([kind, createdAt])
+  @@index([dayYmd, createdAt])
+  @@index([targetUserId, dayYmd, createdAt])
+  @@index([editorUserId, createdAt])
 }
 
 model UserUiSetting {
