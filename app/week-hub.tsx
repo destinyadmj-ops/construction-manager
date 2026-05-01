@@ -127,6 +127,122 @@ function slotsEqual(a: CellSlots, b: CellSlots) {
   return a[0] === b[0] && a[1] === b[1];
 }
 
+function apiCellsEqual(a: ApiCell | null | undefined, b: ApiCell | null | undefined) {
+  return (
+    (a?.slot1 ?? null) === (b?.slot1 ?? null) &&
+    (a?.slot2 ?? null) === (b?.slot2 ?? null) &&
+    (a?.color1 ?? 'default') === (b?.color1 ?? 'default') &&
+    (a?.color2 ?? 'default') === (b?.color2 ?? 'default')
+  );
+}
+
+function cloneApiCell(cell: ApiCell | null | undefined): ApiCell {
+  return {
+    slot1: cell?.slot1 ?? null,
+    slot2: cell?.slot2 ?? null,
+    color1: cell?.color1 ?? 'default',
+    color2: cell?.color2 ?? 'default',
+  };
+}
+
+type CellEntry = { label: string; color: ApiCell['color1'] };
+
+function apiCellToEntries(cell: ApiCell | null | undefined): CellEntry[] {
+  const entries: CellEntry[] = [];
+  if (cell?.slot1) entries.push({ label: cell.slot1, color: cell.color1 ?? 'default' });
+  if (cell?.slot2) entries.push({ label: cell.slot2, color: cell.color2 ?? 'default' });
+  return entries;
+}
+
+function entriesToApiCell(entries: CellEntry[]): ApiCell {
+  return {
+    slot1: entries[0]?.label ?? null,
+    slot2: entries[1]?.label ?? null,
+    color1: entries[0]?.color ?? 'default',
+    color2: entries[1]?.color ?? 'default',
+  };
+}
+
+function previewCellAction(input: {
+  cell: ApiCell | null | undefined;
+  action: CellClickAction;
+  siteName?: string | null;
+  color: CellTextColor;
+}): {
+  cell: ApiCell;
+  changed: boolean;
+  reason?: string;
+  toggled?: 'off' | 'on';
+  replaced?: 'slot2';
+} {
+  const currentCell = cloneApiCell(input.cell);
+  const entries = apiCellToEntries(currentCell);
+  const siteName = input.siteName?.trim() ?? '';
+  const hitIndex = siteName ? entries.findIndex((entry) => entry.label === siteName) : -1;
+
+  switch (input.action) {
+    case 'swap':
+      if (entries.length < 2) return { cell: currentCell, changed: false, reason: 'not-enough-entries' };
+      return { cell: entriesToApiCell([entries[1]!, entries[0]!]), changed: true };
+    case 'recolor':
+      if (!siteName || hitIndex < 0) return { cell: currentCell, changed: false, reason: 'not-found' };
+      return {
+        cell: entriesToApiCell(
+          entries.map((entry, index) => (index === hitIndex ? { ...entry, color: input.color } : entry)),
+        ),
+        changed: true,
+      };
+    case 'remove':
+      if (!siteName || hitIndex < 0) return { cell: currentCell, changed: false, reason: 'not-found' };
+      return {
+        cell: entriesToApiCell(entries.filter((_, index) => index !== hitIndex)),
+        changed: true,
+      };
+    case 'toggle':
+      if (siteName && hitIndex >= 0) {
+        return {
+          cell: entriesToApiCell(entries.filter((_, index) => index !== hitIndex)),
+          changed: true,
+          toggled: 'off',
+        };
+      }
+      if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
+      if (entries.length >= 2) {
+        return {
+          cell: entriesToApiCell([entries[0]!, { label: siteName, color: input.color }]),
+          changed: true,
+          replaced: 'slot2',
+        };
+      }
+      return {
+        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        changed: true,
+        toggled: 'on',
+      };
+    case 'add':
+      if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
+      if (hitIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
+      if (entries.length >= 2) return { cell: currentCell, changed: false, reason: 'cell-full' };
+      return {
+        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        changed: true,
+      };
+    case 'replace2':
+      if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
+      if (hitIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
+      if (entries.length >= 2) {
+        return {
+          cell: entriesToApiCell([entries[0]!, { label: siteName, color: input.color }]),
+          changed: true,
+        };
+      }
+      return {
+        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        changed: true,
+      };
+  }
+}
+
 function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -924,6 +1040,44 @@ function WeekHubInner() {
     const hit = pools.find((u) => u.id === selectedUserId);
     return hit ? hit.name ?? hit.email ?? hit.id : selectedUserId;
   }, [data?.users, monthData?.users, selectedUserId, yearData?.users]);
+
+  const visibleWeekDays = useMemo(() => {
+    return new Set(Array.from({ length: 7 }, (_, index) => toYmd(addDays(weekStart, index))));
+  }, [weekStart]);
+
+  const updateVisibleCell = useCallback((input: { userId: string; day: string; cell: ApiCell }) => {
+    setData((current) => {
+      if (!current || !visibleWeekDays.has(input.day)) return current;
+      const prevCell = current.grid[input.userId]?.[input.day];
+      if (apiCellsEqual(prevCell, input.cell)) return current;
+      return {
+        ...current,
+        grid: {
+          ...current.grid,
+          [input.userId]: {
+            ...(current.grid[input.userId] ?? {}),
+            [input.day]: cloneApiCell(input.cell),
+          },
+        },
+      };
+    });
+
+    setMonthData((current) => {
+      if (!current || !current.days.includes(input.day)) return current;
+      const prevCell = current.grid[input.userId]?.[input.day];
+      if (apiCellsEqual(prevCell, input.cell)) return current;
+      return {
+        ...current,
+        grid: {
+          ...current.grid,
+          [input.userId]: {
+            ...(current.grid[input.userId] ?? {}),
+            [input.day]: cloneApiCell(input.cell),
+          },
+        },
+      };
+    });
+  }, [visibleWeekDays]);
 
   const userLabelById = useMemo(() => {
     const pools: ApiUser[] = [
