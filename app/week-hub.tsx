@@ -275,6 +275,14 @@ function formatHistoryDateTime(value: string) {
   return `${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
+function formatHistoryCellValue(value: string) {
+  return value === '（空）' ? '空欄' : value;
+}
+
+function formatHistoryChange(beforeValue: string, afterValue: string) {
+  return `${formatHistoryCellValue(beforeValue)} → ${formatHistoryCellValue(afterValue)}`;
+}
+
 function startOfWeekMonday(input: Date) {
   const d = new Date(input);
   d.setHours(0, 0, 0, 0);
@@ -1151,6 +1159,7 @@ function WeekHubInner() {
         item.targetLabel,
         item.beforeValue,
         item.afterValue,
+        formatHistoryChange(item.beforeValue, item.afterValue),
         item.targetUserLabel,
         item.editorLabel,
         item.dayYmd,
@@ -5246,7 +5255,7 @@ function ScheduleHistoryDialog({
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="現場名、対象者、内容で検索"
+            placeholder="現場名、編集者、変更内容で検索"
             className="min-w-64 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
           <select
@@ -5277,7 +5286,7 @@ function ScheduleHistoryDialog({
                   <th className="px-2 py-2 font-medium">案件</th>
                   <th className="px-2 py-2 font-medium">スケジュール</th>
                   <th className="px-2 py-2 font-medium">対象</th>
-                  <th className="px-2 py-2 font-medium">内容</th>
+                  <th className="px-2 py-2 font-medium">変更内容</th>
                   <th className="px-2 py-2 font-medium">更新者 / 更新日時</th>
                 </tr>
               </thead>
@@ -5285,12 +5294,12 @@ function ScheduleHistoryDialog({
                 {items.map((item) => (
                   <tr key={item.id} className="border-b border-zinc-100 align-top dark:border-zinc-900">
                     <td className="px-2 py-3 text-zinc-800 dark:text-zinc-100">{item.projectLabel || '（空）'}</td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{item.beforeValue}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.beforeValue)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.targetLabel}</div>
-                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{item.targetUserLabel} / {item.dayYmd}</div>
+                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{item.editorLabel} / {item.dayYmd}</div>
                     </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{item.afterValue}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryChange(item.beforeValue, item.afterValue)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.editorLabel}</div>
                       {item.editorHost || item.editorPlatform || item.editorTimeZone ? (
