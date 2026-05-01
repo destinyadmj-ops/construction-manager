@@ -1342,8 +1342,14 @@ export default function AppHeader() {
                 type="button"
                 ref={historyButtonRef}
                 data-testid="header-action-history"
-                onClick={() => setIsHistoryOpen((v) => !v)}
-                disabled={!(actions.historyMenu || actions.history || navStack.length > 0)}
+                onClick={() => {
+                  const nextOpen = !isHistoryOpen;
+                  if (nextOpen && actions.historyPanel) {
+                    void actions.history?.onClick();
+                  }
+                  setIsHistoryOpen(nextOpen);
+                }}
+                disabled={!(actions.historyPanel || actions.historyMenu || actions.history || navStack.length > 0)}
                 title="履歴"
                 className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
@@ -1354,9 +1360,11 @@ export default function AppHeader() {
                 <div
                   ref={historyMenuRef}
                   data-color-edit-slot="border"
-                  className="absolute left-0 top-full mt-1 w-[480px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                  className={`absolute left-0 top-full mt-1 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
+                    actions.historyPanel?.widthClassName ?? 'w-[480px]'
+                  }`}
                 >
-                  {actions.history ? (
+                  {actions.history && !actions.historyPanel ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -1371,7 +1379,10 @@ export default function AppHeader() {
                     </button>
                   ) : null}
 
-                  <div className="max-h-[32rem] overflow-auto py-1">
+                  {actions.historyPanel ? (
+                    actions.historyPanel.content
+                  ) : (
+                    <div className="max-h-[32rem] overflow-auto py-1">
                     {actions.historyMenu ? (
                       <div className="flex flex-col gap-1 px-2 pb-1">
                         {actions.historyMenu.items.length === 0 ? (
@@ -1437,8 +1448,9 @@ export default function AppHeader() {
                             className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
                           >
                             <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
-                            <span className="break-all">{it.label}</span>
-                          </div>
+                      )}
+                    </div>
+                    )}
                         ))
                     )}
                   </div>

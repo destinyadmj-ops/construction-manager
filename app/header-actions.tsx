@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type HeaderAction = {
   onClick: () => void | Promise<void>;
@@ -25,10 +25,16 @@ export type HeaderHistoryMenu = {
   onHover?: (hover: HeaderHistoryHover | null) => void;
 };
 
+export type HeaderHistoryPanel = {
+	content: ReactNode;
+	widthClassName?: string;
+};
+
 type HeaderActionsState = {
   add?: HeaderAction;
   history?: HeaderAction;
   historyMenu?: HeaderHistoryMenu;
+  historyPanel?: HeaderHistoryPanel;
   save?: HeaderAction;
   undo?: HeaderAction;
   redo?: HeaderAction;
@@ -39,6 +45,7 @@ type HeaderActionsContextValue = {
   setAddAction: (action: HeaderAction | undefined) => void;
   setHistoryAction: (action: HeaderAction | undefined) => void;
   setHistoryMenu: (menu: HeaderHistoryMenu | undefined) => void;
+  setHistoryPanel: (panel: HeaderHistoryPanel | undefined) => void;
   setSaveAction: (action: HeaderAction | undefined) => void;
   setUndoAction: (action: HeaderAction | undefined) => void;
   setRedoAction: (action: HeaderAction | undefined) => void;
@@ -70,6 +77,10 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
     setActions((cur) => ({ ...cur, historyMenu: menu }));
   }, []);
 
+  const setHistoryPanel = useCallback((panel: HeaderHistoryPanel | undefined) => {
+	setActions((cur) => ({ ...cur, historyPanel: panel }));
+  }, []);
+
   const setSaveAction = useCallback((action: HeaderAction | undefined) => {
     setActions((cur) => ({ ...cur, save: action }));
   }, []);
@@ -83,8 +94,8 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const value = useMemo<HeaderActionsContextValue>(
-    () => ({ actions, setAddAction, setHistoryAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction }),
-    [actions, setAddAction, setHistoryAction, setHistoryMenu, setRedoAction, setSaveAction, setUndoAction],
+    () => ({ actions, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction }),
+    [actions, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setRedoAction, setSaveAction, setUndoAction],
   );
 
   return <HeaderActionsContext.Provider value={value}>{children}</HeaderActionsContext.Provider>;
