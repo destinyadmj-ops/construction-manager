@@ -1,26 +1,35 @@
 param(
   [string]$TaskName = "MasterHub Dev Server (dev:keep)",
+  [string]$MonitorTaskName = "MasterHub Dev Server Monitor (dev:keep)",
+  [ValidateRange(1, 60)]
+  [int]$MonitorIntervalMinutes = 5,
   [int]$DelaySeconds = 10
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$cmdPath = Join-Path $repoRoot 'run-dev-keep.cmd'
+$cmdPath = Join-Path $repoRoot 'run-dev-keep-bg.cmd'
 
 if (-not (Test-Path $cmdPath)) {
-  throw "run-dev-keep.cmd not found: $cmdPath"
+  throw "run-dev-keep-bg.cmd not found: $cmdPath"
 }
 
 Write-Host "Installing Scheduled Task..."
-Write-Host "- TaskName: $TaskName"
-Write-Host "- Execute : $cmdPath"
-Write-Host "- Delay   : ${DelaySeconds}s (after logon)"
+Write-Host "- LogonTask : $TaskName"
+Write-Host "- MonitorTask: $MonitorTaskName"
+Write-Host "- Execute   : $cmdPath"
+Write-Host "- Delay     : ${DelaySeconds}s (after logon)"
+Write-Host "- Monitor   : every $MonitorIntervalMinutes minute(s)"
 
-function New-StartupTaskAction {
-  if ($DelaySeconds -gt 0) {
+function New-TaskAction {
+  param(
+    [int]$StartDelaySeconds = 0
+  )
+
+  if ($StartDelaySeconds -gt 0) {
     $cmdEscaped = $cmdPath.Replace("'", "''")
-    $psCommand = "Start-Sleep -Seconds $DelaySeconds; & '$cmdEscaped'"
+    $psCommand = "Start-Sleep -Seconds $StartDelaySeconds; & '$cmdEscaped'"
     $psArgs = "-NoProfile -ExecutionPolicy Bypass -Command `"$psCommand`""
     return New-ScheduledTaskAction -Execute "powershell.exe" -Argument $psArgs
   }
@@ -28,19 +37,26 @@ function New-StartupTaskAction {
   return New-ScheduledTaskAction -Execute $cmdPath
 }
 
+function New-MonitorTaskTrigger {
+  return New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes $MonitorIntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
+}
+
 function Install-WithScheduledTasksModule {
-  $action = New-StartupTaskAction
-  $trigger = New-ScheduledTaskTrigger -AtLogOn
+  $logonAction = New-TaskAction -StartDelaySeconds $DelaySeconds
+  $logonTrigger = New-ScheduledTaskTrigger -AtLogOn
+  $monitorAction = New-TaskAction
+  $monitorTrigger = New-MonitorTaskTrigger
   $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  Register-ScheduledTask -TaskName $TaskName -Action $logonAction -Trigger $logonTrigger -Principal $principal -Settings $settings -Force | Out-Null
+  Register-ScheduledTask -TaskName $MonitorTaskName -Action $monitorAction -Trigger $monitorTrigger -Principal $principal -Settings $settings -Force | Out-Null
 }
 
 function Install-WithSchtasks {
   $taskCommand = "cmd.exe /c `"`"$cmdPath`"`""
 
-  $createArgs = @(
+  $logonArgs = @(
     '/Create'
     '/F'
     '/SC', 'ONLOGON'
@@ -50,12 +66,26 @@ function Install-WithSchtasks {
 
   if ($DelaySeconds -gt 0) {
     $delay = '0000:' + ([string]$DelaySeconds).PadLeft(2, '0')
-    $createArgs += @('/DELAY', $delay)
+    $logonArgs += @('/DELAY', $delay)
   }
 
-  & schtasks.exe @createArgs | Out-Null
+  & schtasks.exe @logonArgs | Out-Null
   if ($LASTEXITCODE -ne 0) {
-    throw "schtasks.exe failed with exit code $LASTEXITCODE"
+    throw "schtasks.exe failed to create logon task with exit code $LASTEXITCODE"
+  }
+
+  $monitorArgs = @(
+    '/Create'
+    '/F'
+    '/SC', 'MINUTE'
+    '/MO', "$MonitorIntervalMinutes"
+    '/TN', $MonitorTaskName
+    '/TR', $taskCommand
+  )
+
+  & schtasks.exe @monitorArgs | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "schtasks.exe failed to create monitor task with exit code $LASTEXITCODE"
   }
 }
 
@@ -93,4 +123,5 @@ if (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "Done. It will auto-start at next logon."
+Write-Host "Done. It will also self-heal every $MonitorIntervalMinutes minute(s) while the PC is logged in."
 Write-Host "To remove: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-dev-autostart.ps1"
