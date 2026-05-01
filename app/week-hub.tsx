@@ -79,6 +79,7 @@ type CellHistoryEntry = {
   day: string; // YYYY-MM-DD
   before: CellSlots;
   after: CellSlots;
+  editorLabel: string;
   at: number;
 };
 
@@ -283,6 +284,23 @@ function formatHistoryChange(beforeValue: string, afterValue: string) {
   return `${formatHistoryCellValue(beforeValue)} → ${formatHistoryCellValue(afterValue)}`;
 }
 
+function formatCellSlotsValue(slots: CellSlots) {
+  const parts = slots.map((slot) => (slot ?? '').trim()).filter((slot): slot is string => slot.length > 0);
+  return parts.length > 0 ? parts.join(' / ') : '空欄';
+}
+
+function formatCellSlotsChange(before: CellSlots, after: CellSlots) {
+  return `${formatCellSlotsValue(before)} → ${formatCellSlotsValue(after)}`;
+}
+
+function pickScheduleHistoryProjectDisplay(item: ScheduleChangeHistoryItem) {
+  const candidates = [item.projectLabel, item.afterValue, item.beforeValue]
+    .map((value) => value.trim())
+    .filter((value) => value && value !== '（空）');
+  if (candidates.length === 0) return '（空）';
+  return candidates.sort((left, right) => right.length - left.length)[0] ?? '（空）';
+}
+
 function startOfWeekMonday(input: Date) {
   const d = new Date(input);
   d.setHours(0, 0, 0, 0);
@@ -445,6 +463,7 @@ function WeekHubInner() {
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
   const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
   const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
+  const currentEditorLabel = authMeUser?.name ?? authMeUser?.email ?? '管理者';
 
   const gridPrefsKey = useMemo(() => {
     return `week-hub:${scheduleKind}:${mode}:gridPrefs`;
@@ -1487,6 +1506,7 @@ function WeekHubInner() {
         last.kind === 'cell' &&
         last.userId === entry.userId &&
         last.day === entry.day &&
+        last.editorLabel === entry.editorLabel &&
         entry.at - last.at <= HISTORY_GROUP_MS &&
         slotsEqual(last.after, entry.before)
       ) {
@@ -2157,8 +2177,8 @@ function WeekHubInner() {
               .map((h) => ({
                 key: `${h.at}:${h.userId}:${h.day}`,
                 at: h.at,
-                editorLabel: userLabelById.get(h.userId) ?? h.userId,
-                siteLabel: `${(h.after[0] ?? h.before[0] ?? '').trim() || '（空）'} (${h.day})`,
+                editorLabel: h.editorLabel,
+                siteLabel: `${formatCellSlotsChange(h.before, h.after)} (${h.day})`,
                 hover: { userId: h.userId, day: h.day },
               })),
             onHover: (hover) => setHistoryHover(hover),
@@ -2889,6 +2909,7 @@ function WeekHubInner() {
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
                   currentUserId={authMeUser?.id ?? null}
+                  currentEditorLabel={currentEditorLabel}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
@@ -3154,6 +3175,7 @@ function WeekHubInner() {
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
                   currentUserId={authMeUser?.id ?? null}
+                  currentEditorLabel={currentEditorLabel}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
@@ -3672,6 +3694,7 @@ function WeekGrid({
   cellTextColor,
   isEditable,
   currentUserId,
+  currentEditorLabel,
   selectedUserId,
   onSelectUser,
   onNotify,
@@ -3720,6 +3743,7 @@ function WeekGrid({
   cellTextColor: CellTextColor;
   isEditable: boolean;
   currentUserId: string | null;
+  currentEditorLabel: string;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
@@ -3962,6 +3986,7 @@ function WeekGrid({
                   cellMinH={cellMinH}
                   isEditable={isEditable}
                   currentUserId={currentUserId}
+                  currentEditorLabel={currentEditorLabel}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
@@ -4021,6 +4046,7 @@ function MonthGrid({
   cellTextColor,
   isEditable,
   currentUserId,
+  currentEditorLabel,
   selectedUserId,
   onSelectUser,
   onNotify,
@@ -4055,6 +4081,7 @@ function MonthGrid({
   cellTextColor: CellTextColor;
   isEditable: boolean;
   currentUserId: string | null;
+  currentEditorLabel: string;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
@@ -4263,6 +4290,7 @@ function MonthGrid({
                   cellMinH={cellMinH}
                   isEditable={isEditable}
                   currentUserId={currentUserId}
+                  currentEditorLabel={currentEditorLabel}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
@@ -4637,6 +4665,7 @@ function Row({
   cellMinH,
   isEditable,
   currentUserId,
+  currentEditorLabel,
   onSelectUser,
   paceTargetDays,
   paceTargetUserId,
@@ -4679,6 +4708,7 @@ function Row({
   cellMinH: number;
   isEditable: boolean;
   currentUserId: string | null;
+  currentEditorLabel: string;
   onSelectUser: (userId: string | null) => void;
   paceTargetDays?: ReadonlySet<string>;
   paceTargetUserId?: string | null;
@@ -4860,6 +4890,7 @@ function Row({
         day: input.day,
         before: [beforeCell.slot1, beforeCell.slot2],
         after: [preview.cell.slot1, preview.cell.slot2],
+        editorLabel: currentEditorLabel,
         // eslint-disable-next-line react-hooks/purity -- executed from an event-triggered async action
         at: Date.now(),
       });
@@ -5293,7 +5324,7 @@ function ScheduleHistoryDialog({
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className="border-b border-zinc-100 align-top dark:border-zinc-900">
-                    <td className="px-2 py-3 text-zinc-800 dark:text-zinc-100">{item.projectLabel || '（空）'}</td>
+                    <td className="px-2 py-3 text-zinc-800 dark:text-zinc-100">{pickScheduleHistoryProjectDisplay(item)}</td>
                     <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.beforeValue)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.targetLabel}</div>
