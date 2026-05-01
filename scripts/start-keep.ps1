@@ -97,6 +97,111 @@ function Get-CurrentHead {
   return $headText
 }
 
+function Get-Sha256Hex {
+  param([string]$Value)
+
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha.Dispose()
+  }
+}
+
+function Get-StatusPathFromLine {
+  param([string]$Line)
+
+  if ([string]::IsNullOrWhiteSpace($Line) -or $Line.Length -le 3) {
+    return ''
+  }
+
+  $pathPart = $Line.Substring(3).Trim()
+  if ($pathPart -match ' -> ') {
+    $pathPart = ($pathPart -split ' -> ', 2)[1]
+  }
+
+  return $pathPart.Trim('"').Replace('\\', '/')
+}
+
+function Test-IgnoredStatusPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $true
+  }
+
+  $ignoredPatterns = @(
+    '^dev-keep\.pid$'
+    '^dev-keep\.log$'
+    '^start-keep\.pid$'
+    '^start-keep\.log$'
+    '^latest\.log$'
+    '^e2e\.log$'
+    '^tmp_daily_export\.csv$'
+    '^\.dev/'
+    '^node_modules/'
+    '^\.next/'
+    '^coverage/'
+    '^test-results/'
+    '^playwright-report/'
+    '^apps/twa/android/app/build/'
+    '\.log(\..+)?$'
+    '\.bak$'
+    '-err\.txt$'
+    '-out\.txt$'
+  )
+
+  foreach ($pattern in $ignoredPatterns) {
+    if ($Path -match $pattern) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-FileStateStamp {
+  param([string]$RelativePath)
+
+  $fullPath = Join-Path $repoRoot ($RelativePath -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+  if (-not (Test-Path -LiteralPath $fullPath)) {
+    return ("{0}|missing" -f $RelativePath)
+  }
+
+  try {
+    $item = Get-Item -LiteralPath $fullPath -ErrorAction Stop
+    return ("{0}|{1}|{2}" -f $RelativePath, $item.Length, $item.LastWriteTimeUtc.Ticks)
+  } catch {
+    return ("{0}|error" -f $RelativePath)
+  }
+}
+
+function Get-SourceFingerprint {
+  $head = Get-CurrentHead
+  $statusLines = @(git -C $repoRoot status --porcelain=v1 --untracked-files=normal 2>$null)
+  if ($LASTEXITCODE -ne 0) {
+    return $head
+  }
+
+  $entries = @()
+  foreach ($line in $statusLines) {
+    $path = Get-StatusPathFromLine $line
+    if (Test-IgnoredStatusPath $path) {
+      continue
+    }
+
+    $statusCode = if ($line.Length -ge 2) { $line.Substring(0, 2) } else { '??' }
+    $entries += ("{0}|{1}" -f $statusCode, (Get-FileStateStamp $path))
+  }
+
+  if ($entries.Count -eq 0) {
+    return ("{0}|clean" -f $head)
+  }
+
+  return ("{0}|dirty|{1}" -f $head, (Get-Sha256Hex ($entries -join "`n")))
+}
+
 function Read-BuildState {
   if (-not (Test-Path $buildStatePath)) {
     return $null
@@ -113,6 +218,7 @@ function Save-BuildState {
   $state = [pscustomobject]@{
     port = $Port
     head = Get-CurrentHead
+    sourceFingerprint = Get-SourceFingerprint
     builtAt = (Get-Date).ToString('o')
   }
 
@@ -136,6 +242,11 @@ function Test-BuildRequired {
 
   $currentHead = Get-CurrentHead
   if ($currentHead -and $state.head -ne $currentHead) {
+    return $true
+  }
+
+  $currentFingerprint = Get-SourceFingerprint
+  if ($currentFingerprint -and $state.sourceFingerprint -ne $currentFingerprint) {
     return $true
   }
 
