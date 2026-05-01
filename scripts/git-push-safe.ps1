@@ -21,6 +21,26 @@ param(
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
+function Get-CurrentBranch {
+    $candidates = @(
+        @('branch', '--show-current'),
+        @('symbolic-ref', '--quiet', '--short', 'HEAD'),
+        @('rev-parse', '--abbrev-ref', 'HEAD')
+    )
+
+    foreach ($candidate in $candidates) {
+        $value = (& git -C $repoRoot @candidate 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0) {
+            $branchName = ([string]$value).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($branchName) -and $branchName -ne 'HEAD') {
+                return $branchName
+            }
+        }
+    }
+
+    return $null
+}
+
 function Get-StatusPathFromLine {
     param([string]$Line)
 
@@ -70,9 +90,9 @@ function Test-IgnoredStatusPath {
 }
 
 Write-Host 'Detecting current branch...'
-$branch = (git -C $repoRoot rev-parse --abbrev-ref HEAD 2>&1 | Select-Object -First 1).Trim()
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch) -or $branch -eq 'HEAD') {
-    Write-Error 'Failed to detect a normal working branch.'
+$branch = Get-CurrentBranch
+if ([string]::IsNullOrWhiteSpace($branch)) {
+    Write-Error 'Failed to detect a normal working branch. Confirm that the repository is not in detached HEAD state.'
     exit 1
 }
 Write-Host "Current branch: $branch"
