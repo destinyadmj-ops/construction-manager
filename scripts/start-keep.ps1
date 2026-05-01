@@ -1,7 +1,7 @@
 param(
   [int]$DelaySeconds = 10,
   [string]$LogFile = "start-keep.log",
-  [int]$Port = 3001,
+  [int]$Port = 3000,
   [string]$HealthPath = "/api/health",
   [int]$HealthTimeoutMs = 1000,
   [int]$IdleCheckSeconds = 5,

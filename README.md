@@ -440,10 +440,10 @@ VS Code タスクの `run: prod (build + start)` を使うか、手動で以下�
 
 ```bash
 npm run build
-npm run start -- -H 127.0.0.1 -p 3001
+npm run start -- -H 127.0.0.1 -p 3000
 ```
 
-- prod: http://127.0.0.1:3001
+- prod: http://127.0.0.1:3000
 
 ## 本番（推奨: Supabase + Linux VPS + Docker Compose）
 
@@ -513,7 +513,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production down
 ※ Service Worker 登録は `production` のみ有効です（devでは登録しません）。そのため **PWA動作確認は必ず prod で** 実施してください。
 
 ※ 重要: AndroidのChromeで「アプリをインストール（Install）」が出るには、基本的に **HTTPS（安全なコンテキスト）** が必要です。
-LAN内の `http://<PC-IP>:3001` は環境によって「ホーム画面に追加」はできても、Install扱いにならないことがあります。
+LAN内の `http://<PC-IP>:3000` は環境によって「ホーム画面に追加」はできても、Install扱いにならないことがあります。
 （運用・配布を想定する場合は、HTTPSのドメインで公開する構成に寄せてください）
 
 ### 方式A: ローカルHTTPS（mkcert）でInstallを確実化
@@ -539,7 +539,7 @@ npm run prod:https:open
 ```
 
 - 起動時に HTTPS URL を表示し、クリップボードにもコピーします。
-- Nextは `http://127.0.0.1:3001`、HTTPSは `https://0.0.0.0:3443`（LANからは `https://<PC-IP>:3443`）です。
+- Nextは `http://127.0.0.1:3000`、HTTPSは `https://0.0.0.0:3443`（LANからは `https://<PC-IP>:3443`）です。
 
 補足:
 
@@ -564,7 +564,7 @@ mkcert -CAROOT
 
 ```bash
 npm run build
-npm run start -- -H 127.0.0.1 -p 3001
+npm run start -- -H 127.0.0.1 -p 3000
 ```
 
 スマホ実機からアクセスする場合（同一Wi-Fi想定）は、LAN公開で起動:
@@ -592,7 +592,7 @@ npm run lan:url:copy
 
 2) **インストール（Android / Chrome）**
 
-- Android端末のChromeで `http://<PCのIPアドレス>:3001/?mode=week` を開く
+- Android端末のChromeで `http://<PCのIPアドレス>:3000/?mode=week` を開く
 - ブラウザメニュー → **「アプリをインストール」**（または「ホーム画面に追加」）
 - インストール後、アプリとして起動して **初期画面が週表示（`/?mode=week`）で開く** ことを確認
 

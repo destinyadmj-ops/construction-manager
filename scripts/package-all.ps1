@@ -5,7 +5,7 @@ param(
     [switch]$DesktopOnly,
     [switch]$MobileOnly,
     [switch]$WebOnly,
-    [string]$DesktopUrl = "http://localhost:3001",
+    [string]$DesktopUrl = "http://localhost:3000",
     [string]$DesktopReleaseUrl = ""
 )
 

@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $picker = Join-Path $PSScriptRoot 'pick-port.ps1'
 
-$port = & powershell -NoProfile -ExecutionPolicy Bypass -File $picker -Candidates @(3000, 3001) -HealthPath $HealthPath -TimeoutMs $HealthTimeoutMs
+$port = & powershell -NoProfile -ExecutionPolicy Bypass -File $picker -Candidates @(3000) -HealthPath $HealthPath -TimeoutMs $HealthTimeoutMs
 if (-not $port -or -not ($port -as [int])) {
   $port = 3000
 }

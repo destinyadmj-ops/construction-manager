@@ -4,7 +4,7 @@
 param(
     [switch]$SkipBuild,
     [switch]$DirOnly,
-    [string]$MasterHubUrl = "http://localhost:3001",
+    [string]$MasterHubUrl = "http://localhost:3000",
     [string]$DesktopReleaseUrl = ""
 )
 

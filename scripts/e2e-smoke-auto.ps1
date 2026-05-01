@@ -9,7 +9,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $repoRoot
 
 $picker = Join-Path $PSScriptRoot 'pick-port.ps1'
-$port = & powershell -NoProfile -ExecutionPolicy Bypass -File $picker -Candidates @(3000, 3001) -HealthPath "/api/health" -TimeoutMs 700
+$port = & powershell -NoProfile -ExecutionPolicy Bypass -File $picker -Candidates @(3000) -HealthPath "/api/health" -TimeoutMs 700
 if (-not $port -or -not ($port -as [int])) {
   $port = 3000
 }

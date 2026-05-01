@@ -1,5 +1,5 @@
 param(
-  [int]$Port = 3001,
+  [int]$Port = 3000,
   [string]$Path = '/?mode=week',
   [switch]$CopyFirst
 )
