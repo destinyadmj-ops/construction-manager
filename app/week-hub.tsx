@@ -2792,15 +2792,8 @@ function WeekHubInner() {
                       pinSiteLabelRef.current = selectedSite.label;
                       pinSiteToTop(selectedSite);
                     }
-                    // Refresh week after an assignment
-                    try {
-                      const res = await fetch(
-                        `/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`,
-                      );
-                      if (res.ok) setData((await res.json()) as ApiResponse);
-                    } catch {
-                      // ignore
-                    }
+                    void refreshCurrentView();
+                    void refreshSites();
                   }}
                   userOrder={userOrder}
                   reorderMode={reorderMode}
@@ -3063,14 +3056,8 @@ function WeekHubInner() {
                       pinSiteLabelRef.current = selectedSite.label;
                       pinSiteToTop(selectedSite);
                     }
-                    try {
-                      const res = await fetch(
-                        `/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`,
-                      );
-                      if (res.ok) setMonthData((await res.json()) as MonthApiResponse);
-                    } catch {
-                      // ignore
-                    }
+                    void refreshCurrentView();
+                    void refreshSites();
                   }}
                   userOrder={userOrder}
                   reorderMode={reorderMode}
