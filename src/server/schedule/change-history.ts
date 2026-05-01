@@ -132,8 +132,13 @@ export function formatScheduleCellSnapshot(snapshot: ScheduleCellSnapshot) {
   return parts.length > 0 ? parts.join(' / ') : '（空）';
 }
 
+function formatScheduleCellProjectLabel(snapshot: ScheduleCellSnapshot) {
+  const parts = [snapshot.slot1, snapshot.slot2].map((value) => normalize(value)).filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(' / ') : '';
+}
+
 export function pickScheduleHistoryProjectLabel(before: ScheduleCellSnapshot, after: ScheduleCellSnapshot) {
-  return after.slot1 ?? after.slot2 ?? before.slot1 ?? before.slot2 ?? '';
+  return formatScheduleCellProjectLabel(after) || formatScheduleCellProjectLabel(before);
 }
 
 async function resolveScheduleEditorContext(request: Request) {
