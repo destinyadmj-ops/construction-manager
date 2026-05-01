@@ -1,5 +1,10 @@
 import { prisma } from '@/server/db/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import {
+  createScheduleCellSnapshot,
+  createScheduleCellSnapshotFromWorkEntries,
+  recordScheduleChangeHistory,
+} from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import { z } from 'zod';
@@ -66,11 +71,19 @@ export async function POST(request: Request) {
   const kind = parsed.data.kind ?? 'NORMAL';
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } });
     if (!user) return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
 
     const startAt = startOfDayLocal(day);
     const until = addDays(startAt, 1);
+    const targetUserLabel = user.name ?? user.email ?? user.id;
+
+    const beforeEntries = await prisma.workEntry.findMany({
+      where: { userId, kind, startAt: { gte: startAt, lt: until } },
+      orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
+      select: { summary: true, accountingMeta: true },
+    });
+    const beforeSnapshot = createScheduleCellSnapshotFromWorkEntries(beforeEntries);
 
     const slot1Name = (parsed.data.slot1 ?? null)?.trim() || null;
     const slot2Name = (parsed.data.slot2 ?? null)?.trim() || null;
@@ -124,6 +137,22 @@ export async function POST(request: Request) {
     } catch {
       // ignore history folder creation failure
     }
+
+    await recordScheduleChangeHistory({
+      request,
+      kind,
+      targetUserId: user.id,
+      targetUserLabel,
+      dayYmd: day,
+      targetLabel: 'スケジュール',
+      before: beforeSnapshot,
+      after: createScheduleCellSnapshot({
+        slot1: slot1Site?.name ?? slot1Name,
+        slot1Color,
+        slot2: slot2Site?.name ?? slot2Name,
+        slot2Color,
+      }),
+    });
 
     return Response.json({ ok: true });
   } catch (e) {
