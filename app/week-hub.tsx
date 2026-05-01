@@ -12,7 +12,9 @@ type ScheduleKind = 'normal' | 'daily';
 
 type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
-type CellTextColor = 'default' | 'red';
+const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+type LabelColor = (typeof LABEL_COLORS)[number];
+type CellTextColor = LabelColor;
 type CellBg = 'default' | 'soft';
 
 type ApiUser = { id: string; name: string | null; email: string | null };
@@ -29,9 +31,9 @@ type ApiCell = {
   // Up to 2 slots. Each slot is a short label.
   slot1: string | null;
   slot2: string | null;
-  // Optional hint color: 'red' means attention.
-  color1: 'default' | 'red';
-  color2: 'default' | 'red';
+  // Optional hint color for each slot.
+  color1: LabelColor;
+  color2: LabelColor;
 };
 
 type ApiResponse = {
@@ -60,6 +62,7 @@ type YearSummaryApiResponse = {
 type SiteItem = {
   id: string | null;
   label: string;
+  scheduleLabelColor?: LabelColor | null;
   badgeMonthVisible?: boolean;
   invoiceIssuedThisMonth?: boolean;
   reportIssuedThisMonth?: boolean;
@@ -100,6 +103,39 @@ type ScheduleChangeHistoryItem = {
 };
 
 const HISTORY_GROUP_MS = 800;
+
+const LABEL_COLOR_OPTIONS: Array<{ value: LabelColor; label: string }> = [
+  { value: 'default', label: '通常' },
+  { value: 'red', label: '赤' },
+  { value: 'orange', label: '橙' },
+  { value: 'yellow', label: '黄' },
+  { value: 'green', label: '緑' },
+  { value: 'blue', label: '青' },
+  { value: 'purple', label: '紫' },
+  { value: 'pink', label: '桃' },
+];
+
+function isLabelColor(value: unknown): value is LabelColor {
+  return typeof value === 'string' && (LABEL_COLORS as readonly string[]).includes(value);
+}
+
+function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: LabelColor = 'default'): LabelColor {
+  return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
+}
+
+function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): string {
+  if (color === 'default') {
+    return tone === 'primary' ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-500 dark:text-zinc-400';
+  }
+
+  if (color === 'red') return tone === 'primary' ? 'text-red-600 dark:text-red-400' : 'text-red-500 dark:text-red-300';
+  if (color === 'orange') return tone === 'primary' ? 'text-orange-600 dark:text-orange-400' : 'text-orange-500 dark:text-orange-300';
+  if (color === 'yellow') return tone === 'primary' ? 'text-amber-600 dark:text-amber-300' : 'text-amber-500 dark:text-amber-200';
+  if (color === 'green') return tone === 'primary' ? 'text-green-600 dark:text-green-400' : 'text-green-500 dark:text-green-300';
+  if (color === 'blue') return tone === 'primary' ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500 dark:text-blue-300';
+  if (color === 'purple') return tone === 'primary' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-500 dark:text-violet-300';
+  return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
+}
 
 function arrayEqual(a: string[], b: string[]) {
   if (a === b) return true;
@@ -537,7 +573,7 @@ function WeekHubInner() {
           : null;
       if (nextAction) setCellClickAction(nextAction);
 
-      const nextTextColor = o.cellTextColor === 'red' ? 'red' : o.cellTextColor === 'default' ? 'default' : null;
+      const nextTextColor = isLabelColor(o.cellTextColor) ? o.cellTextColor : null;
       if (nextTextColor) setCellTextColor(nextTextColor);
 
       const nextBg = o.cellBg === 'soft' ? 'soft' : o.cellBg === 'default' ? 'default' : null;
@@ -752,6 +788,21 @@ function WeekHubInner() {
     [normalizeSiteInputToName, sites],
   );
 
+  const resolveSiteReference = useCallback(
+    (input: { siteId?: string | null; siteName?: string | null }): SiteItem | null => {
+      const siteId = input.siteId?.trim();
+      if (siteId) {
+        const byId = sites.find((site) => site.id === siteId);
+        if (byId) return byId;
+      }
+
+      const siteName = input.siteName?.trim();
+      if (!siteName) return null;
+      return resolveSiteFromText(siteName);
+    },
+    [resolveSiteFromText, sites],
+  );
+
   const pinSiteToTop = useCallback(
     (site: SiteItem) => {
     const label = (site?.label ?? '').trim();
@@ -903,12 +954,15 @@ function WeekHubInner() {
         <span className="text-xs text-zinc-500 dark:text-zinc-400">文字色</span>
         <select
           value={cellTextColor}
-          onChange={(e) => setCellTextColor((e.target.value === 'red' ? 'red' : 'default') satisfies CellTextColor)}
+          onChange={(e) => setCellTextColor((isLabelColor(e.target.value) ? e.target.value : 'default') satisfies CellTextColor)}
           className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
           aria-label="文字色"
         >
-          <option value="default">通常</option>
-          <option value="red">赤</option>
+          {LABEL_COLOR_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -1434,6 +1488,7 @@ function WeekHubInner() {
             id: string;
             companyName?: string | null;
             name: string;
+            scheduleLabelColor?: string | null;
             contactName?: string | null;
             createdAt?: string;
             depreciationThreshold?: number;
@@ -1462,6 +1517,7 @@ function WeekHubInner() {
           return {
             id: s.id,
             label,
+            scheduleLabelColor: isLabelColor(s.scheduleLabelColor) ? s.scheduleLabelColor : 'default',
             badgeMonthVisible:
               !hasConfiguredPace(s.repeatRule, s.pace) || (typeof s.paceExpectedThisMonth === 'number' && s.paceExpectedThisMonth > 0),
             invoiceIssuedThisMonth: s.invoiceIssuedThisMonth,
@@ -1655,7 +1711,11 @@ function WeekHubInner() {
           const id = typeof o?.id === 'string' ? o.id : null;
           const name = typeof o?.name === 'string' ? o.name : null;
           if (!id || !name) return null;
-          return { id, label: name } as SiteItem;
+          return {
+            id,
+            label: name,
+            scheduleLabelColor: isLabelColor(o?.scheduleLabelColor) ? o.scheduleLabelColor : 'default',
+          } as SiteItem;
         })
         .filter((x): x is SiteItem => !!x);
       setSiteSuggestions(parsed.slice(0, 10));
@@ -2554,7 +2614,7 @@ function WeekHubInner() {
                             setSiteCreateMsg(msg || `HTTP ${r.status}`);
                             return;
                           }
-                          const created: SiteItem = { id: json.site.id, label: name };
+                          const created: SiteItem = { id: json.site.id, label: name, scheduleLabelColor: 'default' };
                           setSites((cur) => [created, ...cur]);
                           setSelectedSite(created);
                           setNewSiteName('');
@@ -2927,6 +2987,7 @@ function WeekHubInner() {
                   onNextMonth={goNextMonth}
                   onToday={() => setCursorDate(new Date())}
                   selectedSite={selectedSite}
+                  resolveSiteReference={resolveSiteReference}
                   paceTargetDays={weekVisiblePaceTargets}
                   paceTargetUserId={effectiveAutoFillUserId}
                   onEnsureSite={ensureSelectedSite}
@@ -3193,6 +3254,7 @@ function WeekHubInner() {
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
                   selectedSite={selectedSite}
+                  resolveSiteReference={resolveSiteReference}
                   paceTargetDays={monthVisiblePaceTargets}
                   paceTargetUserId={effectiveAutoFillUserId}
                   onEnsureSite={ensureSelectedSite}
@@ -3697,6 +3759,7 @@ function WeekGrid({
   onNextMonth,
   onToday,
   selectedSite,
+  resolveSiteReference,
   paceTargetDays,
   paceTargetUserId,
   onEnsureSite,
@@ -3746,6 +3809,7 @@ function WeekGrid({
   onNextMonth: () => void;
   onToday: () => void;
   selectedSite: SiteItem | null;
+  resolveSiteReference: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   paceTargetDays: ReadonlySet<string>;
   paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
@@ -3986,6 +4050,7 @@ function WeekGrid({
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
                   selectedSite={selectedSite}
+                  resolveSiteReference={resolveSiteReference}
                   paceTargetDays={paceTargetDays}
                   paceTargetUserId={paceTargetUserId}
                   onEnsureSite={onEnsureSite}
@@ -4049,6 +4114,7 @@ function MonthGrid({
   cellMinHComfortable,
   cellBg,
   selectedSite,
+  resolveSiteReference,
   paceTargetDays,
   paceTargetUserId,
   onEnsureSite,
@@ -4084,6 +4150,7 @@ function MonthGrid({
   cellMinHComfortable: number;
   cellBg: CellBg;
   selectedSite: SiteItem | null;
+  resolveSiteReference: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   paceTargetDays: ReadonlySet<string>;
   paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
@@ -4290,6 +4357,7 @@ function MonthGrid({
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
                   selectedSite={selectedSite}
+                  resolveSiteReference={resolveSiteReference}
                   paceTargetDays={paceTargetDays}
                   paceTargetUserId={paceTargetUserId}
                   onEnsureSite={onEnsureSite}
@@ -4667,6 +4735,7 @@ function Row({
   grid,
   apiKind,
   selectedSite,
+  resolveSiteReference,
   onEnsureSite,
   onOpenSiteFromCell,
   selectedUserId,
@@ -4710,6 +4779,7 @@ function Row({
   grid: Record<string, ApiCell>;
   apiKind: 'NORMAL' | 'DAILY';
   selectedSite: SiteItem | null;
+  resolveSiteReference?: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   onEnsureSite?: () => Promise<SiteItem | null>;
   onOpenSiteFromCell?: (siteName: string) => void;
   selectedUserId: string | null;
@@ -4825,8 +4895,13 @@ function Row({
     siteName?: string | null;
     beforeFallback: CellSlots;
   }) => {
-    let resolvedSite = selectedSite;
-    if (input.action !== 'swap' && !input.siteName && !resolvedSite) {
+    let resolvedSite =
+      input.action === 'swap'
+        ? selectedSite
+        : resolveSiteReference?.({ siteId: input.siteId ?? null, siteName: input.siteName ?? null }) ??
+          (!input.siteId && !input.siteName ? selectedSite : null);
+
+    if (input.action !== 'swap' && !input.siteId && !input.siteName && !resolvedSite) {
       resolvedSite = (await onEnsureSite?.()) ?? null;
       if (!resolvedSite) {
         onNotify?.('現場名を入力してください');
@@ -4842,11 +4917,12 @@ function Row({
       color2: currentCell?.color2 ?? 'default',
     });
     const resolvedSiteName = input.siteName ?? resolvedSite?.label ?? null;
+    const requestedColor = input.action === 'recolor' ? input.color : resolveSiteLabelColor(resolvedSite, input.color);
     const preview = previewCellAction({
       cell: beforeCell,
       action: input.action,
       siteName: resolvedSiteName,
-      color: input.color,
+      color: requestedColor,
     });
 
     if (!preview.changed) {
@@ -4867,7 +4943,7 @@ function Row({
           action: input.action,
           siteId: input.siteId ?? resolvedSite?.id ?? null,
           siteName: resolvedSiteName,
-          color: input.color,
+          color: requestedColor,
         }),
       });
 
@@ -5220,16 +5296,12 @@ function Row({
                 <>
                   {renderSlotLabel(
                     slot1,
-                    `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                      c1 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'
-                    }`,
+                    `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c1, 'primary')}`,
                     'var(--weekhub-cell-font-size, 12px)',
                   )}
                   {renderSlotLabel(
                     slot2,
-                    `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                      c2 === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'
-                    }`,
+                    `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c2, 'secondary')}`,
                     'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
                   )}
                 </>
