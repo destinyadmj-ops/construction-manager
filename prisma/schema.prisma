@@ -109,6 +109,7 @@ model ScheduleChangeHistory {
   editorUserId      String?
   editorLoginMemoryId String?
   dayYmd            String
+  targetUserLabel   String   @default("")
   projectLabel      String   @default("")
   targetLabel       String   @default("")
   beforeValue       String   @default("")
