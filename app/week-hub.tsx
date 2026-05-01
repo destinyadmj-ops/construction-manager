@@ -19,6 +19,8 @@ type ApiUser = { id: string; name: string | null; email: string | null };
 
 type AuthMeUser = {
   id: string;
+  name: string | null;
+  email: string | null;
   canEditSchedule: boolean;
   canGrantScheduleEdit: boolean;
 };
@@ -78,6 +80,22 @@ type CellHistoryEntry = {
   before: CellSlots;
   after: CellSlots;
   at: number;
+};
+
+type ScheduleChangeHistoryItem = {
+  id: string;
+  dayYmd: string;
+  targetUserLabel: string;
+  projectLabel: string;
+  targetLabel: string;
+  beforeValue: string;
+  afterValue: string;
+  editorLabel: string;
+  editorHost: string;
+  editorPlatform: string;
+  editorLanguage: string;
+  editorTimeZone: string;
+  createdAt: string;
 };
 
 const HISTORY_GROUP_MS = 800;
@@ -251,6 +269,12 @@ function toYmd(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+function formatHistoryDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
 function startOfWeekMonday(input: Date) {
   const d = new Date(input);
   d.setHours(0, 0, 0, 0);
@@ -301,7 +325,7 @@ export default function WeekHub() {
 }
 
 function WeekHubInner() {
-  const { setAddAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const { setAddAction, setHistoryAction, setHistoryMenu, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
@@ -368,6 +392,13 @@ function WeekHubInner() {
   const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [isScheduleHistoryOpen, setIsScheduleHistoryOpen] = useState(false);
+  const [scheduleHistoryItems, setScheduleHistoryItems] = useState<ScheduleChangeHistoryItem[]>([]);
+  const [scheduleHistoryTotal, setScheduleHistoryTotal] = useState(0);
+  const [scheduleHistoryLoading, setScheduleHistoryLoading] = useState(false);
+  const [scheduleHistoryError, setScheduleHistoryError] = useState<string | null>(null);
+  const [scheduleHistorySearch, setScheduleHistorySearch] = useState('');
+  const [scheduleHistoryTargetFilter, setScheduleHistoryTargetFilter] = useState<'all' | 'スケジュール' | 'カラー'>('all');
 
   useEffect(() => {
     const m = searchParams.get('mode');
@@ -588,6 +619,8 @@ function WeekHubInner() {
         }
         setAuthMeUser({
           id: raw.id,
+          name: typeof raw.name === 'string' ? raw.name : null,
+          email: typeof raw.email === 'string' ? raw.email : null,
           canEditSchedule: raw.canEditSchedule === true,
           canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
         });
@@ -1078,6 +1111,55 @@ function WeekHubInner() {
       };
     });
   }, [visibleWeekDays]);
+
+  const loadScheduleHistory = useCallback(async () => {
+    setScheduleHistoryLoading(true);
+    setScheduleHistoryError(null);
+    try {
+      const res = await fetch(`/api/schedule/history?kind=${encodeURIComponent(apiKind)}&limit=200`, {
+        cache: 'no-store',
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok: true; total: number; items: ScheduleChangeHistoryItem[] }
+        | { ok: false; error?: string }
+        | null;
+      if (!res.ok || !json || !('ok' in json) || json.ok !== true) {
+        setScheduleHistoryError(json && 'error' in json ? json.error ?? '履歴の取得に失敗しました' : `HTTP ${res.status}`);
+        return;
+      }
+      setScheduleHistoryItems(Array.isArray(json.items) ? json.items : []);
+      setScheduleHistoryTotal(typeof json.total === 'number' ? json.total : 0);
+    } catch {
+      setScheduleHistoryError('履歴の取得に失敗しました');
+    } finally {
+      setScheduleHistoryLoading(false);
+    }
+  }, [apiKind]);
+
+  useEffect(() => {
+    if (!isScheduleHistoryOpen) return;
+    void loadScheduleHistory();
+  }, [isScheduleHistoryOpen, loadScheduleHistory]);
+
+  const filteredScheduleHistoryItems = useMemo(() => {
+    const query = scheduleHistorySearch.trim().toLowerCase();
+    return scheduleHistoryItems.filter((item) => {
+      if (scheduleHistoryTargetFilter !== 'all' && item.targetLabel !== scheduleHistoryTargetFilter) return false;
+      if (!query) return true;
+      return [
+        item.projectLabel,
+        item.targetLabel,
+        item.beforeValue,
+        item.afterValue,
+        item.targetUserLabel,
+        item.editorLabel,
+        item.dayYmd,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [scheduleHistoryItems, scheduleHistorySearch, scheduleHistoryTargetFilter]);
 
   const userLabelById = useMemo(() => {
     const pools: ApiUser[] = [
@@ -2094,6 +2176,22 @@ function WeekHubInner() {
   ]);
 
   useEffect(() => {
+    setHistoryAction(
+      hasScheduleEditPermission
+        ? {
+            onClick: () => setIsScheduleHistoryOpen(true),
+            disabled: false,
+            title: '編集履歴一覧',
+          }
+        : undefined,
+    );
+
+    return () => {
+      setHistoryAction(undefined);
+    };
+  }, [hasScheduleEditPermission, setHistoryAction]);
+
+  useEffect(() => {
     const canUndo = undoStack.length > 0 && !isUndoRedoBusy;
     const canRedo = redoStack.length > 0 && !isUndoRedoBusy;
 
@@ -2781,6 +2879,7 @@ function WeekHubInner() {
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
+                  currentUserId={authMeUser?.id ?? null}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
@@ -3045,6 +3144,7 @@ function WeekHubInner() {
                   cellClickAction={cellClickAction}
                   cellTextColor={cellTextColor}
                   isEditable={editActive}
+                  currentUserId={authMeUser?.id ?? null}
                   selectedUserId={selectedUserId}
                   onSelectUser={setSelectedUserId}
                   onNotify={showCellActionMsg}
@@ -3306,6 +3406,21 @@ function WeekHubInner() {
           )}
         </div>
 
+        {isScheduleHistoryOpen ? (
+          <ScheduleHistoryDialog
+            items={filteredScheduleHistoryItems}
+            total={scheduleHistoryTotal}
+            loading={scheduleHistoryLoading}
+            error={scheduleHistoryError}
+            search={scheduleHistorySearch}
+            onSearchChange={setScheduleHistorySearch}
+            targetFilter={scheduleHistoryTargetFilter}
+            onTargetFilterChange={setScheduleHistoryTargetFilter}
+            onClose={() => setIsScheduleHistoryOpen(false)}
+            onRefresh={() => void loadScheduleHistory()}
+          />
+        ) : null}
+
         {siteDetailOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <button
@@ -3547,6 +3662,7 @@ function WeekGrid({
   cellClickAction,
   cellTextColor,
   isEditable,
+  currentUserId,
   selectedUserId,
   onSelectUser,
   onNotify,
@@ -3594,6 +3710,7 @@ function WeekGrid({
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
+  currentUserId: string | null;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
@@ -3835,6 +3952,7 @@ function WeekGrid({
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
+                  currentUserId={currentUserId}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
@@ -3893,6 +4011,7 @@ function MonthGrid({
   cellClickAction,
   cellTextColor,
   isEditable,
+  currentUserId,
   selectedUserId,
   onSelectUser,
   onNotify,
@@ -3926,6 +4045,7 @@ function MonthGrid({
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
+  currentUserId: string | null;
   selectedUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   onNotify?: (msg: string | null) => void;
@@ -4133,6 +4253,7 @@ function MonthGrid({
                   gridLayout={gridLayout}
                   cellMinH={cellMinH}
                   isEditable={isEditable}
+                  currentUserId={currentUserId}
                   onSelectUser={onSelectUser}
                   onNotify={onNotify}
                   onCellHistory={onCellHistory}
@@ -4506,6 +4627,7 @@ function Row({
   gridLayout,
   cellMinH,
   isEditable,
+  currentUserId,
   onSelectUser,
   paceTargetDays,
   paceTargetUserId,
@@ -4547,6 +4669,7 @@ function Row({
   gridLayout: GridLayout;
   cellMinH: number;
   isEditable: boolean;
+  currentUserId: string | null;
   onSelectUser: (userId: string | null) => void;
   paceTargetDays?: ReadonlySet<string>;
   paceTargetUserId?: string | null;
@@ -4576,6 +4699,7 @@ function Row({
   suggestionLoading?: boolean;
 }) {
   const isSelectedUser = selectedUserId === user.id;
+  const isCurrentUser = currentUserId === user.id;
 
   const renderSlotLabel = useCallback(
     (value: string | null, className: string, fontSize: string) => {
@@ -4769,7 +4893,12 @@ function Row({
           className="flex items-start justify-between gap-2"
           style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
         >
-          <div data-user-label className="min-w-0 truncate font-medium">{user.name ?? user.email ?? user.id}</div>
+          <div
+            data-user-label
+            className={`min-w-0 truncate font-medium ${isCurrentUser ? 'text-red-500 dark:text-red-300' : ''}`}
+          >
+            {user.name ?? user.email ?? user.id}
+          </div>
           {reorderMode ? (
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-1">
@@ -5059,5 +5188,125 @@ function Row({
         );
       })}
     </>
+  );
+}
+
+function ScheduleHistoryDialog({
+  items,
+  total,
+  loading,
+  error,
+  search,
+  onSearchChange,
+  targetFilter,
+  onTargetFilterChange,
+  onClose,
+  onRefresh,
+}: {
+  items: ScheduleChangeHistoryItem[];
+  total: number;
+  loading: boolean;
+  error: string | null;
+  search: string;
+  onSearchChange: (value: string) => void;
+  targetFilter: 'all' | 'スケジュール' | 'カラー';
+  onTargetFilterChange: (value: 'all' | 'スケジュール' | 'カラー') => void;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" aria-label="close" onClick={onClose} className="absolute inset-0 bg-black/40" />
+
+      <div className="relative flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div>
+            <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">スケジュール変更履歴</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{items.length}件表示 / 全{total}件</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            >
+              再読込
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="現場名、対象者、内容で検索"
+            className="min-w-64 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+          />
+          <select
+            value={targetFilter}
+            onChange={(event) =>
+              onTargetFilterChange(
+                event.target.value === 'スケジュール' || event.target.value === 'カラー' ? event.target.value : 'all',
+              )
+            }
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+          >
+            <option value="all">すべて</option>
+            <option value="スケジュール">スケジュール</option>
+            <option value="カラー">カラー</option>
+          </select>
+        </div>
+
+        <div className="overflow-auto px-4 py-3">
+          {loading ? <div className="py-6 text-sm text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
+          {!loading && error ? <div className="py-6 text-sm text-red-700 dark:text-red-300">{error}</div> : null}
+          {!loading && !error && items.length === 0 ? (
+            <div className="py-6 text-sm text-zinc-500 dark:text-zinc-400">履歴はまだありません。</div>
+          ) : null}
+          {!loading && !error && items.length > 0 ? (
+            <table className="min-w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                  <th className="px-2 py-2 font-medium">案件</th>
+                  <th className="px-2 py-2 font-medium">スケジュール</th>
+                  <th className="px-2 py-2 font-medium">対象</th>
+                  <th className="px-2 py-2 font-medium">内容</th>
+                  <th className="px-2 py-2 font-medium">更新者 / 更新日時</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b border-zinc-100 align-top dark:border-zinc-900">
+                    <td className="px-2 py-3 text-zinc-800 dark:text-zinc-100">{item.projectLabel || '（空）'}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{item.beforeValue}</td>
+                    <td className="px-2 py-3">
+                      <div className="text-zinc-800 dark:text-zinc-100">{item.targetLabel}</div>
+                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{item.targetUserLabel} / {item.dayYmd}</div>
+                    </td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{item.afterValue}</td>
+                    <td className="px-2 py-3">
+                      <div className="text-zinc-800 dark:text-zinc-100">{item.editorLabel}</div>
+                      {item.editorHost || item.editorPlatform || item.editorTimeZone ? (
+                        <div className="mt-1 text-zinc-500 dark:text-zinc-400">
+                          {[item.editorHost, item.editorPlatform, item.editorTimeZone].filter(Boolean).join(' / ')}
+                        </div>
+                      ) : null}
+                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{formatHistoryDateTime(item.createdAt)}</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
