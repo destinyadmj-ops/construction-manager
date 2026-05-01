@@ -289,18 +289,6 @@ function formatCellSlotsValue(slots: CellSlots) {
   return parts.length > 0 ? parts.join(' / ') : '空欄';
 }
 
-function formatCellSlotsChange(before: CellSlots, after: CellSlots) {
-  return `${formatCellSlotsValue(before)} → ${formatCellSlotsValue(after)}`;
-}
-
-function pickScheduleHistoryProjectDisplay(item: ScheduleChangeHistoryItem) {
-  const candidates = [item.projectLabel, item.afterValue, item.beforeValue]
-    .map((value) => value.trim())
-    .filter((value) => value && value !== '（空）');
-  if (candidates.length === 0) return '（空）';
-  return candidates.sort((left, right) => right.length - left.length)[0] ?? '（空）';
-}
-
 function startOfWeekMonday(input: Date) {
   const d = new Date(input);
   d.setHours(0, 0, 0, 0);
@@ -2177,8 +2165,9 @@ function WeekHubInner() {
               .map((h) => ({
                 key: `${h.at}:${h.userId}:${h.day}`,
                 at: h.at,
+                beforeLabel: formatCellSlotsValue(h.before),
+                afterLabel: formatCellSlotsValue(h.after),
                 editorLabel: h.editorLabel,
-                siteLabel: `${formatCellSlotsChange(h.before, h.after)} (${h.day})`,
                 hover: { userId: h.userId, day: h.day },
               })),
             onHover: (hover) => setHistoryHover(hover),
@@ -5286,7 +5275,7 @@ function ScheduleHistoryDialog({
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="現場名、編集者、変更内容で検索"
+            placeholder="編集前、編集後、編集者で検索"
             className="min-w-64 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
           />
           <select
@@ -5314,31 +5303,22 @@ function ScheduleHistoryDialog({
             <table className="min-w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                  <th className="px-2 py-2 font-medium">案件</th>
-                  <th className="px-2 py-2 font-medium">スケジュール</th>
-                  <th className="px-2 py-2 font-medium">対象</th>
-                  <th className="px-2 py-2 font-medium">変更内容</th>
-                  <th className="px-2 py-2 font-medium">更新者 / 更新日時</th>
+                  <th className="px-2 py-2 font-medium">いつ</th>
+                  <th className="px-2 py-2 font-medium">編集前</th>
+                  <th className="px-2 py-2 font-medium">編集後</th>
+                  <th className="px-2 py-2 font-medium">誰が</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className="border-b border-zinc-100 align-top dark:border-zinc-900">
-                    <td className="px-2 py-3 text-zinc-800 dark:text-zinc-100">{pickScheduleHistoryProjectDisplay(item)}</td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.beforeValue)}</td>
                     <td className="px-2 py-3">
-                      <div className="text-zinc-800 dark:text-zinc-100">{item.targetLabel}</div>
-                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{item.editorLabel} / {item.dayYmd}</div>
+                      <div className="text-zinc-800 dark:text-zinc-100">{formatHistoryDateTime(item.createdAt)}</div>
                     </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryChange(item.beforeValue, item.afterValue)}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.beforeValue)}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.afterValue)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.editorLabel}</div>
-                      {item.editorHost || item.editorPlatform || item.editorTimeZone ? (
-                        <div className="mt-1 text-zinc-500 dark:text-zinc-400">
-                          {[item.editorHost, item.editorPlatform, item.editorTimeZone].filter(Boolean).join(' / ')}
-                        </div>
-                      ) : null}
-                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{formatHistoryDateTime(item.createdAt)}</div>
                     </td>
                   </tr>
                 ))}

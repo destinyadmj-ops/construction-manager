@@ -1385,15 +1385,13 @@ export default function AppHeader() {
                             onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
                             onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
                           >
-                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                              <div className="text-zinc-500 dark:text-zinc-400">
-                                {new Date(it.at).toLocaleString()}
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
+                              <div className="text-zinc-500 dark:text-zinc-400">{new Date(it.at).toLocaleString()}</div>
+                              <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
+                                {it.beforeLabel}
                               </div>
-                              <div
-                                className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-200"
-                                title={it.siteLabel}
-                              >
-                                {it.siteLabel}
+                              <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.afterLabel}>
+                                {it.afterLabel}
                               </div>
                               <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
                             </div>
