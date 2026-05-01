@@ -9,10 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$cmdPath = Join-Path $repoRoot 'run-dev-keep-bg.cmd'
+$cmdPath = Join-Path $repoRoot 'run-dev-keep-agent.cmd'
 
 if (-not (Test-Path $cmdPath)) {
-  throw "run-dev-keep-bg.cmd not found: $cmdPath"
+  throw "run-dev-keep-agent.cmd not found: $cmdPath"
 }
 
 Write-Host "Installing Scheduled Task..."
