@@ -1,5 +1,5 @@
 param(
-  [int[]]$Candidates = @(3000, 3001),
+  [int[]]$Candidates = @(3000),
   [string]$HealthPath = "/api/health",
   [int]$TimeoutMs = 700
 )

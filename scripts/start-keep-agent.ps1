@@ -1,6 +1,6 @@
 param(
   [string]$LogFile = "start-keep.log",
-  [int]$Port = 3001,
+  [int]$Port = 3000,
   [string]$HealthPath = "/api/health",
   [int]$HealthTimeoutMs = 1000,
   [ValidateRange(5, 300)]

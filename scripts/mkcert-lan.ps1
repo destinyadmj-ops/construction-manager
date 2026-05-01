@@ -1,5 +1,5 @@
 param(
-  [int]$HttpPort = 3001,
+  [int]$HttpPort = 3000,
   [int]$HttpsPort = 3443,
   [string]$Path = '/?mode=week'
 )

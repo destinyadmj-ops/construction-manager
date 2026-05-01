@@ -54,7 +54,7 @@ npm run package:desktop
 
 1. `Master Hub-Setup-0.1.0.exe` をユーザーに配布
 2. インストーラを実行（ワンクリックインストール）
-3. 配布版はビルド時に埋め込んだURLへ接続（未指定時は `http://localhost:3001`）
+3. 配布版はビルド時に埋め込んだURLへ接続（未指定時は `http://localhost:3000`）
 
 ### 配布後の更新運用
 

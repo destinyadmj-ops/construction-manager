@@ -1,6 +1,6 @@
 param(
   [string]$PidFile = "start-keep.pid",
-  [int]$Port = 3001,
+  [int]$Port = 3000,
   [string]$HealthPath = "/api/health",
   [int]$TimeoutSec = 2
 )

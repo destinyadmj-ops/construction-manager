@@ -3,7 +3,7 @@ import https from 'node:https';
 import http from 'node:http';
 import { URL } from 'node:url';
 
-const target = process.env.TARGET_URL || 'http://127.0.0.1:3001';
+const target = process.env.TARGET_URL || 'http://127.0.0.1:3000';
 const listenPort = Number(process.env.HTTPS_PORT || '3443');
 const certPath = process.env.TLS_CERT;
 const keyPath = process.env.TLS_KEY;
