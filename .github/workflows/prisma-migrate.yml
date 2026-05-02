@@ -23,8 +23,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Determine migration URLs
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_DATABASE_URL}" ]; then
+            echo "SUPABASE_DATABASE_URL is required" >&2
+            exit 1
+          fi
+
+          echo "DATABASE_URL=${SUPABASE_DATABASE_URL}" >> "$GITHUB_ENV"
+
+          if [ -z "${SUPABASE_DIRECT_URL}" ]; then
+            echo "DIRECT_URL=${SUPABASE_DATABASE_URL}" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          direct_host="$(node -e "process.stdout.write(new URL(process.env.SUPABASE_DIRECT_URL).hostname)")"
+          if getent ahostsv4 "$direct_host" >/dev/null 2>&1; then
+            echo "DIRECT_URL=${SUPABASE_DIRECT_URL}" >> "$GITHUB_ENV"
+          else
+            echo "Direct host ${direct_host} has no IPv4 record on this runner; falling back to SUPABASE_DATABASE_URL"
+            echo "DIRECT_URL=${SUPABASE_DATABASE_URL}" >> "$GITHUB_ENV"
+          fi
+
       - name: Run Prisma Migrate Deploy
         env:
-          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          DIRECT_URL: ${{ env.DIRECT_URL }}
         run: npm run db:deploy
