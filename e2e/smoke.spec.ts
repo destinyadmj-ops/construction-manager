@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { PrismaPg } from '@prisma/adapter-pg';
 import dotenv from 'dotenv';
 import net from 'node:net';
 import { PrismaClient } from '../src/generated/prisma';
@@ -6,9 +7,48 @@ import { PrismaClient } from '../src/generated/prisma';
 dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
 
-const prisma = new PrismaClient();
+type PrismaClientOptions = ConstructorParameters<typeof PrismaClient>[0];
 
 let dbAvailable = false;
+
+function getPgAdapterConfig(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = (url.searchParams.get('sslmode') ?? '').toLowerCase();
+    const shouldUseSupabaseSsl =
+      sslMode === 'require' ||
+      url.hostname.endsWith('.supabase.co') ||
+      url.hostname.endsWith('.pooler.supabase.com');
+
+    if (!shouldUseSupabaseSsl) {
+      return { connectionString };
+    }
+
+    url.searchParams.delete('sslmode');
+    return {
+      connectionString: url.toString(),
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    };
+  } catch {
+    return { connectionString };
+  }
+}
+
+function getPrismaClientOptions(): PrismaClientOptions {
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is not set');
+  }
+
+  return {
+    adapter: new PrismaPg(getPgAdapterConfig(connectionString)),
+  };
+}
+
+const prisma = new PrismaClient(getPrismaClientOptions());
 
 function getDbHostPortFromEnv(): { host: string; port: number } {
   const url = process.env.DATABASE_URL;

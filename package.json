@@ -33,6 +33,7 @@
     "dev:autostart:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-dev-autostart.ps1",
     "dev:startup:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-startup.ps1",
     "dev:startup:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-dev-startup.ps1",
+    "prebuild": "npm run db:generate",
     "build": "node scripts/with-build-meta.mjs next build --webpack",
     "build:compile": "node scripts/with-build-meta.mjs next build --webpack --experimental-build-mode compile",
     "build:generate": "node scripts/with-build-meta.mjs next build --webpack --experimental-build-mode generate",
