@@ -59,6 +59,7 @@
     "prod:https": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod-https.ps1",
     "prod:https:open": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod-https.ps1 -Open",
     "lint": "eslint",
+    "pretypecheck": "npm run db:generate",
     "typecheck": "tsc --noEmit",
     "typecheck:diag": "tsc --noEmit --pretty false --diagnostics",
     "format": "prettier --write .",
