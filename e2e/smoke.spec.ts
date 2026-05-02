@@ -289,6 +289,31 @@ async function ensureUserGateCleared(page: import('@playwright/test').Page) {
   throw new Error('E2E: UserGate could not be cleared');
 }
 
+async function closeVisibleUserGate(page: import('@playwright/test').Page) {
+  const gateTitle = page.getByText('初回ログイン / ユーザー選択');
+  const closeButton = page.getByRole('button', { name: '閉じる' });
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const gateVisible = await gateTitle
+      .isVisible()
+      .then((v) => v)
+      .catch(() => false);
+    if (!gateVisible) return;
+
+    const canClose = await closeButton
+      .isVisible()
+      .then((v) => v)
+      .catch(() => false);
+    if (!canClose) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    await closeButton.click();
+    await page.waitForTimeout(300);
+  }
+}
+
 test('home loads', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
@@ -346,6 +371,7 @@ test('templates pdf endpoint returns a PDF', async ({ request }) => {
 test('year summary cell drills down to month view', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
+  await closeVisibleUserGate(page);
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
@@ -383,6 +409,7 @@ test('year summary cell drills down to month view', async ({ page }) => {
 test('selected user chip can clear selection', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
+  await closeVisibleUserGate(page);
 
   await page.getByRole('button', { name: '年予定' }).click();
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
