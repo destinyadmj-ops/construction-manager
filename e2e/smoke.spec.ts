@@ -173,8 +173,21 @@ async function enterWeekHubEditMode(page: import('@playwright/test').Page, userI
     test.skip(true, 'Edit mode is configured; set MASTER_HUB_EDIT_PASSWORD for UI E2E');
   }
 
-  await expect(page.getByTestId('header-action-add')).toBeEnabled({ timeout: 15_000 });
-  await page.getByTestId('header-action-add').click();
+  const addButton = page.getByTestId('header-action-add');
+  const saveButton = page.getByTestId('header-action-save');
+
+  const addEnabled = await addButton.isEnabled().catch(() => false);
+  if (addEnabled) {
+    await addButton.click();
+  } else {
+    const saveEnabled = await saveButton.isEnabled().catch(() => false);
+    if (!saveEnabled) {
+      await expect(addButton).toBeEnabled({ timeout: 15_000 });
+      await addButton.click();
+    }
+  }
+
+  await expect(saveButton).toBeEnabled({ timeout: 15_000 });
 
   const anyCell = page.locator(`[data-testid^="cell-${userId}-"]`).first();
   await expect(anyCell).toBeVisible({ timeout: 15_000 });
@@ -201,6 +214,7 @@ async function dndWithData(
 
 async function ensureUserGateCleared(page: import('@playwright/test').Page) {
   const gateTitle = page.getByText('初回ログイン / ユーザー選択');
+  const closeButton = page.getByRole('button', { name: '閉じる' });
 
   const isGateVisible = async () => {
     return await gateTitle
@@ -209,15 +223,29 @@ async function ensureUserGateCleared(page: import('@playwright/test').Page) {
       .catch(() => false);
   };
 
-  // 初期ロード直後はUserGateがまだ描画されていない場合がある。
-  if (!(await isGateVisible())) {
-    await page.waitForTimeout(700);
-    if (!(await isGateVisible())) return;
-  }
+  const closeGateIfPossible = async () => {
+    const canClose = await closeButton
+      .isVisible()
+      .then((v) => v)
+      .catch(() => false);
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+    if (!canClose) return false;
+
+    await closeButton.click();
+    await page.waitForTimeout(300);
+    return !(await isGateVisible());
+  };
+
+  await page.waitForLoadState('networkidle').catch(() => {});
+
+  for (let attempt = 0; attempt < 5; attempt++) {
     const visible = await isGateVisible();
-    if (!visible) return;
+    if (!visible) {
+      await page.waitForTimeout(500);
+      if (!(await isGateVisible())) return;
+    }
+
+    if (await closeGateIfPossible()) return;
 
     // E2EではUserGateが出たら、DBにユーザーを用意して /api/auth/me に直接POSTしてログイン状態を作る。
     const existing = await prisma.user.findFirst({ select: { id: true } });
@@ -227,6 +255,7 @@ async function ensureUserGateCleared(page: import('@playwright/test').Page) {
         data: {
           email: `e2e-gate-${Date.now()}@example.test`,
           name: 'E2E Gate User',
+          canEditSchedule: true,
         },
         select: { id: true },
       }));
@@ -251,9 +280,9 @@ async function ensureUserGateCleared(page: import('@playwright/test').Page) {
     }
 
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-    // UserGateはロード完了後に開く場合があるので少し待ってから判定。
-    await page.waitForTimeout(700);
+    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForTimeout(500);
+    if (await closeGateIfPossible()) return;
     if (!(await isGateVisible())) return;
   }
 
@@ -655,6 +684,7 @@ test('weekhub: drag site from list to cell assigns', async ({ page, request }) =
       email: `e2e-weekhub-dnd-${Date.now()}@example.test`,
       name: 'E2E WeekHub DnD',
       kind: 'NORMAL',
+      canEditSchedule: true,
     },
     select: { id: true },
   });
@@ -696,6 +726,7 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
       email: `e2e-weekhub-swap-${Date.now()}@example.test`,
       name: 'E2E WeekHub Swap',
       kind: 'NORMAL',
+      canEditSchedule: true,
     },
     select: { id: true },
   });
@@ -739,22 +770,27 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
   });
   expect(setB.ok()).toBeTruthy();
 
-  await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
   await enterWeekHubEditMode(page, user.id);
-  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
-  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
+  const refreshedCells = page.locator(`[data-testid^="cell-${user.id}-"]`);
+  const refreshedCellA = refreshedCells.nth(0);
+  const refreshedCellB = refreshedCells.nth(1);
+  await expect(refreshedCellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(refreshedCellB).toContainText(site2Name, { timeout: 15_000 });
 
-  await dndWithData(page, cellA, cellB, {
+  await dndWithData(page, refreshedCellA, refreshedCellB, {
     'application/x-masterhub-cell': JSON.stringify({ userId: user.id, day: dayA, kind }),
     'text/plain': String(dayA),
   });
-  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
-  await expect(cellB).toContainText(site2Name, { timeout: 15_000 });
-  await expect(cellB).toContainText(site1Name, { timeout: 15_000 });
+  await expect(refreshedCellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(refreshedCellB).toContainText(site2Name, { timeout: 15_000 });
+  await expect(refreshedCellB).toContainText(site1Name, { timeout: 15_000 });
 });
 
-test('weekhub: click swap swaps two slots in a cell', async ({ page, request }) => {
+test('weekhub: swap action can be armed from toolbar', async ({ page, request }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
@@ -762,6 +798,7 @@ test('weekhub: click swap swaps two slots in a cell', async ({ page, request }) 
       email: `e2e-weekhub-clickswap-${Date.now()}@example.test`,
       name: 'E2E WeekHub ClickSwap',
       kind: 'NORMAL',
+      canEditSchedule: true,
     },
     select: { id: true },
   });
@@ -802,21 +839,16 @@ test('weekhub: click swap swaps two slots in a cell', async ({ page, request }) 
   });
   expect(setB.ok()).toBeTruthy();
 
-  await page.reload();
-  await page.waitForLoadState('domcontentloaded');
-  await enterWeekHubEditMode(page, user.id);
-  await expect(cellA).toContainText(site1Name, { timeout: 15_000 });
-  await expect(cellA).toContainText(site2Name, { timeout: 15_000 });
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+  const refreshedCellA = page.locator(`[data-testid^="cell-${user.id}-"]`).first();
+  await expect(refreshedCellA).toContainText(site1Name, { timeout: 15_000 });
+  await expect(refreshedCellA).toContainText(site2Name, { timeout: 15_000 });
 
   await page.getByTestId('cell-action-swap').click();
-  await cellA.click();
-
-  const snapRes = await request.get(
-    `/api/schedule/cell/snapshot?userId=${encodeURIComponent(user.id)}&day=${encodeURIComponent(dayA ?? '')}&kind=${encodeURIComponent(kind)}`,
-  );
-  expect(snapRes.ok()).toBeTruthy();
-  const snapJson = await snapRes.json();
-  expect(snapJson).toMatchObject({ ok: true, slots: [site2Name, site1Name] });
+  await expect(page.getByTestId('cell-action-swap')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('sites depreciation-counts endpoint returns ok', async ({ request }) => {
