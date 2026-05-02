@@ -1,0 +1,55 @@
+name: Production Health Check
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: main
+            url: https://masterhubapp.org
+            expect_fragment: ''
+          - name: www
+            url: https://www.masterhubapp.org
+            expect_fragment: ''
+          - name: api-health
+            url: https://masterhubapp.org/api/health
+            expect_fragment: '"ok":true'
+
+    steps:
+      - name: Check ${{ matrix.name }}
+        env:
+          TARGET_URL: ${{ matrix.url }}
+          EXPECT_FRAGMENT: ${{ matrix.expect_fragment }}
+        run: |
+          set -euo pipefail
+
+          body_file="$(mktemp)"
+          status_code="$(curl --silent --show-error --location --max-time 20 \
+            --output "$body_file" \
+            --write-out "%{http_code}" \
+            "$TARGET_URL")"
+
+          echo "Checked: $TARGET_URL"
+          echo "HTTP status: $status_code"
+
+          if [ "$status_code" -lt 200 ] || [ "$status_code" -ge 400 ]; then
+            echo "Unexpected status code for $TARGET_URL: $status_code" >&2
+            cat "$body_file"
+            exit 1
+          fi
+
+          if [ -n "$EXPECT_FRAGMENT" ]; then
+            if ! grep -F "$EXPECT_FRAGMENT" "$body_file" > /dev/null; then
+              echo "Expected response fragment not found: $EXPECT_FRAGMENT" >&2
+              cat "$body_file"
+              exit 1
+            fi
+          fi
