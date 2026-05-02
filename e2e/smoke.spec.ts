@@ -314,6 +314,32 @@ async function closeVisibleUserGate(page: import('@playwright/test').Page) {
   }
 }
 
+async function openYearMode(page: import('@playwright/test').Page) {
+  const yearButton = page.getByRole('button', { name: '年予定' });
+  const gateTitle = page.getByText('初回ログイン / ユーザー選択');
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await closeVisibleUserGate(page);
+    const gateVisible = await gateTitle
+      .isVisible()
+      .then((v) => v)
+      .catch(() => false);
+    if (gateVisible) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    try {
+      await yearButton.click({ timeout: 2_000 });
+      return;
+    } catch {
+      await page.waitForTimeout(500);
+    }
+  }
+
+  await yearButton.click();
+}
+
 test('home loads', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
@@ -371,9 +397,7 @@ test('templates pdf endpoint returns a PDF', async ({ request }) => {
 test('year summary cell drills down to month view', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
-  await closeVisibleUserGate(page);
-
-  await page.getByRole('button', { name: '年予定' }).click();
+  await openYearMode(page);
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
   await expect(page.getByTestId('year-grid')).toBeVisible();
 
@@ -409,9 +433,7 @@ test('year summary cell drills down to month view', async ({ page }) => {
 test('selected user chip can clear selection', async ({ page }) => {
   await page.goto('/');
   await ensureUserGateCleared(page);
-  await closeVisibleUserGate(page);
-
-  await page.getByRole('button', { name: '年予定' }).click();
+  await openYearMode(page);
   await expect(page.getByText('年予定（サマリ）')).toBeVisible();
   await expect(page.getByTestId('year-grid')).toBeVisible();
 
@@ -716,8 +738,14 @@ test('weekhub: drag site from list to cell assigns', async ({ page, request }) =
     select: { id: true },
   });
 
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+
   const siteName = `e2e-weekhub-site-${Date.now()}`;
-  const createSiteRes = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name: siteName } });
+  const createSiteRes = await page.request.post('/api/sites', { data: { name: siteName } });
   expect(createSiteRes.ok()).toBeTruthy();
   const siteJson = await createSiteRes.json();
   expect(siteJson).toMatchObject({ ok: true });
@@ -726,7 +754,6 @@ test('weekhub: drag site from list to cell assigns', async ({ page, request }) =
   await page.goto('/?mode=week');
   await loginAs(page, user.id);
   await ensureUserGateCleared(page);
-
   await expect(page.getByTestId('modebar-week')).toBeVisible();
   await enterWeekHubEditMode(page, user.id);
 
@@ -758,8 +785,13 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
     select: { id: true },
   });
 
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+
   const mkSite = async (name: string) => {
-    const res = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name } });
+    const res = await page.request.post('/api/sites', { data: { name } });
     expect(res.ok()).toBeTruthy();
     const json = await res.json();
     expect(json).toMatchObject({ ok: true });
@@ -771,11 +803,6 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
   const site1 = await mkSite(site1Name);
   const site2 = await mkSite(site2Name);
 
-  await page.goto('/?mode=week');
-  await loginAs(page, user.id);
-  await ensureUserGateCleared(page);
-
-  await expect(page.getByTestId('modebar-week')).toBeVisible();
   await enterWeekHubEditMode(page, user.id);
 
   const cells = page.locator(`[data-testid^="cell-${user.id}-"]`);
@@ -788,11 +815,11 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
   expect(dayB).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
   const kind = 'NORMAL';
-  const setA = await request.post('/api/schedule/cell', {
+  const setA = await page.request.post('/api/schedule/cell', {
     data: { userId: user.id, day: dayA, kind, action: 'toggle', siteId: site1 },
   });
   expect(setA.ok()).toBeTruthy();
-  const setB = await request.post('/api/schedule/cell', {
+  const setB = await page.request.post('/api/schedule/cell', {
     data: { userId: user.id, day: dayB, kind, action: 'toggle', siteId: site2 },
   });
   expect(setB.ok()).toBeTruthy();
@@ -830,8 +857,13 @@ test('weekhub: swap action can be armed from toolbar', async ({ page, request })
     select: { id: true },
   });
 
+  await page.goto('/?mode=week');
+  await loginAs(page, user.id);
+  await ensureUserGateCleared(page);
+  await expect(page.getByTestId('modebar-week')).toBeVisible();
+
   const mkSite = async (name: string) => {
-    const res = await request.post('/api/sites', { headers: getAdminHeaders(), data: { name } });
+    const res = await page.request.post('/api/sites', { data: { name } });
     expect(res.ok()).toBeTruthy();
     const json = await res.json();
     expect(json).toMatchObject({ ok: true });
@@ -843,11 +875,6 @@ test('weekhub: swap action can be armed from toolbar', async ({ page, request })
   const site1 = await mkSite(site1Name);
   const site2 = await mkSite(site2Name);
 
-  await page.goto('/?mode=week');
-  await loginAs(page, user.id);
-  await ensureUserGateCleared(page);
-
-  await expect(page.getByTestId('modebar-week')).toBeVisible();
   await enterWeekHubEditMode(page, user.id);
 
   const cells = page.locator(`[data-testid^="cell-${user.id}-"]`);
@@ -857,11 +884,11 @@ test('weekhub: swap action can be armed from toolbar', async ({ page, request })
   expect(dayA).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
   const kind = 'NORMAL';
-  const setA = await request.post('/api/schedule/cell', {
+  const setA = await page.request.post('/api/schedule/cell', {
     data: { userId: user.id, day: dayA, kind, action: 'toggle', siteId: site1 },
   });
   expect(setA.ok()).toBeTruthy();
-  const setB = await request.post('/api/schedule/cell', {
+  const setB = await page.request.post('/api/schedule/cell', {
     data: { userId: user.id, day: dayA, kind, action: 'add', siteId: site2 },
   });
   expect(setB.ok()).toBeTruthy();
