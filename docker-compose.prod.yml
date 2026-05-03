@@ -3,6 +3,12 @@ services:
     image: redis:7
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     volumes:
       - masterhub_redisdata:/data
 
@@ -22,7 +28,20 @@ services:
       - masterhub_storage:/data/masterhub-storage
       - masterhub_outbox:/data/masterhub-outbox
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health?probe=ready').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
     restart: unless-stopped
 
   worker:
@@ -39,7 +58,8 @@ services:
       - masterhub_storage:/data/masterhub-storage
       - masterhub_outbox:/data/masterhub-outbox
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

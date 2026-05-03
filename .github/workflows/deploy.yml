@@ -10,6 +10,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      ALERT_WEBHOOK_URL: ${{ secrets.PROD_ALERT_WEBHOOK_URL }}
       DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
       DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
       REDIS_URL: ${{ secrets.PROD_REDIS_URL }}
@@ -67,11 +68,33 @@ jobs:
           envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN
           script: |
             set -eu
+
+            run_compose() {
+              docker compose -f docker-compose.prod.yml --env-file .env.production "$@"
+            }
+
+            check_ready() {
+              body_file="$(mktemp)"
+              if curl --fail --silent --show-error --max-time 10 \
+                --retry 12 --retry-delay 5 --retry-connrefused \
+                --output "$body_file" \
+                http://127.0.0.1:3000/api/health?probe=ready; then
+                cat "$body_file"
+                rm -f "$body_file"
+                return 0
+              fi
+
+              cat "$body_file" >&2 || true
+              rm -f "$body_file"
+              return 1
+            }
+
             mkdir -p "$DEPLOY_PATH"
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               git clone --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$DEPLOY_PATH"
             fi
             cd "$DEPLOY_PATH"
+            previous_sha="$(git rev-parse HEAD 2>/dev/null || true)"
             git fetch origin main --prune
             git checkout -B main origin/main
             git reset --hard "$GITHUB_SHA"
@@ -87,4 +110,43 @@ jobs:
             NEXTAUTH_URL=${NEXTAUTH_URL}
             ADMIN_TOKEN=${ADMIN_TOKEN}
             EOF
-            docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build --remove-orphans
+            run_compose up -d --build --remove-orphans
+
+            if ! check_ready; then
+              echo "Deploy readiness check failed." >&2
+              run_compose ps >&2 || true
+              run_compose logs --tail=120 >&2 || true
+
+              if [ -n "$previous_sha" ] && [ "$previous_sha" != "$GITHUB_SHA" ]; then
+                echo "Rolling back to previous commit: $previous_sha" >&2
+                git reset --hard "$previous_sha"
+                run_compose up -d --build --remove-orphans
+
+                if ! check_ready; then
+                  echo "Rollback readiness check also failed." >&2
+                  run_compose ps >&2 || true
+                  run_compose logs --tail=120 >&2 || true
+                fi
+              fi
+
+              exit 1
+            fi
+
+      - name: Notify deploy failure
+        if: failure() && env.ALERT_WEBHOOK_URL != ''
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          payload=$(cat <<EOF
+          {"text":"[master-hub] Deploy to Production failed for ${COMMIT_SHA}. ${RUN_URL}"}
+          EOF
+          )
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$ALERT_WEBHOOK_URL"

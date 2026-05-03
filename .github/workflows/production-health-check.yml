@@ -2,25 +2,27 @@ name: Production Health Check
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      ALERT_WEBHOOK_URL: ${{ secrets.PROD_ALERT_WEBHOOK_URL }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: main
             url: https://masterhubapp.org
-            expect_fragment: ''
+            expect_fragment: ""
           - name: www
             url: https://www.masterhubapp.org
-            expect_fragment: ''
+            expect_fragment: ""
           - name: api-health
-            url: https://masterhubapp.org/api/health
+            url: https://masterhubapp.org/api/health?probe=ready
             expect_fragment: '"ok":true'
 
     steps:
@@ -53,3 +55,23 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Notify health-check failure
+        if: failure() && env.ALERT_WEBHOOK_URL != ''
+        env:
+          TARGET_URL: ${{ matrix.url }}
+          TARGET_NAME: ${{ matrix.name }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          payload=$(cat <<EOF
+          {"text":"[master-hub] Production health check failed: ${TARGET_NAME} ${TARGET_URL} ${RUN_URL}"}
+          EOF
+          )
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$ALERT_WEBHOOK_URL"
