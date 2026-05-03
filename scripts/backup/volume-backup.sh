@@ -106,12 +106,9 @@ archive_volume() {
   fi
 
   docker run --rm --pull=missing \
-    --user "$(id -u):$(id -g)" \
     -v "${volume_name}:/volume:ro" \
-    -v "${volumes_dir}:/backup" \
-    -e ARCHIVE_FILE="$archive_file" \
     alpine:3.20 \
-    sh -lc 'tar -czf "/backup/$ARCHIVE_FILE" -C /volume .'
+    sh -lc 'tar -c -C /volume .' | gzip -c > "${volumes_dir}/${archive_file}"
 
   echo "OK: ${volumes_dir}/${archive_file}"
 }
