@@ -26,7 +26,7 @@ npm run start
 配布版を本番URL固定で作る例:
 
 ```powershell
-..\..\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/"
+..\..\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1"
 ```
 
 ## できること（最小）
@@ -56,13 +56,25 @@ npm run dist
 またはルートから接続先を固定して生成:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1"
 ```
 
 - 出力: `apps/desktop/dist/`
-- 生成物例: `Master Hub-Setup-0.1.0.exe`
+- 生成物例: `Master Hub-Setup-0.1.1.exe`
 
-※ 署名（コードサイン）は未設定です。社内配布の土台として最小構成にしています。
+署名付き配布を行う場合の例:
+
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
+```
+
+Windows の証明書ストアを使う場合の例:
+
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1" -WindowsCertSha1 "<thumbprint>"
+```
+
+証明書を指定しない場合は未署名のまま生成されます。
 
 ## 更新運用（軽量）
 
@@ -79,6 +91,23 @@ DESKTOP_APP_VERSION="0.1.1"
 DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master%20Hub-Setup-0.1.1.exe"
 DESKTOP_APP_RELEASE_NOTES="請求画面の修正と安定化"
 ```
+
+## 別PC確認
+
+1. 新規インストール確認
+
+```powershell
+Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.1.exe" -Algorithm SHA256
+```
+
+- 配布前に SHA256 を控える
+- 別PCで installer を実行し、初回起動で本番URLへ接続できることを確認する
+
+2. updater 確認
+
+- 0.1.0 を入れた端末で、サーバー側の `DESKTOP_APP_VERSION` を 0.1.1 に向ける
+- アプリの「ヘルプ」→「更新を確認」で新しいバージョン案内が出ることを確認する
+- 0.1.1 導入後は同じ操作で「最新です」表示に戻ることを確認する
 
 ## アイコン
 
