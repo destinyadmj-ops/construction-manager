@@ -106,6 +106,7 @@ archive_volume() {
   fi
 
   docker run --rm --pull=missing \
+    --user "$(id -u):$(id -g)" \
     -v "${volume_name}:/volume:ro" \
     -v "${volumes_dir}:/backup" \
     -e ARCHIVE_FILE="$archive_file" \
