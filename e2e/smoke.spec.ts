@@ -725,7 +725,7 @@ test('schedule swap-cells endpoint swaps two cells', async ({ request }) => {
   expect(afterB).toEqual(beforeA);
 });
 
-test('weekhub: drag site from list to cell assigns', async ({ page, request }) => {
+test('weekhub: drag site from list to cell assigns', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
@@ -772,7 +772,7 @@ test('weekhub: drag site from list to cell assigns', async ({ page, request }) =
   await expect(anyCell).toContainText(siteName, { timeout: 15_000 });
 });
 
-test('weekhub: drag cell to cell copies into target', async ({ page, request }) => {
+test('weekhub: drag cell to cell copies into target', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
@@ -844,7 +844,7 @@ test('weekhub: drag cell to cell copies into target', async ({ page, request }) 
   await expect(refreshedCellB).toContainText(site1Name, { timeout: 15_000 });
 });
 
-test('weekhub: swap action can be armed from toolbar', async ({ page, request }) => {
+test('weekhub: swap action can be armed from toolbar', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
 
   const user = await prisma.user.create({
