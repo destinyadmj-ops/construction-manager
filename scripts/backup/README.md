@@ -98,6 +98,54 @@ bash scripts/backup/volume-backup.sh \
 - DB バックアップ: `OnCalendar=hourly`
 - Volume バックアップ: `OnCalendar=*-*-* 03:25:00`
 
+## 外部ストレージ同期（rclone 推奨）
+
+本番サーバーの `/opt/master-hub/backups` を外部ストレージへ送る場合は、`rclone` を使うのが最小です。
+
+1. `rclone` をインストール
+
+```bash
+sudo apt-get update -y
+sudo apt-get install -y rclone
+```
+
+2. `linuxuser` で remote を設定
+
+```bash
+rclone config
+```
+
+3. 設定テンプレートをコピー
+
+```bash
+cp scripts/backup/backup-sync.env.example /opt/master-hub/.backup-sync.env
+```
+
+4. `/opt/master-hub/.backup-sync.env` の `BACKUP_SYNC_TARGET` を実際の保存先へ変更
+
+5. dry-run で確認
+
+```bash
+bash scripts/backup/sync-backups-rclone.sh \
+  --env-file /opt/master-hub/.backup-sync.env \
+  --out-dir /opt/master-hub/backups \
+  --dry-run
+```
+
+6. 問題なければ実行
+
+```bash
+bash scripts/backup/sync-backups-rclone.sh \
+  --env-file /opt/master-hub/.backup-sync.env \
+  --out-dir /opt/master-hub/backups
+```
+
+systemd timer の推奨:
+
+- バックアップ生成の後に同期するため、`OnCalendar=*-*-* *:50:00`
+- env file が無い間は `ConditionPathExists=/opt/master-hub/.backup-sync.env` を付けてスキップ
+- remote 側 retention を使わないなら、`BACKUP_SYNC_DELETE_OLDER_THAN` は空のままでよい
+
 ## タスクスケジューラ（推奨）
 
 - DB バックアップ: 1時間ごと
