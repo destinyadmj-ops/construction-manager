@@ -74,18 +74,32 @@ jobs:
             }
 
             check_ready() {
-              body_file="$(mktemp)"
-              if curl --fail --silent --show-error --max-time 10 \
-                --retry 12 --retry-delay 5 --retry-connrefused \
-                --output "$body_file" \
-                http://127.0.0.1:3000/api/health?probe=ready; then
-                cat "$body_file"
-                rm -f "$body_file"
-                return 0
-              fi
+              local attempt=1
+              local max_attempts=12
+              local body_file
 
-              cat "$body_file" >&2 || true
-              rm -f "$body_file"
+              while [ "$attempt" -le "$max_attempts" ]; do
+                body_file="$(mktemp)"
+
+                if curl --fail --silent --show-error --max-time 10 \
+                  --output "$body_file" \
+                  http://127.0.0.1:3000/api/health?probe=ready; then
+                  cat "$body_file"
+                  rm -f "$body_file"
+                  return 0
+                fi
+
+                echo "Readiness attempt ${attempt}/${max_attempts} failed." >&2
+                cat "$body_file" >&2 || true
+                rm -f "$body_file"
+
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  sleep 5
+                fi
+
+                attempt=$((attempt + 1))
+              done
+
               return 1
             }
 
