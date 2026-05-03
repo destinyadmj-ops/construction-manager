@@ -5,7 +5,11 @@ param(
     [switch]$SkipBuild,
     [switch]$DirOnly,
     [string]$MasterHubUrl = "http://localhost:3000",
-    [string]$DesktopReleaseUrl = ""
+    [string]$DesktopReleaseUrl = "",
+    [string]$DesktopVersion = "",
+    [string]$WindowsCertFile = "",
+    [string]$WindowsCertPassword = "",
+    [string]$WindowsCertSha1 = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +48,59 @@ if (-not (Test-Path "node_modules")) {
 }
 Write-Host "Dependencies ready." -ForegroundColor Green
 
+$builderArgs = @()
+
+if (-not [string]::IsNullOrWhiteSpace($DesktopVersion)) {
+    if ($DesktopVersion -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$') {
+        Write-Host "DesktopVersion must look like 0.1.1 or 0.1.1-beta.1" -ForegroundColor Red
+        Pop-Location
+        exit 1
+    }
+    Write-Host "Overriding desktop version: $DesktopVersion" -ForegroundColor Yellow
+    $builderArgs += "--config.extraMetadata.version=$DesktopVersion"
+}
+
+$signingConfigured = $false
+
+if (-not [string]::IsNullOrWhiteSpace($WindowsCertFile)) {
+    if (-not (Test-Path $WindowsCertFile)) {
+        Write-Host "Code signing certificate not found: $WindowsCertFile" -ForegroundColor Red
+        Pop-Location
+        exit 1
+    }
+
+    $resolvedCertFile = (Resolve-Path $WindowsCertFile).Path
+    $env:CSC_LINK = $resolvedCertFile
+    $signingConfigured = $true
+    Write-Host "Using Windows signing certificate: $resolvedCertFile" -ForegroundColor Yellow
+}
+
+if (-not [string]::IsNullOrWhiteSpace($WindowsCertPassword)) {
+    $env:CSC_KEY_PASSWORD = $WindowsCertPassword
+    $signingConfigured = $true
+    Write-Host "Using Windows signing certificate password from script parameter." -ForegroundColor Yellow
+}
+
+if (-not [string]::IsNullOrWhiteSpace($WindowsCertSha1)) {
+    $builderArgs += "--config.win.certificateSha1=$WindowsCertSha1"
+    $signingConfigured = $true
+    Write-Host "Using Windows signing certificate thumbprint: $WindowsCertSha1" -ForegroundColor Yellow
+}
+
+if (-not $signingConfigured -and (
+    -not [string]::IsNullOrWhiteSpace($env:CSC_LINK) -or
+    -not [string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK) -or
+    -not [string]::IsNullOrWhiteSpace($env:CSC_NAME)
+)) {
+    $signingConfigured = $true
+}
+
+if ($signingConfigured) {
+    Write-Host "Windows code signing is enabled for this build." -ForegroundColor Green
+} else {
+    Write-Host "Windows code signing is not configured; the installer will be unsigned." -ForegroundColor Yellow
+}
+
 # 3. Set environment variables for desktop runtime
 Write-Host "`n[3/6] Setting MASTER_HUB_URL: $MasterHubUrl" -ForegroundColor Yellow
 $env:MASTER_HUB_URL = $MasterHubUrl
@@ -78,10 +135,10 @@ Write-Host "Icons generated." -ForegroundColor Green
 Write-Host "`n[6/6] Packaging with electron-builder..." -ForegroundColor Yellow
 if ($DirOnly) {
     Write-Host "Building unpacked directory only..." -ForegroundColor Cyan
-    npx electron-builder --dir
+    & npx electron-builder --dir @builderArgs
 } else {
     Write-Host "Building installer..." -ForegroundColor Cyan
-    npx electron-builder
+    & npx electron-builder @builderArgs
 }
 
 if ($LASTEXITCODE -ne 0) {
