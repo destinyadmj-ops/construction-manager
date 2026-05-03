@@ -61,6 +61,34 @@ async function checkRedis(): Promise<CheckResult> {
   }
 
   try {
+    await withTimeout(
+      'redis',
+      new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          redis.off('ready', onReady);
+          redis.off('error', onError);
+        };
+
+        const onReady = () => {
+          cleanup();
+          resolve();
+        };
+
+        const onError = (error: unknown) => {
+          cleanup();
+          reject(error);
+        };
+
+        if (redis.status === 'ready') {
+          resolve();
+          return;
+        }
+
+        redis.once('ready', onReady);
+        redis.once('error', onError);
+      }),
+    );
+
     await withTimeout('redis', redis.ping());
     return { ok: true, latencyMs: Date.now() - startedAt };
   } catch (error) {
