@@ -102,6 +102,11 @@ bash scripts/backup/volume-backup.sh \
 
 本番サーバーの `/opt/master-hub/backups` を外部ストレージへ送る場合は、`rclone` を使うのが最小です。
 
+この repo では 2 通り使えます。
+
+- 既存の `rclone config` remote を使う
+- `.backup-sync.env` だけで Cloudflare R2 / AWS S3 remote を定義する
+
 1. `rclone` をインストール
 
 ```bash
@@ -109,21 +114,64 @@ sudo apt-get update -y
 sudo apt-get install -y rclone
 ```
 
-2. `linuxuser` で remote を設定
+2. `.backup-sync.env` を作成
+
+```bash
+cp scripts/backup/backup-sync.env.example /opt/master-hub/.backup-sync.env
+chmod 600 /opt/master-hub/.backup-sync.env
+```
+
+3. 次のどちらかで保存先を決める
+
+`rclone config` を使う場合:
 
 ```bash
 rclone config
 ```
 
-3. 設定テンプレートをコピー
+その場合は `/opt/master-hub/.backup-sync.env` に少なくとも次を入れます。
 
 ```bash
-cp scripts/backup/backup-sync.env.example /opt/master-hub/.backup-sync.env
+BACKUP_SYNC_TARGET="remote-name:masterhub/prod"
 ```
 
-4. `/opt/master-hub/.backup-sync.env` の `BACKUP_SYNC_TARGET` を実際の保存先へ変更
+Cloudflare R2 / AWS S3 を env だけで使う場合は、`rclone config` は不要です。
 
-5. dry-run で確認
+Cloudflare R2 例:
+
+```bash
+BACKUP_SYNC_PROVIDER="r2"
+BACKUP_SYNC_REMOTE_NAME="backupsync"
+BACKUP_SYNC_BUCKET="masterhub-backups"
+BACKUP_SYNC_PREFIX="prod"
+BACKUP_SYNC_ACCESS_KEY_ID="..."
+BACKUP_SYNC_SECRET_ACCESS_KEY="..."
+BACKUP_SYNC_REGION="auto"
+BACKUP_SYNC_ENDPOINT="https://ACCOUNT_ID.r2.cloudflarestorage.com"
+BACKUP_SYNC_NO_CHECK_BUCKET="true"
+```
+
+AWS S3 例:
+
+```bash
+BACKUP_SYNC_PROVIDER="s3"
+BACKUP_SYNC_REMOTE_NAME="backupsync"
+BACKUP_SYNC_BUCKET="masterhub-backups"
+BACKUP_SYNC_PREFIX="prod"
+BACKUP_SYNC_ACCESS_KEY_ID="..."
+BACKUP_SYNC_SECRET_ACCESS_KEY="..."
+BACKUP_SYNC_REGION="ap-northeast-1"
+BACKUP_SYNC_STORAGE_CLASS="STANDARD_IA"
+BACKUP_SYNC_SERVER_SIDE_ENCRYPTION="AES256"
+```
+
+補足:
+
+- bucket は先に provider 側で作成しておく
+- Cloudflare R2 は `Object Read & Write` 権限の token を使うなら `BACKUP_SYNC_NO_CHECK_BUCKET="true"` を付けるのが安全
+- AWS S3 で SSE-KMS を使うなら `BACKUP_SYNC_SERVER_SIDE_ENCRYPTION="aws:kms"` と `BACKUP_SYNC_SSE_KMS_KEY_ID="..."` を追加
+
+4. dry-run で確認
 
 ```bash
 bash scripts/backup/sync-backups-rclone.sh \
@@ -132,7 +180,7 @@ bash scripts/backup/sync-backups-rclone.sh \
   --dry-run
 ```
 
-6. 問題なければ実行
+5. 問題なければ実行
 
 ```bash
 bash scripts/backup/sync-backups-rclone.sh \
@@ -145,6 +193,7 @@ systemd timer の推奨:
 - バックアップ生成の後に同期するため、`OnCalendar=*-*-* *:50:00`
 - env file が無い間は `ConditionPathExists=/opt/master-hub/.backup-sync.env` を付けてスキップ
 - remote 側 retention を使わないなら、`BACKUP_SYNC_DELETE_OLDER_THAN` は空のままでよい
+- 初回は `--dry-run` の後に `rclone ls backupsync:BUCKET/PREFIX` 相当で object を確認する
 
 ## タスクスケジューラ（推奨）
 
