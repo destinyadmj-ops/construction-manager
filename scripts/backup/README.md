@@ -42,7 +42,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup/pg-backup.ps1
 
 補足:
 
-- `pg_dump` が見つからない場合は、Docker の `postgres:16` イメージ上で `pg_dump` を実行してバックアップします。
+- `pg_dump` が見つからない場合は、Docker の PostgreSQL イメージ上で `pg_dump` を実行してバックアップします。
+- Supabase / Postgres 17 系を使う本番では、Linux script は既定で `postgres:17` を使います。
 
 - `-KeepDays`（既定: 30）: 日次スナップショット（1日1本）を保持
 

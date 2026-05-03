@@ -10,6 +10,7 @@ OUT_DIR="$REPO_ROOT/backups"
 CONNECT_TIMEOUT_SECONDS=10
 KEEP_HOURS=48
 KEEP_DAYS=30
+PG_IMAGE="postgres:17"
 
 usage() {
   cat <<'EOF'
@@ -21,6 +22,7 @@ Options:
   --connect-timeout-seconds N     pg_dump connect timeout seconds (default: 10)
   --keep-hours N                  Number of hourly backups to keep (default: 48)
   --keep-days N                   Number of daily snapshots to keep (default: 30)
+  --pg-image IMAGE                PostgreSQL image used to run pg_dump (default: postgres:17)
   -h, --help                      Show this help
 EOF
 }
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-days)
       KEEP_DAYS="$2"
+      shift 2
+      ;;
+    --pg-image)
+      PG_IMAGE="$2"
       shift 2
       ;;
     -h|--help)
@@ -150,12 +156,13 @@ BACKUP_FILE="backup_${STAMP}.sql.gz"
 NORMALIZED_DATABASE_URL="$(normalize_database_url "$DATABASE_URL")"
 
 docker run --rm --pull=missing \
+  --user "$(id -u):$(id -g)" \
   -e DATABASE_URL="$NORMALIZED_DATABASE_URL" \
   -e PGCONNECT_TIMEOUT="$CONNECT_TIMEOUT_SECONDS" \
   -e BACKUP_FILE="$BACKUP_FILE" \
   -v "$BACKUP_DIR:/backup" \
-  postgres:16 \
-  sh -lc 'pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=p | gzip -c > "/backup/$BACKUP_FILE"'
+  "$PG_IMAGE" \
+  sh -ec 'tmp_file="/tmp/$BACKUP_FILE.sql"; pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=p --file "$tmp_file"; gzip -c "$tmp_file" > "/backup/$BACKUP_FILE"; rm -f "$tmp_file"'
 
 REMOVED="$(prune_backups "$BACKUP_DIR" "$KEEP_HOURS" "$KEEP_DAYS")"
 
