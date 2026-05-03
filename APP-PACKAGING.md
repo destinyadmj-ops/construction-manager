@@ -39,22 +39,38 @@ npm run package:desktop
 .\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com"
 ```
 
+**desktop版のバージョンを指定して生成:**
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopVersion "0.1.1"
+```
+
 **更新確認先も明示したい場合:**
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopReleaseUrl "https://your-server.com/api/desktop-release"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopReleaseUrl "https://your-server.com/api/desktop-release" -DesktopVersion "0.1.1"
+```
+
+**PFX 証明書で署名したい場合:**
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopVersion "0.1.1" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
+```
+
+**Windows 証明書ストアの証明書を使う場合:**
+```powershell
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://your-server.com" -DesktopVersion "0.1.1" -WindowsCertSha1 "<thumbprint>"
 ```
 
 ### 出力
 
 - **場所:** `apps/desktop/dist/`
-- **ファイル:** `Master Hub-Setup-0.1.0.exe` (Windows)
+- **ファイル:** `Master Hub-Setup-<version>.exe` (Windows)
 - **サイズ:** 約 200-300MB（Electron + Chromium 含む）
 
 ### 配布
 
-1. `Master Hub-Setup-0.1.0.exe` をユーザーに配布
+1. `Master Hub-Setup-<version>.exe` をユーザーに配布
 2. インストーラを実行（ワンクリックインストール）
 3. 配布版はビルド時に埋め込んだURLへ接続（未指定時は `http://localhost:3000`）
+4. 配布前に `Get-FileHash` で SHA256 を控える
 
 ### 配布後の更新運用
 
@@ -69,6 +85,19 @@ DESKTOP_APP_VERSION="0.1.1"
 DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
 DESKTOP_APP_RELEASE_NOTES="帳票と割当ロジックの修正"
 ```
+
+### 別PCでの確認ポイント
+
+1. 新規PCでインストーラから起動し、本番URLへログインできることを確認
+2. 旧版 0.1.0 を入れた端末で `DESKTOP_APP_VERSION=0.1.1` に向け、「更新を確認」で新バージョン案内が出ることを確認
+3. 0.1.1 適用後に再度「更新を確認」し、「最新です」表示になることを確認
+
+### コード署名
+
+- `-WindowsCertFile` と `-WindowsCertPassword` を渡すと PFX 証明書で署名ビルドできる
+- `-WindowsCertSha1` を渡すと Windows 証明書ストア上の証明書を使える
+- 何も渡さない場合は未署名で生成される
+- SmartScreen 警告を実際に減らすには、有効な OV/EV コード署名証明書または同等の信頼済み署名基盤が必要
 
 ### カスタマイズ
 
@@ -176,9 +205,12 @@ apps/mobile/android/        → Android Studioプロジェクト
 ### Desktop
 - [ ] `npm run package:desktop` 成功
 - [ ] `apps/desktop/dist/*.exe` 生成確認
+- [ ] `Get-FileHash apps/desktop/dist/*.exe -Algorithm SHA256` 記録
 - [ ] インストーラ実行テスト
 - [ ] デフォルトURL動作確認
 - [ ] メニュー機能確認（再読み込み、URLコピー等）
+- [ ] 「更新を確認」で期待どおりに新版案内または最新表示になる
+- [ ] 署名付き配布時は `Get-AuthenticodeSignature` で `Valid` を確認
 
 ### Mobile (iOS)
 - [ ] Xcode でビルド成功
@@ -257,13 +289,9 @@ npx cap add android
 
 1. バージョンアップ:
    ```bash
-   # Root
-   npm version patch  # 0.1.0 → 0.1.1
-   
-   # Desktop
-   cd apps/desktop
-   npm version patch
-   
+   # Desktop installer version
+   npm run package:desktop -- -DesktopVersion "0.1.1"
+
    # Mobile
    cd apps/mobile
    npm version patch
@@ -276,6 +304,7 @@ npx cap add android
 
 3. 配布:
    - Desktop: 新しいインストーラを配布
+   - Desktop: 必要なら Vultr 側の `DESKTOP_APP_VERSION` / `DESKTOP_APP_DOWNLOAD_URL` を新しい version に更新
    - Mobile: App Store/Play Store に更新版アップロード
    - PWA: サーバー更新で自動反映
 
