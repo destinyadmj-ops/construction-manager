@@ -112,6 +112,10 @@ jobs:
             git fetch origin main --prune
             git checkout -B main origin/main
             git reset --hard "$GITHUB_SHA"
+            desktop_env_lines=""
+            if [ -f .env.production ]; then
+              desktop_env_lines="$(grep '^DESKTOP_APP_' .env.production || true)"
+            fi
             redis_url="${REDIS_URL:-redis://redis:6379}"
             cat > .env.production <<EOF
             DATABASE_URL=${DATABASE_URL}
@@ -124,6 +128,9 @@ jobs:
             NEXTAUTH_URL=${NEXTAUTH_URL}
             ADMIN_TOKEN=${ADMIN_TOKEN}
             EOF
+            if [ -n "$desktop_env_lines" ]; then
+              printf '\n%s\n' "$desktop_env_lines" >> .env.production
+            fi
             run_compose up -d --build --remove-orphans
 
             if ! check_ready; then
