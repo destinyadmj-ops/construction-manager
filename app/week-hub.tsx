@@ -1,7 +1,18 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react';
+import {
+  Fragment,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent,
+} from 'react';
 import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
@@ -135,6 +146,33 @@ function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): strin
   if (color === 'blue') return tone === 'primary' ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500 dark:text-blue-300';
   if (color === 'purple') return tone === 'primary' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-500 dark:text-violet-300';
   return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
+}
+
+function clampNameColumnWidth(value: number) {
+  return Math.max(120, Math.min(280, Math.round(value)));
+}
+
+function ColumnResizeHandle({
+  onPointerDown,
+}: {
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-label="従業員名の列幅を調整"
+      aria-orientation="vertical"
+      onPointerDown={onPointerDown}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      className="absolute inset-y-0 right-0 z-20 flex w-3 translate-x-1/2 cursor-col-resize touch-none items-center justify-center"
+      title="従業員名の幅を調整"
+    >
+      <div className="h-8 w-px rounded-full bg-zinc-300 dark:bg-zinc-700" />
+    </div>
+  );
 }
 
 function arrayEqual(a: string[], b: string[]) {
@@ -412,6 +450,7 @@ function WeekHubInner() {
     el.scrollTop += e.deltaY;
   }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [nameColW, setNameColW] = useState<number>(160);
   // たたみ時のセル幅
   const [cellMinW, setCellMinW] = useState<number>(112);
   const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
@@ -423,6 +462,8 @@ function WeekHubInner() {
   const cellActionMsgTimer = useRef<number | null>(null);
   const [isCellSettingsOpen, setIsCellSettingsOpen] = useState(false);
   const cellSettingsRef = useRef<HTMLDivElement | null>(null);
+  const [isNameColResizing, setIsNameColResizing] = useState(false);
+  const nameColResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
   const [userOrder, setUserOrder] = useState<string[]>([]);
@@ -471,6 +512,56 @@ function WeekHubInner() {
       document.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [isCellSettingsOpen]);
+
+  const stopNameColResize = useCallback(() => {
+    nameColResizeRef.current = null;
+    setIsNameColResizing(false);
+  }, []);
+
+  const startNameColResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      nameColResizeRef.current = {
+        startX: event.clientX,
+        startWidth: nameColW,
+      };
+      setIsNameColResizing(true);
+    },
+    [nameColW],
+  );
+
+  useEffect(() => {
+    if (!isNameColResizing) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onPointerMove = (event: PointerEvent) => {
+      const current = nameColResizeRef.current;
+      if (!current) return;
+      const next = clampNameColumnWidth(current.startWidth + event.clientX - current.startX);
+      setNameColW((prev) => (prev === next ? prev : next));
+    };
+
+    const onPointerUp = () => {
+      stopNameColResize();
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [isNameColResizing, stopNameColResize]);
 
   useEffect(() => {
     const k = (searchParams.get('kind') ?? '').toLowerCase();
@@ -578,6 +669,11 @@ function WeekHubInner() {
 
       const nextBg = o.cellBg === 'soft' ? 'soft' : o.cellBg === 'default' ? 'default' : null;
       if (nextBg) setCellBg(nextBg);
+
+      const nextNameColW = typeof o.nameColW === 'number' ? o.nameColW : null;
+      if (nextNameColW !== null && Number.isFinite(nextNameColW)) {
+        setNameColW(clampNameColumnWidth(nextNameColW));
+      }
 
       const w = typeof o.cellMinW === 'number' ? o.cellMinW : null;
       if (w && Number.isFinite(w)) {
@@ -707,11 +803,12 @@ function WeekHubInner() {
     }
 
     const payload = {
-        v: 1,
+      v: 1,
       gridLayout,
       cellClickAction,
       cellTextColor,
       cellBg,
+      nameColW,
       cellMinW,
       cellMinHCompact,
       cellMinHComfortable,
@@ -738,6 +835,7 @@ function WeekHubInner() {
     effectiveUserId,
     gridLayout,
     gridPrefsKey,
+    nameColW,
     saveGridPrefs,
   ]);
 
@@ -977,7 +1075,7 @@ function WeekHubInner() {
         </button>
 
         {isCellSettingsOpen ? (
-          <div className="absolute left-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+          <div className="absolute right-0 top-full z-[70] mt-1 w-[min(360px,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
             <div className="border-b border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
               表示（セル）
             </div>
@@ -1046,7 +1144,25 @@ function WeekHubInner() {
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">└ 幅</div>
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 名前幅</div>
+                <select
+                  value={String(nameColW)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setNameColW(Number.isFinite(n) ? clampNameColumnWidth(n) : 160);
+                  }}
+                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
+                  aria-label="名前幅"
+                >
+                  <option value="140">狭</option>
+                  <option value="160">標準</option>
+                  <option value="180">広</option>
+                  <option value="220">最大</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">└ 日幅</div>
                 <select
                   value={String(cellMinW)}
                   onChange={(e) => {
@@ -2017,7 +2133,9 @@ function WeekHubInner() {
     <div
       id="mode-tabs"
       ref={modeTabsRef}
-      className="sticky top-[var(--app-header-h)] z-40 scroll-mt-20 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-black"
+      className={`sticky top-[var(--app-header-h)] scroll-mt-20 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-black ${
+        isCellSettingsOpen ? 'z-[60]' : 'z-40'
+      }`}
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2978,10 +3096,12 @@ function WeekHubInner() {
                   monthWeekTabs={monthWeekTabs}
                   apiKind={apiKind}
                   gridLayout={gridLayout}
+                  nameColW={nameColW}
                   cellMinW={cellMinW}
                   cellMinHCompact={cellMinHCompact}
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
+                  onStartNameColResize={startNameColResize}
                   onSelectWeekStart={setWeekStartByDate}
                   onPrevMonth={goPrevMonth}
                   onNextMonth={goNextMonth}
@@ -3249,10 +3369,12 @@ function WeekHubInner() {
                   data={monthData}
                   apiKind={apiKind}
                   gridLayout={gridLayout}
+                  nameColW={nameColW}
                   cellMinW={cellMinW}
                   cellMinHCompact={cellMinHCompact}
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
+                  onStartNameColResize={startNameColResize}
                   selectedSite={selectedSite}
                   resolveSiteReference={resolveSiteReference}
                   paceTargetDays={monthVisiblePaceTargets}
@@ -3493,10 +3615,12 @@ function WeekHubInner() {
                   userOrder={userOrder}
                   reorderMode={reorderMode}
                   gridLayout={gridLayout}
+                  nameColW={nameColW}
                   cellMinW={cellMinW}
                   cellMinHCompact={cellMinHCompact}
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
+                  onStartNameColResize={startNameColResize}
                   onMoveUser={(userId, dir) => {
                     setUserOrder((cur) => {
                       const i = cur.indexOf(userId);
@@ -3750,10 +3874,12 @@ function WeekGrid({
   monthWeekTabs,
   apiKind,
   gridLayout,
+  nameColW,
   cellMinW,
   cellMinHCompact,
   cellMinHComfortable,
   cellBg,
+  onStartNameColResize,
   onSelectWeekStart,
   onPrevMonth,
   onNextMonth,
@@ -3800,10 +3926,12 @@ function WeekGrid({
   monthWeekTabs: { monthKey: string; tabs: Date[] };
   apiKind: 'NORMAL' | 'DAILY';
   gridLayout: GridLayout;
+  nameColW: number;
   cellMinW: number;
   cellMinHCompact: number;
   cellMinHComfortable: number;
   cellBg: CellBg;
+  onStartNameColResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSelectWeekStart: (d: Date) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
@@ -3883,6 +4011,7 @@ function WeekGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
+  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -3995,10 +4124,12 @@ function WeekGrid({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(120px, 180px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300" />
+            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative">
+              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
+            </div>
             {dayLabels.map((d) => (
               <div
                 key={d.key}
@@ -4030,7 +4161,7 @@ function WeekGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(120px, 180px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -4075,6 +4206,7 @@ function WeekGrid({
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
                   onDeleteUser={() => onDeleteUser(u.id)}
+                  onStartNameColResize={onStartNameColResize}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={draggedSite}
                   selectedCell={selectedCell}
@@ -4109,10 +4241,12 @@ function MonthGrid({
   data,
   apiKind,
   gridLayout,
+  nameColW,
   cellMinW,
   cellMinHCompact,
   cellMinHComfortable,
   cellBg,
+  onStartNameColResize,
   selectedSite,
   resolveSiteReference,
   paceTargetDays,
@@ -4145,10 +4279,12 @@ function MonthGrid({
   data: MonthApiResponse | null;
   apiKind: 'NORMAL' | 'DAILY';
   gridLayout: GridLayout;
+  nameColW: number;
   cellMinW: number;
   cellMinHCompact: number;
   cellMinHComfortable: number;
   cellBg: CellBg;
+  onStartNameColResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   selectedSite: SiteItem | null;
   resolveSiteReference: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   paceTargetDays: ReadonlySet<string>;
@@ -4211,6 +4347,7 @@ function MonthGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
+  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4299,10 +4436,12 @@ function MonthGrid({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300" />
+            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative">
+              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
+            </div>
             {dayLabels.map((d) => (
               <div
                 key={d.key}
@@ -4334,7 +4473,7 @@ function MonthGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -4382,6 +4521,7 @@ function MonthGrid({
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
                   onDeleteUser={() => onDeleteUser(u.id)}
+                  onStartNameColResize={onStartNameColResize}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={null}
                 />
@@ -4480,10 +4620,12 @@ function YearGrid({
   userOrder,
   reorderMode,
   gridLayout,
+  nameColW,
   cellMinW,
   cellMinHCompact,
   cellMinHComfortable,
   cellBg,
+  onStartNameColResize,
   onMoveUser,
   onDeleteUser,
 }: {
@@ -4494,19 +4636,22 @@ function YearGrid({
   userOrder: string[];
   reorderMode: boolean;
   gridLayout: GridLayout;
+  nameColW: number;
   cellMinW: number;
   cellMinHCompact: number;
   cellMinHComfortable: number;
   cellBg: CellBg;
+  onStartNameColResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
   onDeleteUser: (userId: string) => void | Promise<void>;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const months = data?.months ?? [];
   const grid = data?.grid ?? {};
-    const cellMinH = useMemo(() => {
-      return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
-    }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
+  const cellMinH = useMemo(() => {
+    return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
+  }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
+  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
@@ -4565,10 +4710,12 @@ function YearGrid({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="pointer-events-none sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300" />
+            <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative">
+              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
+            </div>
 
             {months.map((m) => {
               const mm = Number(m.slice(-2));
@@ -4598,7 +4745,7 @@ function YearGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(120px, 180px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -4637,7 +4784,7 @@ function YearGrid({
                     aria-current={isSelectedUser ? 'true' : undefined}
                     data-user-row={u.id}
                     data-testid={`user-row-${u.id}`}
-                    className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-2 py-2 text-left text-[13px] dark:border-zinc-800 ${
+                    className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-2 py-2 text-left text-[13px] dark:border-zinc-800 relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-200 dark:after:bg-zinc-800 ${
                       isSelectedUser ? selectedBg : baseBg
                     }`}
                   >
@@ -4693,6 +4840,7 @@ function YearGrid({
                         </div>
                       ) : null}
                     </div>
+                    <ColumnResizeHandle onPointerDown={onStartNameColResize} />
                   </div>
 
                   {months.map((m) => {
@@ -4760,6 +4908,7 @@ function Row({
   onMoveUp,
   onMoveDown,
   onDeleteUser,
+  onStartNameColResize,
   rowCellClassName,
   draggedSite,
   selectedCell,
@@ -4804,6 +4953,7 @@ function Row({
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onDeleteUser?: () => void | Promise<void>;
+  onStartNameColResize?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   rowCellClassName?: string;
   draggedSite: SiteItem | null;
   selectedCell?: { userId: string; day: string } | null;
@@ -5012,7 +5162,7 @@ function Row({
         data-user-label={(user.name ?? user.email ?? user.id).trim()}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
-        className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black ${
+        className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-400 dark:after:bg-zinc-600 ${
           isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : ''
         }`}
       >
@@ -5071,6 +5221,7 @@ function Row({
             </div>
           ) : null}
         </div>
+        {onStartNameColResize ? <ColumnResizeHandle onPointerDown={onStartNameColResize} /> : null}
       </div>
       {dayLabels.map((d) => {
         const cell = grid[d.key];
