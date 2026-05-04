@@ -890,9 +890,9 @@ export default function AppHeader() {
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
       <div className="bg-white/60 dark:bg-black/60">
-        <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-2 px-4 py-3 lg:px-6">
+        <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-3 lg:flex-nowrap lg:px-6">
 
-          <div className="hidden min-w-0 sm:-ml-2 sm:flex sm:flex-1 sm:items-center sm:gap-2">
+          <div className="hidden min-w-0 sm:-ml-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
@@ -1265,7 +1265,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="hidden sm:-ml-2 sm:flex sm:min-w-0 sm:items-center sm:gap-1">
+          <div className="hidden sm:-ml-2 sm:flex sm:min-w-0 sm:flex-wrap sm:items-center sm:gap-1">
             <button
               type="button"
               data-testid="header-action-back"
@@ -1459,7 +1459,7 @@ export default function AppHeader() {
             </div>
 
             {pathname === '/' ? (
-              <div className="ml-0 flex shrink-0 items-center gap-1 text-[11px] whitespace-nowrap" aria-label="当月アラート凡例">
+              <div className="ml-0 flex min-w-0 flex-wrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
                 <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
@@ -1487,7 +1487,7 @@ export default function AppHeader() {
         </div>
 
         {/* Right-side hub actions */}
-        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
           <Link
             href="/alerts"
             onClick={() => {

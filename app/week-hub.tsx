@@ -426,6 +426,7 @@ function WeekHubInner() {
   const [yearData, setYearData] = useState<YearSummaryApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [isElectronShell, setIsElectronShell] = useState(false);
   const [editConfigured, setEditConfigured] = useState(false);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editActive, setEditActive] = useState(false);
@@ -746,6 +747,13 @@ function WeekHubInner() {
       window.removeEventListener('online', update);
       window.removeEventListener('offline', update);
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const userAgent = navigator.userAgent;
+    const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
+    setIsElectronShell(/\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell);
   }, []);
 
   useEffect(() => {
@@ -2137,137 +2145,134 @@ function WeekHubInner() {
         isCellSettingsOpen ? 'z-[60]' : 'z-40'
       }`}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {/* タブ切替UI: 週/月/年 */}
-          {[
-            { key: 'week', label: '週予定' },
-            { key: 'month', label: '月予定' },
-            { key: 'year', label: '年予定' },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setMode(tab.key as ViewMode)}
-              className={`rounded-md border px-2 py-1 text-xs ${
-                mode === tab.key
-                  ? 'border-blue-500 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-800'
-                  : 'border-zinc-200 bg-white/60 text-zinc-700 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-
-          <div className="ml-2 flex min-w-0 flex-1 items-center gap-2 text-xs">
-            <span className="text-zinc-500 dark:text-zinc-400">従業員:</span>
-            {selectedUserId ? (
-              <span
-                className="min-w-0 flex-1 truncate rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-zinc-700 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200"
-                title={selectedUserLabel ?? selectedUserId}
-                data-testid="selected-user-chip"
-              >
-                {selectedUserLabel ?? selectedUserId}
-              </span>
-            ) : (
-              <span className="rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-zinc-400 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-500">
-                （なし）
-              </span>
-            )}
-
-            {hasScheduleEditPermission ? (
+      <div className="flex flex-col gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {[
+              { key: 'week', label: '週予定' },
+              { key: 'month', label: '月予定' },
+              { key: 'year', label: '年予定' },
+            ].map(tab => (
               <button
+                key={tab.key}
                 type="button"
-                onClick={() => setReorderMode((v) => !v)}
-                disabled={!editActive}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-pressed={reorderMode}
+                onClick={() => setMode(tab.key as ViewMode)}
+                className={`rounded-md border px-2 py-1 text-xs ${
+                  mode === tab.key
+                    ? 'border-blue-500 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-800'
+                    : 'border-zinc-200 bg-white/60 text-zinc-700 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black'
+                }`}
               >
-                {reorderMode ? '並べ替え: ON' : '並べ替え'}
+                {tab.label}
               </button>
+            ))}
+
+            {isElectronShell ? (
+              <div className="ml-0 flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs sm:ml-2">
+                <span className="text-zinc-500 dark:text-zinc-400">従業員:</span>
+                {selectedUserId ? (
+                  <span
+                    className="min-w-0 flex-1 truncate rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-zinc-700 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200"
+                    title={selectedUserLabel ?? selectedUserId}
+                    data-testid="selected-user-chip"
+                  >
+                    {selectedUserLabel ?? selectedUserId}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-zinc-200 bg-white/60 px-2 py-1 text-zinc-400 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-500">
+                    （なし）
+                  </span>
+                )}
+
+                {hasScheduleEditPermission ? (
+                  <button
+                    type="button"
+                    onClick={() => setReorderMode((v) => !v)}
+                    disabled={!editActive}
+                    className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                    aria-pressed={reorderMode}
+                  >
+                    {reorderMode ? '並べ替え: ON' : '並べ替え'}
+                  </button>
+                ) : null}
+
+                {selectedUserId ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUserId(null)}
+                    className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                    aria-label="選択解除"
+                    data-testid="clear-selected-user"
+                  >
+                    解除
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+            {mode === 'month' ? (
+              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-month">
+                {viewMonth}
+              </div>
+            ) : mode === 'year' ? (
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={goPrevYear}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  aria-label="前の年"
+                >
+                  ←
+                </button>
+                <div
+                  className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300"
+                  data-testid="modebar-year"
+                >
+                  {viewYear}年
+                </div>
+                <button
+                  type="button"
+                  onClick={goNextYear}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  aria-label="次の年"
+                >
+                  →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekStartByDate(new Date())}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                >
+                  今年
+                </button>
+              </div>
+            ) : mode === 'week' ? (
+              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-week">
+                {toYmd(weekStart)}〜{toYmd(addDays(weekStart, 6))}
+              </div>
             ) : null}
 
-            {selectedUserId ? (
-              <button
-                type="button"
-                onClick={() => setSelectedUserId(null)}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="選択解除"
-                data-testid="clear-selected-user"
-              >
-                解除
-              </button>
+            {isElectronShell && mode !== 'year' ? cellActionButtons : null}
+
+            {isLoading ? (
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
             ) : null}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {mode === 'month' ? (
-            <>
-              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-month">
-                {viewMonth}
-              </div>
-
-              {cellActionButtons}
-            </>
-          ) : mode === 'year' ? (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={goPrevYear}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="前の年"
-              >
-                ←
-              </button>
-              <div
-                className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300"
-                data-testid="modebar-year"
-              >
-                {viewYear}年
-              </div>
-              <button
-                type="button"
-                onClick={goNextYear}
-                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                aria-label="次の年"
-              >
-                →
-              </button>
-              <button
-                type="button"
-                onClick={() => setWeekStartByDate(new Date())}
-                className="ml-1 rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              >
-                今年
-              </button>
-            </div>
-          ) : mode === 'week' ? (
-            <>
-              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-week">
-                {toYmd(weekStart)}〜{toYmd(addDays(weekStart, 6))}
-              </div>
-
-              {cellActionButtons}
-            </>
-          ) : null}
-
-          {isLoading ? (
-            <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
-          ) : null}
-
-          {cellActionMsg ? (
-            <div
-              className="max-w-[60vw] truncate text-xs text-zinc-500 dark:text-zinc-400"
-              role="status"
-              aria-live="polite"
-              data-testid="cell-action-msg"
-              title={cellActionMsg}
-            >
-              {cellActionMsg}
-            </div>
-          ) : null}
-        </div>
+        {cellActionMsg ? (
+          <div
+            className="max-w-full truncate text-xs text-zinc-500 dark:text-zinc-400 sm:max-w-[60vw]"
+            role="status"
+            aria-live="polite"
+            data-testid="cell-action-msg"
+            title={cellActionMsg}
+          >
+            {cellActionMsg}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -2454,8 +2459,8 @@ function WeekHubInner() {
   }, [isUndoRedoBusy, redo, redoStack.length, setRedoAction, setUndoAction, undo, undoStack.length]);
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="w-full px-4 py-4 lg:px-6">
+    <div className="min-h-[calc(100vh-56px)] overflow-x-hidden bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+      <div className="w-full min-w-0 px-4 py-4 lg:px-6">
         {isOffline ? (
           <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
             オフラインのため、表示が古い可能性があります。
