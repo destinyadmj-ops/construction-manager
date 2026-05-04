@@ -148,6 +148,7 @@ export default function AppHeader() {
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
+  const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
   const [, setMonthLegend] = useState<MonthLegendState>({
     invoiceMissing: false,
@@ -211,6 +212,17 @@ export default function AppHeader() {
     // 通常時は必ずOFF（編集中のみONを維持したい）
     writeColorEditMode(false);
     setWeekColorPickMode(false);
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+
+    const userAgent = navigator.userAgent;
+    const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
+    const isElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
+    const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+
+    setIsMobileBrowser(isMobileUa && !isElectronShell);
   }, []);
 
   const fetchAppVersion = useCallback(async () => {
@@ -1543,7 +1555,7 @@ export default function AppHeader() {
         </div>
 
         {/* Right-side hub actions */}
-        <div className="hidden min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
+        <div className={`${isMobileBrowser ? 'hidden' : 'flex'} min-w-0 max-w-full flex-wrap items-center justify-end gap-1`}>
           <div ref={overflowMenuRef} className="relative lg:hidden">
             <button
               type="button"
