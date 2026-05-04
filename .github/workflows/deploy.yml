@@ -21,6 +21,11 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DESKTOP_APP_VERSION: ${{ secrets.PROD_DESKTOP_APP_VERSION }}
+      DESKTOP_APP_DOWNLOAD_URL: ${{ secrets.PROD_DESKTOP_APP_DOWNLOAD_URL }}
+      DESKTOP_APP_RELEASE_NOTES: ${{ secrets.PROD_DESKTOP_APP_RELEASE_NOTES }}
+      DESKTOP_APP_PUBLISHED_AT: ${{ secrets.PROD_DESKTOP_APP_PUBLISHED_AT }}
+      DESKTOP_APP_CHANNEL: ${{ secrets.PROD_DESKTOP_APP_CHANNEL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -60,17 +65,31 @@ jobs:
           NEXTAUTH_SECRET: ${{ env.NEXTAUTH_SECRET }}
           NEXTAUTH_URL: ${{ env.NEXTAUTH_URL }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+          DESKTOP_APP_VERSION: ${{ env.DESKTOP_APP_VERSION }}
+          DESKTOP_APP_DOWNLOAD_URL: ${{ env.DESKTOP_APP_DOWNLOAD_URL }}
+          DESKTOP_APP_RELEASE_NOTES: ${{ env.DESKTOP_APP_RELEASE_NOTES }}
+          DESKTOP_APP_PUBLISHED_AT: ${{ env.DESKTOP_APP_PUBLISHED_AT }}
+          DESKTOP_APP_CHANNEL: ${{ env.DESKTOP_APP_CHANNEL }}
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ env.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN
+          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN,DESKTOP_APP_VERSION,DESKTOP_APP_DOWNLOAD_URL,DESKTOP_APP_RELEASE_NOTES,DESKTOP_APP_PUBLISHED_AT,DESKTOP_APP_CHANNEL
           script: |
             set -eu
 
             run_compose() {
               docker compose -f docker-compose.prod.yml --env-file .env.production "$@"
+            }
+
+            append_env_if_set() {
+              local key="$1"
+              local value="$2"
+
+              if [ -n "$value" ]; then
+                printf '%s="%s"\n' "$key" "$value" >> .env.production
+              fi
             }
 
             check_ready() {
@@ -115,6 +134,21 @@ jobs:
             desktop_env_lines=""
             if [ -f .env.production ]; then
               desktop_env_lines="$(grep '^DESKTOP_APP_' .env.production || true)"
+              if [ -n "${DESKTOP_APP_VERSION:-}" ]; then
+                desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_VERSION=' || true)"
+              fi
+              if [ -n "${DESKTOP_APP_DOWNLOAD_URL:-}" ]; then
+                desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_DOWNLOAD_URL=' || true)"
+              fi
+              if [ -n "${DESKTOP_APP_RELEASE_NOTES:-}" ]; then
+                desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_RELEASE_NOTES=' || true)"
+              fi
+              if [ -n "${DESKTOP_APP_PUBLISHED_AT:-}" ]; then
+                desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_PUBLISHED_AT=' || true)"
+              fi
+              if [ -n "${DESKTOP_APP_CHANNEL:-}" ]; then
+                desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_CHANNEL=' || true)"
+              fi
             fi
             redis_url="${REDIS_URL:-redis://redis:6379}"
             cat > .env.production <<EOF
@@ -131,6 +165,11 @@ jobs:
             if [ -n "$desktop_env_lines" ]; then
               printf '\n%s\n' "$desktop_env_lines" >> .env.production
             fi
+            append_env_if_set DESKTOP_APP_VERSION "${DESKTOP_APP_VERSION:-}"
+            append_env_if_set DESKTOP_APP_DOWNLOAD_URL "${DESKTOP_APP_DOWNLOAD_URL:-}"
+            append_env_if_set DESKTOP_APP_RELEASE_NOTES "${DESKTOP_APP_RELEASE_NOTES:-}"
+            append_env_if_set DESKTOP_APP_PUBLISHED_AT "${DESKTOP_APP_PUBLISHED_AT:-}"
+            append_env_if_set DESKTOP_APP_CHANNEL "${DESKTOP_APP_CHANNEL:-}"
             run_compose up -d --build --remove-orphans
 
             if ! check_ready; then

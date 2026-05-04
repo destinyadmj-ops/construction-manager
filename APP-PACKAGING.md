@@ -78,12 +78,22 @@ npm run package:desktop
 - Electron 側の更新は新しい exe を再配布する
 - アプリ内の「更新を確認」は `/api/desktop-release` を見て、新しい exe のダウンロードURLへ誘導できる
 
-Vultr 側の環境変数例:
+GitHub Actions で deploy している本番は、repo secrets に次を設定:
+
+```env
+PROD_DESKTOP_APP_VERSION="0.1.1"
+PROD_DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
+PROD_DESKTOP_APP_RELEASE_NOTES="スマホ表示・予定編集・履歴保持・更新案内を改善"
+PROD_DESKTOP_APP_PUBLISHED_AT="2026-05-05T00:00:00Z"
+PROD_DESKTOP_APP_CHANNEL="stable"
+```
+
+手動 deploy や GitHub Actions を使わない構成では、従来どおり Vultr 側の環境変数に `DESKTOP_APP_*` を設定:
 
 ```env
 DESKTOP_APP_VERSION="0.1.1"
 DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
-DESKTOP_APP_RELEASE_NOTES="帳票と割当ロジックの修正"
+DESKTOP_APP_RELEASE_NOTES="スマホ表示・予定編集・履歴保持・更新案内を改善"
 ```
 
 ### 別PCでの確認ポイント
