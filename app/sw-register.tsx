@@ -33,9 +33,14 @@ export default function ServiceWorkerRegister() {
       if (window.location.protocol !== 'https:' && !isLocalhost) return;
     }
 
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // no-op: optional enhancement
-    });
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => registration.update().catch(() => {
+        // no-op
+      }))
+      .catch(() => {
+        // no-op: optional enhancement
+      });
   }, []);
 
   return null;

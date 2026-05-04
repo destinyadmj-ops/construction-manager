@@ -1,11 +1,14 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
   --app-header-h: 56px;
   --mode-tabs-h: 0px;
   --masterhub-font-size: 16px;
+  color-scheme: light;
 }
 
 html {
