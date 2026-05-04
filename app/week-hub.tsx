@@ -2141,12 +2141,12 @@ function WeekHubInner() {
     <div
       id="mode-tabs"
       ref={modeTabsRef}
-      className={`sticky top-[var(--app-header-h)] scroll-mt-20 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-black ${
+      className={`sticky top-[var(--app-header-h)] scroll-mt-20 rounded-lg border border-zinc-200 bg-white px-2 py-2 sm:rounded-xl sm:px-3 dark:border-zinc-800 dark:bg-black ${
         isCellSettingsOpen ? 'z-[60]' : 'z-40'
       }`}
     >
-      <div className="flex flex-col gap-2 sm:gap-3">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex flex-col gap-1.5 sm:gap-3">
+        <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 lg:gap-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {[
               { key: 'week', label: '週予定' },
@@ -2211,7 +2211,7 @@ function WeekHubInner() {
             ) : null}
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:justify-end sm:gap-2">
             {mode === 'month' ? (
               <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300" data-testid="modebar-month">
                 {viewMonth}
@@ -2460,7 +2460,7 @@ function WeekHubInner() {
 
   return (
     <div className="min-h-[calc(100vh-56px)] overflow-x-hidden bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="w-full min-w-0 px-4 py-4 lg:px-6">
+      <div className="w-full min-w-0 px-2 py-3 sm:px-3 sm:py-4 lg:px-6">
         {isOffline ? (
           <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
             オフラインのため、表示が古い可能性があります。

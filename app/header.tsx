@@ -123,8 +123,8 @@ function versionId(info: AppVersionInfo): string {
   return `${info.version}|${info.gitSha ?? ''}|${info.buildTime ?? ''}`;
 }
 
-function navLinkClass(active: boolean) {
-  return `inline-flex min-w-20 shrink-0 items-center justify-center rounded-lg border px-4 py-2 text-[11px] ${
+function navLinkClass(active: boolean, displayClass = 'inline-flex') {
+  return `${displayClass} min-w-[4.5rem] shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-[11px] sm:min-w-20 sm:px-4 ${
     active
       ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
       : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
@@ -192,6 +192,8 @@ export default function AppHeader() {
 
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
+  const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const readWeekColorPickMode = useCallback(() => {
     return readColorEditMode();
@@ -457,6 +459,10 @@ export default function AppHeader() {
     setIsHistoryOpen(false);
   }, [routeKey]);
 
+  useEffect(() => {
+    setIsOverflowMenuOpen(false);
+  }, [routeKey]);
+
   useOutsidePointerDown({
     open: isHistoryOpen,
     refs: [historyButtonRef, historyMenuRef],
@@ -467,6 +473,22 @@ export default function AppHeader() {
   useEffect(() => {
     setIsMultiMenuOpen(false);
   }, [routeKey]);
+
+  useEffect(() => {
+    if (!isOverflowMenuOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = overflowMenuRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setIsOverflowMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [isOverflowMenuOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -882,6 +904,7 @@ export default function AppHeader() {
   const isReports = pathname === '/reports';
   const isInvoices = pathname === '/invoices';
   const isAlerts = pathname === '/alerts';
+  const isHistoryButtonEnabled = Boolean(actions.historyPanel || actions.historyMenu || actions.history || navStack.length > 0);
 
   return (
     <header
@@ -890,9 +913,9 @@ export default function AppHeader() {
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
       <div className="bg-white/60 dark:bg-black/60">
-        <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-3 lg:flex-nowrap lg:px-6">
+        <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3 lg:flex-nowrap lg:px-6">
 
-          <div className="hidden min-w-0 sm:-ml-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:-ml-2">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
@@ -1265,7 +1288,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="hidden sm:-ml-2 sm:flex sm:min-w-0 sm:flex-wrap sm:items-center sm:gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 sm:-ml-2">
             <button
               type="button"
               data-testid="header-action-back"
@@ -1287,7 +1310,7 @@ export default function AppHeader() {
               }}
               disabled={!canBack}
               title={actions.undo ? actions.undo.title ?? '入力を取り消し' : 'ロールバック'}
-              className="mh-btn"
+              className={`${canBack ? '' : 'hidden xl:inline-flex'} mh-btn`}
             >
               戻る
             </button>
@@ -1302,7 +1325,7 @@ export default function AppHeader() {
               }}
               disabled={!actions.save || actions.save.disabled}
               title={actions.save?.title ?? '作業や入力'}
-              className="mh-btn-primary"
+              className={`${actions.save && !actions.save.disabled ? '' : 'hidden xl:inline-flex'} mh-btn-primary`}
             >
               保存
             </button>
@@ -1321,7 +1344,7 @@ export default function AppHeader() {
               }}
               disabled={!canForward}
               title={actions.redo ? actions.redo.title ?? '入力をやり直し' : 'ロールフォワード'}
-              className="mh-btn"
+              className={`${canForward ? '' : 'hidden xl:inline-flex'} mh-btn`}
             >
               進む
             </button>
@@ -1332,12 +1355,12 @@ export default function AppHeader() {
               onClick={() => void actions.add?.onClick()}
               disabled={!actions.add || actions.add.disabled}
               title={actions.add?.title ?? '編集'}
-              className="ml-1 mh-btn"
+              className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden xl:ml-1 xl:inline-flex'} mh-btn`}
             >
               編集
             </button>
 
-            <div className="relative">
+            <div className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}>
               <button
                 type="button"
                 ref={historyButtonRef}
@@ -1349,7 +1372,7 @@ export default function AppHeader() {
                   }
                   setIsHistoryOpen(nextOpen);
                 }}
-                disabled={!(actions.historyPanel || actions.historyMenu || actions.history || navStack.length > 0)}
+                disabled={!isHistoryButtonEnabled}
                 title="履歴"
                 className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
@@ -1459,7 +1482,7 @@ export default function AppHeader() {
             </div>
 
             {pathname === '/' ? (
-              <div className="ml-0 flex min-w-0 flex-wrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
+              <div className="ml-0 hidden min-w-0 flex-wrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
                 <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
@@ -1488,12 +1511,167 @@ export default function AppHeader() {
 
         {/* Right-side hub actions */}
         <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
+          <div ref={overflowMenuRef} className="relative lg:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMultiMenuOpen(false);
+                setIsOverflowMenuOpen((v) => !v);
+              }}
+              className={`${navLinkClass(false)} relative`}
+              aria-expanded={isOverflowMenuOpen}
+              title="主要メニュー"
+            >
+              メニュー
+              {!alertLoading && alertCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                  {alertCount > 99 ? '99+' : alertCount}
+                </span>
+              ) : null}
+            </button>
+
+            {isOverflowMenuOpen ? (
+              <div
+                data-color-edit-slot="border"
+                className="absolute right-0 top-full z-50 mt-1 w-[220px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+              >
+                <div className="max-h-[70vh] overflow-auto py-1">
+                  <Link
+                    href="/alerts"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isAlerts ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isAlerts ? 'page' : undefined}
+                  >
+                    アラート
+                  </Link>
+                  <Link
+                    href="/accounting"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isAccounting ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isAccounting ? 'page' : undefined}
+                  >
+                    会計
+                  </Link>
+                  <Link
+                    href="/reports"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isReports ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isReports ? 'page' : undefined}
+                  >
+                    報告書
+                  </Link>
+                  <Link
+                    href="/invoices"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isInvoices ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isInvoices ? 'page' : undefined}
+                  >
+                    請求書
+                  </Link>
+                  <Link
+                    href="/management"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isManagement ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isManagement ? 'page' : undefined}
+                  >
+                    管理
+                  </Link>
+                  <Link
+                    href="/site-ledger"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isSiteLedger ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isSiteLedger ? 'page' : undefined}
+                  >
+                    現場台帳
+                  </Link>
+                  <Link
+                    href="/partners"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                    }}
+                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isPartners ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                    }`}
+                    aria-current={isPartners ? 'page' : undefined}
+                  >
+                    関係会社
+                  </Link>
+                  <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                      router.push('/multi?tab=graph');
+                    }}
+                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    集計（グラフ）
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                      router.push('/multi?tab=net');
+                    }}
+                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    集計（収支）
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navIntentRef.current = 'push';
+                      setIsOverflowMenuOpen(false);
+                      router.push('/multi?tab=sales');
+                    }}
+                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    集計（売上）
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <Link
             href="/alerts"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex relative rounded-md border px-3 py-2 text-[11px] ${
+            className={`relative hidden rounded-md border px-3 py-2 text-[11px] lg:inline-flex ${
               isAlerts
                 ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
                 : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
@@ -1524,7 +1702,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isAccounting)}`}
+            className={navLinkClass(isAccounting, 'hidden lg:inline-flex')}
             title="会計（PDF/CSV/テンプレ/一覧）へ"
             aria-current={isAccounting ? 'page' : undefined}
           >
@@ -1536,7 +1714,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isReports)}`}
+            className={navLinkClass(isReports, 'hidden lg:inline-flex')}
             title="報告書（送信/履歴/検索）へ"
             aria-current={isReports ? 'page' : undefined}
           >
@@ -1548,7 +1726,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isInvoices)}`}
+            className={navLinkClass(isInvoices, 'hidden lg:inline-flex')}
             title="請求書（送信/履歴/検索）へ"
             aria-current={isInvoices ? 'page' : undefined}
           >
@@ -1559,7 +1737,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isManagement)}`}
+            className={navLinkClass(isManagement, 'hidden lg:inline-flex')}
             title="リピート/自動入力などの管理へ"
             aria-current={isManagement ? 'page' : undefined}
           >
@@ -1570,7 +1748,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isSiteLedger)}`}
+            className={navLinkClass(isSiteLedger, 'hidden lg:inline-flex')}
             title="現場台帳（追加/詳細）へ"
             aria-current={isSiteLedger ? 'page' : undefined}
           >
@@ -1581,7 +1759,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={`hidden sm:inline-flex ${navLinkClass(isPartners)}`}
+            className={navLinkClass(isPartners, 'hidden lg:inline-flex')}
             title="関係会社へ"
             aria-current={isPartners ? 'page' : undefined}
           >
@@ -1591,8 +1769,11 @@ export default function AppHeader() {
           <div ref={multiMenuRef} className="relative">
             <button
               type="button"
-              onClick={() => setIsMultiMenuOpen((v) => !v)}
-              className={`hidden sm:inline-flex ${navLinkClass(isMulti)}`}
+              onClick={() => {
+                setIsOverflowMenuOpen(false);
+                setIsMultiMenuOpen((v) => !v);
+              }}
+              className={navLinkClass(isMulti, 'hidden lg:inline-flex')}
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
