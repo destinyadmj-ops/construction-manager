@@ -1,12 +1,12 @@
-import { prisma } from '@/server/db/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { listScheduleChangeHistory, SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT } from '@/server/schedule/change-history';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
 const QuerySchema = z.object({
   kind: z.enum(['NORMAL', 'DAILY']).optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT).optional(),
 });
 
 export async function GET(request: Request) {
@@ -24,32 +24,10 @@ export async function GET(request: Request) {
   }
 
   const kind = parsed.data.kind ?? 'NORMAL';
-  const limit = parsed.data.limit ?? 200;
+  const limit = parsed.data.limit ?? SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT;
 
   try {
-    const [items, total] = await Promise.all([
-      prisma.scheduleChangeHistory.findMany({
-        where: { kind },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit,
-        select: {
-          id: true,
-          dayYmd: true,
-          targetUserLabel: true,
-          projectLabel: true,
-          targetLabel: true,
-          beforeValue: true,
-          afterValue: true,
-          editorLabel: true,
-          editorHost: true,
-          editorPlatform: true,
-          editorLanguage: true,
-          editorTimeZone: true,
-          createdAt: true,
-        },
-      }),
-      prisma.scheduleChangeHistory.count({ where: { kind } }),
-    ]);
+    const { items, total } = await listScheduleChangeHistory({ kind, limit });
 
     return Response.json({ ok: true, total, items });
   } catch (error) {

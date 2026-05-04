@@ -1300,7 +1300,7 @@ function WeekHubInner() {
     setScheduleHistoryLoading(true);
     setScheduleHistoryError(null);
     try {
-      const res = await fetch(`/api/schedule/history?kind=${encodeURIComponent(apiKind)}&limit=200`, {
+      const res = await fetch(`/api/schedule/history?kind=${encodeURIComponent(apiKind)}&limit=5000`, {
         cache: 'no-store',
       });
       const json = (await res.json().catch(() => null)) as
