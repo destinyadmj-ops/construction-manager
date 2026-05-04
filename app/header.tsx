@@ -194,7 +194,6 @@ export default function AppHeader() {
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
   const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
   const overflowMenuRef = useRef<HTMLDivElement | null>(null);
-  const [isSmartphoneBrowser, setIsSmartphoneBrowser] = useState(false);
 
   const readWeekColorPickMode = useCallback(() => {
     return readColorEditMode();
@@ -212,26 +211,6 @@ export default function AppHeader() {
     // 通常時は必ずOFF（編集中のみONを維持したい）
     writeColorEditMode(false);
     setWeekColorPickMode(false);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
-
-    const sync = () => {
-      const ua = navigator.userAgent;
-      const isWorkbenchShell = /\bCode\/\d+/i.test(ua);
-      const isElectronShell = /\bElectron\/\d+/i.test(ua) && !isWorkbenchShell;
-      const isStandalone =
-        window.matchMedia?.('(display-mode: standalone)').matches === true ||
-        (navigator as Navigator & { standalone?: boolean }).standalone === true;
-      const isMobileUa = /\bAndroid\b|\biPhone\b|\biPod\b/i.test(ua);
-      const isNarrowViewport = window.innerWidth <= 640;
-      setIsSmartphoneBrowser(!isElectronShell && !isStandalone && (isMobileUa || isNarrowViewport));
-    };
-
-    sync();
-    window.addEventListener('resize', sync);
-    return () => window.removeEventListener('resize', sync);
   }, []);
 
   const fetchAppVersion = useCallback(async () => {
@@ -926,11 +905,11 @@ export default function AppHeader() {
   const isInvoices = pathname === '/invoices';
   const isAlerts = pathname === '/alerts';
   const isHistoryButtonEnabled = Boolean(actions.historyPanel || actions.historyMenu || actions.history || navStack.length > 0);
-  const scheduleEditButtonLabel = actions.save ? '編集終了' : '編集開始';
-  const scheduleEditButtonDisabled = actions.save ? Boolean(actions.save.disabled) : !actions.add || Boolean(actions.add.disabled);
+  const scheduleEditButtonLabel = actions.save ? '編集終了' : actions.add ? '編集開始' : '編集準備中';
+  const scheduleEditButtonDisabled = actions.save ? Boolean(actions.save.disabled) : actions.add ? Boolean(actions.add.disabled) : true;
   const scheduleEditHelpText = actions.save
     ? actions.save.title ?? '編集モード中です。終了すると通常表示に戻ります。'
-    : actions.add?.title ?? '編集を開始します。';
+    : actions.add?.title ?? '予定編集の準備中です。';
 
   return (
     <header
@@ -1064,7 +1043,7 @@ export default function AppHeader() {
                     </button>
                     </div>
 
-                    {pathname === '/' && (actions.add || actions.save) ? (
+                    {pathname === '/' ? (
                       <>
                         <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                           予定編集
@@ -1564,7 +1543,7 @@ export default function AppHeader() {
         </div>
 
         {/* Right-side hub actions */}
-        <div className={`${isSmartphoneBrowser ? 'hidden' : 'flex'} min-w-0 max-w-full flex-wrap items-center justify-end gap-1`}>
+        <div className="hidden min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
           <div ref={overflowMenuRef} className="relative lg:hidden">
             <button
               type="button"
@@ -1875,6 +1854,7 @@ export default function AppHeader() {
             ) : null}
           </div>
         </div>
+      </div>
       </div>
     </header>
   );
