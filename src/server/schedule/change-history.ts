@@ -1,10 +1,13 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import { cookies } from 'next/headers';
 
+import { Prisma } from '@/generated/prisma';
 import { prisma } from '@/server/db/prisma';
 
 const COOKIE_NAME = 'masterHub.uid';
+export const SCHEDULE_CHANGE_HISTORY_RETENTION_DAYS = 21;
+export const SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT = 5000;
 
 export type ScheduleLabelColor = 'default' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink';
 
@@ -13,6 +16,22 @@ export type ScheduleCellSnapshot = {
   slot1Color: ScheduleLabelColor;
   slot2: string | null;
   slot2Color: ScheduleLabelColor;
+};
+
+export type ScheduleChangeHistoryListItem = {
+  id: string;
+  dayYmd: string;
+  targetUserLabel: string;
+  projectLabel: string;
+  targetLabel: string;
+  beforeValue: string;
+  afterValue: string;
+  editorLabel: string;
+  editorHost: string;
+  editorPlatform: string;
+  editorLanguage: string;
+  editorTimeZone: string;
+  createdAt: Date;
 };
 
 function sha256(value: string) {
@@ -25,6 +44,18 @@ function normalize(value: string | null | undefined) {
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getScheduleChangeHistoryDelegate() {
+  return prisma.scheduleChangeHistory as typeof prisma.scheduleChangeHistory | undefined;
+}
+
+function getScheduleHistoryCutoff(now = new Date()) {
+  return new Date(now.getTime() - SCHEDULE_CHANGE_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function clampScheduleHistoryLimit(limit: number) {
+  return Math.max(1, Math.min(SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT, Math.round(limit)));
 }
 
 function getRequestIp(request: Request) {
@@ -141,6 +172,105 @@ export function pickScheduleHistoryProjectLabel(before: ScheduleCellSnapshot, af
   return formatScheduleCellProjectLabel(after) || formatScheduleCellProjectLabel(before);
 }
 
+export async function listScheduleChangeHistory(input: {
+  kind: 'NORMAL' | 'DAILY';
+  limit?: number;
+}) {
+  const cutoff = getScheduleHistoryCutoff();
+  const take = clampScheduleHistoryLimit(input.limit ?? SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT);
+  const delegate = getScheduleChangeHistoryDelegate();
+
+  if (delegate?.findMany && delegate?.count) {
+    const [items, total] = await Promise.all([
+      delegate.findMany({
+        where: {
+          kind: input.kind,
+          createdAt: { gte: cutoff },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take,
+        select: {
+          id: true,
+          dayYmd: true,
+          targetUserLabel: true,
+          projectLabel: true,
+          targetLabel: true,
+          beforeValue: true,
+          afterValue: true,
+          editorLabel: true,
+          editorHost: true,
+          editorPlatform: true,
+          editorLanguage: true,
+          editorTimeZone: true,
+          createdAt: true,
+        },
+      }),
+      delegate.count({
+        where: {
+          kind: input.kind,
+          createdAt: { gte: cutoff },
+        },
+      }),
+    ]);
+
+    return { items, total };
+  }
+
+  const [items, totalRows] = await Promise.all([
+    prisma.$queryRaw<ScheduleChangeHistoryListItem[]>(Prisma.sql`
+      SELECT
+        "id",
+        "dayYmd",
+        "targetUserLabel",
+        "projectLabel",
+        "targetLabel",
+        "beforeValue",
+        "afterValue",
+        "editorLabel",
+        "editorHost",
+        "editorPlatform",
+        "editorLanguage",
+        "editorTimeZone",
+        "createdAt"
+      FROM "ScheduleChangeHistory"
+      WHERE "kind" = CAST(${input.kind} AS "WorkEntryKind")
+        AND "createdAt" >= ${cutoff}
+      ORDER BY "createdAt" DESC, "id" DESC
+      LIMIT ${take}
+    `),
+    prisma.$queryRaw<Array<{ total: bigint | number }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM "ScheduleChangeHistory"
+      WHERE "kind" = CAST(${input.kind} AS "WorkEntryKind")
+        AND "createdAt" >= ${cutoff}
+    `),
+  ]);
+
+  return {
+    items,
+    total: Number(totalRows[0]?.total ?? 0),
+  };
+}
+
+async function pruneScheduleChangeHistory() {
+  const cutoff = getScheduleHistoryCutoff();
+  const delegate = getScheduleChangeHistoryDelegate();
+
+  if (delegate?.deleteMany) {
+    await delegate.deleteMany({
+      where: {
+        createdAt: { lt: cutoff },
+      },
+    });
+    return;
+  }
+
+  await prisma.$executeRaw`
+    DELETE FROM "ScheduleChangeHistory"
+    WHERE "createdAt" < ${cutoff}
+  `;
+}
+
 async function resolveScheduleEditorContext(request: Request) {
   const jar = await cookies();
   const userId = normalize(jar.get(COOKIE_NAME)?.value);
@@ -205,27 +335,76 @@ export async function recordScheduleChangeHistory(input: {
 
   try {
     const editor = await resolveScheduleEditorContext(input.request);
-    await prisma.scheduleChangeHistory.create({
-      data: {
-        kind: input.kind,
-        targetUserId: input.targetUserId,
-        targetUserLabel: input.targetUserLabel,
-        editorUserId: editor.editorUserId,
-        editorLoginMemoryId: editor.editorLoginMemoryId,
-        dayYmd: input.dayYmd,
-        projectLabel: pickScheduleHistoryProjectLabel(input.before, input.after),
-        targetLabel: input.targetLabel,
-        beforeValue: formatScheduleCellSnapshot(input.before),
-        afterValue: formatScheduleCellSnapshot(input.after),
-        editorLabel: editor.editorLabel,
-        editorIpHash: editor.editorIpHash,
-        editorUserAgentHash: editor.editorUserAgentHash,
-        editorHost: editor.editorHost,
-        editorPlatform: editor.editorPlatform,
-        editorLanguage: editor.editorLanguage,
-        editorTimeZone: editor.editorTimeZone,
-      },
-    });
+    const delegate = getScheduleChangeHistoryDelegate();
+    const payload = {
+      kind: input.kind,
+      targetUserId: input.targetUserId,
+      targetUserLabel: input.targetUserLabel,
+      editorUserId: editor.editorUserId,
+      editorLoginMemoryId: editor.editorLoginMemoryId,
+      dayYmd: input.dayYmd,
+      projectLabel: pickScheduleHistoryProjectLabel(input.before, input.after),
+      targetLabel: input.targetLabel,
+      beforeValue: formatScheduleCellSnapshot(input.before),
+      afterValue: formatScheduleCellSnapshot(input.after),
+      editorLabel: editor.editorLabel,
+      editorIpHash: editor.editorIpHash,
+      editorUserAgentHash: editor.editorUserAgentHash,
+      editorHost: editor.editorHost,
+      editorPlatform: editor.editorPlatform,
+      editorLanguage: editor.editorLanguage,
+      editorTimeZone: editor.editorTimeZone,
+    };
+
+    if (delegate?.create) {
+      await delegate.create({
+        data: payload,
+      });
+    } else {
+      await prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "ScheduleChangeHistory" (
+          "id",
+          "kind",
+          "targetUserId",
+          "editorUserId",
+          "editorLoginMemoryId",
+          "dayYmd",
+          "targetUserLabel",
+          "projectLabel",
+          "targetLabel",
+          "beforeValue",
+          "afterValue",
+          "editorLabel",
+          "editorIpHash",
+          "editorUserAgentHash",
+          "editorHost",
+          "editorPlatform",
+          "editorLanguage",
+          "editorTimeZone"
+        ) VALUES (
+          ${randomUUID()},
+          CAST(${payload.kind} AS "WorkEntryKind"),
+          ${payload.targetUserId},
+          ${payload.editorUserId},
+          ${payload.editorLoginMemoryId},
+          ${payload.dayYmd},
+          ${payload.targetUserLabel},
+          ${payload.projectLabel},
+          ${payload.targetLabel},
+          ${payload.beforeValue},
+          ${payload.afterValue},
+          ${payload.editorLabel},
+          ${payload.editorIpHash},
+          ${payload.editorUserAgentHash},
+          ${payload.editorHost},
+          ${payload.editorPlatform},
+          ${payload.editorLanguage},
+          ${payload.editorTimeZone}
+        )
+      `);
+    }
+
+    await pruneScheduleChangeHistory();
   } catch {
     // Audit logging is best-effort and must not block schedule writes.
   }
