@@ -148,6 +148,7 @@ export default function AppHeader() {
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
+  const [isElectronShell, setIsElectronShell] = useState(false);
   const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
   const [, setMonthLegend] = useState<MonthLegendState>({
@@ -219,10 +220,11 @@ export default function AppHeader() {
 
     const userAgent = navigator.userAgent;
     const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
-    const isElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
+    const nextIsElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
     const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
 
-    setIsMobileBrowser(isMobileUa && !isElectronShell);
+    setIsElectronShell(nextIsElectronShell);
+    setIsMobileBrowser(isMobileUa && !nextIsElectronShell);
   }, []);
 
   const fetchAppVersion = useCallback(async () => {
@@ -1333,7 +1335,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="hidden">
+          <div className={`${isElectronShell ? 'flex' : 'hidden'} min-w-0 flex-wrap items-center gap-1`}>
             <button
               type="button"
               data-testid="header-action-back"
