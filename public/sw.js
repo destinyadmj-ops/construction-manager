@@ -1,4 +1,4 @@
-const CACHE_NAME = 'master-hub-v3';
+const CACHE_NAME = 'master-hub-v4';
 const CORE_ASSETS = ['/', '/?mode=week', '/manifest.webmanifest', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -50,6 +50,32 @@ self.addEventListener('fetch', (event) => {
   // Never cache API requests. Always forward them to the network.
   if (isApiRequest) {
     event.respondWith(fetch(request));
+    return;
+  }
+
+  if (isNavigation) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (isSameOrigin && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+
+          const week = await caches.match('/?mode=week');
+          if (week) return week;
+
+          const fallback = await caches.match('/');
+          if (fallback) return fallback;
+
+          return new Response('', { status: 504, statusText: 'offline' });
+        })
+    );
     return;
   }
 
