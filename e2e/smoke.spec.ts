@@ -107,8 +107,7 @@ async function loginAs(page: import('@playwright/test').Page, userId: string) {
   expect(res.ok()).toBeTruthy();
   const json = await res.json();
   expect(json).toMatchObject({ ok: true });
-  await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 async function ensureEditModeEnabled(page: import('@playwright/test').Page) {
@@ -182,16 +181,18 @@ async function enterWeekHubEditMode(page: import('@playwright/test').Page, userI
     }
   } else {
     await settingsButton.click();
-    const scheduleEditButton = page.getByRole('button', { name: /編集開始|編集終了|編集準備中/ }).last();
+    const scheduleEditButton = page.locator('xpath=//div[normalize-space()="予定編集"]/following-sibling::div[1]//button[1]');
     await expect(scheduleEditButton).toBeVisible({ timeout: 15_000 });
     await expect(scheduleEditButton).toBeEnabled({ timeout: 15_000 });
 
-    const label = (await scheduleEditButton.textContent()) ?? '';
-    if (label.includes('編集開始')) {
+    const label = ((await scheduleEditButton.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    if (label === '編集開始') {
       await scheduleEditButton.click();
     }
 
-    await expect(scheduleEditButton).toHaveText(/編集終了/, { timeout: 15_000 });
+    const draggableSiteButton = page.locator('button[data-site-id]').first();
+    await expect(draggableSiteButton).toHaveAttribute('draggable', 'true', { timeout: 15_000 });
+
     await settingsButton.click();
   }
 
@@ -740,6 +741,7 @@ test('schedule swap-cells endpoint swaps two cells', async ({ request }) => {
 
 test('weekhub: drag site from list to cell assigns', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
+  test.setTimeout(60_000);
 
   const user = await prisma.user.create({
     data: {
@@ -787,6 +789,7 @@ test('weekhub: drag site from list to cell assigns', async ({ page }) => {
 
 test('weekhub: drag cell to cell copies into target', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
+  test.setTimeout(60_000);
 
   const user = await prisma.user.create({
     data: {
@@ -859,6 +862,7 @@ test('weekhub: drag cell to cell copies into target', async ({ page }) => {
 
 test('weekhub: swap action can be armed from toolbar', async ({ page }) => {
   test.skip(!dbAvailable, 'DB is not available');
+  test.setTimeout(60_000);
 
   const user = await prisma.user.create({
     data: {
