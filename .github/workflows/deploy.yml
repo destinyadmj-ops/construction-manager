@@ -24,6 +24,7 @@ jobs:
       DESKTOP_APP_VERSION: ${{ secrets.PROD_DESKTOP_APP_VERSION }}
       DESKTOP_APP_DOWNLOAD_URL: ${{ secrets.PROD_DESKTOP_APP_DOWNLOAD_URL }}
       DESKTOP_APP_RELEASE_NOTES: ${{ secrets.PROD_DESKTOP_APP_RELEASE_NOTES }}
+      DESKTOP_APP_RELEASE_NOTES_B64: ${{ secrets.PROD_DESKTOP_APP_RELEASE_NOTES_B64 }}
       DESKTOP_APP_PUBLISHED_AT: ${{ secrets.PROD_DESKTOP_APP_PUBLISHED_AT }}
       DESKTOP_APP_CHANNEL: ${{ secrets.PROD_DESKTOP_APP_CHANNEL }}
     steps:
@@ -68,6 +69,7 @@ jobs:
           DESKTOP_APP_VERSION: ${{ env.DESKTOP_APP_VERSION }}
           DESKTOP_APP_DOWNLOAD_URL: ${{ env.DESKTOP_APP_DOWNLOAD_URL }}
           DESKTOP_APP_RELEASE_NOTES: ${{ env.DESKTOP_APP_RELEASE_NOTES }}
+          DESKTOP_APP_RELEASE_NOTES_B64: ${{ env.DESKTOP_APP_RELEASE_NOTES_B64 }}
           DESKTOP_APP_PUBLISHED_AT: ${{ env.DESKTOP_APP_PUBLISHED_AT }}
           DESKTOP_APP_CHANNEL: ${{ env.DESKTOP_APP_CHANNEL }}
         with:
@@ -75,7 +77,7 @@ jobs:
           username: ${{ env.DEPLOY_USER }}
           key: ${{ env.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN,DESKTOP_APP_VERSION,DESKTOP_APP_DOWNLOAD_URL,DESKTOP_APP_RELEASE_NOTES,DESKTOP_APP_PUBLISHED_AT,DESKTOP_APP_CHANNEL
+          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN,DESKTOP_APP_VERSION,DESKTOP_APP_DOWNLOAD_URL,DESKTOP_APP_RELEASE_NOTES,DESKTOP_APP_RELEASE_NOTES_B64,DESKTOP_APP_PUBLISHED_AT,DESKTOP_APP_CHANNEL
           script: |
             set -eu
 
@@ -150,6 +152,10 @@ jobs:
                 desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_CHANNEL=' || true)"
               fi
             fi
+            decoded_desktop_release_notes="${DESKTOP_APP_RELEASE_NOTES:-}"
+            if [ -n "${DESKTOP_APP_RELEASE_NOTES_B64:-}" ]; then
+              decoded_desktop_release_notes="$(python3 -c 'import base64, os; print(base64.b64decode(os.environ["DESKTOP_APP_RELEASE_NOTES_B64"]).decode("utf-8"), end="")')"
+            fi
             redis_url="${REDIS_URL:-redis://redis:6379}"
             cat > .env.production <<EOF
             DATABASE_URL=${DATABASE_URL}
@@ -167,7 +173,7 @@ jobs:
             fi
             append_env_if_set DESKTOP_APP_VERSION "${DESKTOP_APP_VERSION:-}"
             append_env_if_set DESKTOP_APP_DOWNLOAD_URL "${DESKTOP_APP_DOWNLOAD_URL:-}"
-            append_env_if_set DESKTOP_APP_RELEASE_NOTES "${DESKTOP_APP_RELEASE_NOTES:-}"
+            append_env_if_set DESKTOP_APP_RELEASE_NOTES "$decoded_desktop_release_notes"
             append_env_if_set DESKTOP_APP_PUBLISHED_AT "${DESKTOP_APP_PUBLISHED_AT:-}"
             append_env_if_set DESKTOP_APP_CHANNEL "${DESKTOP_APP_CHANNEL:-}"
             run_compose up -d --build --remove-orphans

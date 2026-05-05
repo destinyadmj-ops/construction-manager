@@ -501,7 +501,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production down
 		- または `powershell -File scripts/package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/"`
 		- 出力: `apps/desktop/dist/Master Hub-Setup-<version>.exe`
 	- 更新（最小運用）: 新しい `Setup-<version>.exe` を配布して実行してもらう
-	- 軽量更新確認: GitHub Actions で deploy している本番は repo secrets の `PROD_DESKTOP_APP_VERSION` / `PROD_DESKTOP_APP_DOWNLOAD_URL` / `PROD_DESKTOP_APP_RELEASE_NOTES` / `PROD_DESKTOP_APP_PUBLISHED_AT` / `PROD_DESKTOP_APP_CHANNEL` を設定する。手動 deploy の場合は `.env.production` の `DESKTOP_APP_*` を使う
+	- 軽量更新確認: GitHub Actions で deploy している本番は repo secrets の `PROD_DESKTOP_APP_VERSION` / `PROD_DESKTOP_APP_DOWNLOAD_URL` / `PROD_DESKTOP_APP_RELEASE_NOTES_B64` / `PROD_DESKTOP_APP_PUBLISHED_AT` / `PROD_DESKTOP_APP_CHANNEL` を設定する。ASCII のみなら `PROD_DESKTOP_APP_RELEASE_NOTES` でもよい。手動 deploy の場合は `.env.production` の `DESKTOP_APP_*` を使う
 	- 接続先URL（例）: `$env:MASTER_HUB_URL='https://YOUR_URL/'; npm run start`
 - Android（TWA最小 / 推奨）: [apps/twa/README.md](apps/twa/README.md)
 	- 更新をWeb側に寄せたい場合の最小土台（HTTPS + 固定ドメイン前提）
