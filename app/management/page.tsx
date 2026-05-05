@@ -22,6 +22,16 @@ type ApiUser = {
   email: string | null;
   canEditSchedule: boolean | undefined;
   canGrantScheduleEdit: boolean | undefined;
+  passwordConfigured: boolean | undefined;
+  passwordSetAt: string | null;
+};
+
+type UserNotificationItem = {
+  id: string;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  createdAt: string;
 };
 type ApiSite = {
   id: string;
@@ -56,6 +66,19 @@ function endOfMonthYmd(now: Date) {
   return `${end.getFullYear()}-${pad2(end.getMonth() + 1)}-${pad2(end.getDate())}`;
 }
 
+function formatDateTimeText(value: string | null) {
+  if (!value) return '未設定';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 
 export default function ManagementPage() {
   const { setAddAction, setUndoAction, setRedoAction } = useHeaderActions();
@@ -75,6 +98,14 @@ export default function ManagementPage() {
   const [permTargetUserId, setPermTargetUserId] = useState<string>('');
   const [permMsg, setPermMsg] = useState<string | null>(null);
   const [isPermSaving, setIsPermSaving] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>([]);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
+  const [isNotificationLoading, setIsNotificationLoading] = useState(false);
 
   const [autoFillMonth, setAutoFillMonth] = useState<string>(() => {
     const now = new Date();
@@ -307,7 +338,9 @@ export default function ManagementPage() {
           const canEditSchedule = typeof o?.canEditSchedule === 'boolean' ? o.canEditSchedule : undefined;
           const canGrantScheduleEdit =
             typeof o?.canGrantScheduleEdit === 'boolean' ? o.canGrantScheduleEdit : undefined;
-          return { id, name, email, canEditSchedule, canGrantScheduleEdit };
+          const passwordConfigured = typeof o?.passwordConfigured === 'boolean' ? o.passwordConfigured : undefined;
+          const passwordSetAt = typeof o?.passwordSetAt === 'string' ? o.passwordSetAt : null;
+          return { id, name, email, canEditSchedule, canGrantScheduleEdit, passwordConfigured, passwordSetAt };
         })
         .filter((x): x is ApiUser => !!x);
       setUsers(parsed);
@@ -346,6 +379,98 @@ export default function ManagementPage() {
     },
     [loadUsers],
   );
+
+  const resetUserPassword = useCallback(
+    async (userId: string) => {
+      setPasswordMsg(null);
+      const next = resetPassword.trim();
+      if (!next) {
+        setPasswordMsg('新しいパスワードを入力してください');
+        return;
+      }
+      if (next !== resetPasswordConfirm.trim()) {
+        setPasswordMsg('確認用パスワードが一致しません');
+        return;
+      }
+
+      setIsPasswordSaving(true);
+      try {
+        const r = await fetch('/api/users/password', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ userId, password: next }),
+        });
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+
+        setPasswordMsg('パスワードを更新しました');
+        setResetPassword('');
+        setResetPasswordConfirm('');
+        await loadUsers();
+      } catch (e) {
+        setPasswordMsg(e instanceof Error ? `パスワード更新に失敗: ${e.message}` : 'パスワード更新に失敗しました');
+      } finally {
+        setIsPasswordSaving(false);
+      }
+    },
+    [loadUsers, resetPassword, resetPasswordConfirm],
+  );
+
+  const loadUserNotifications = useCallback(
+    async (userId: string) => {
+      setNotificationMsg(null);
+      setIsNotificationLoading(true);
+      try {
+        const r = await fetch(`/api/users/notifications?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+
+        const raw = Array.isArray(obj?.notifications) ? (obj.notifications as unknown[]) : [];
+        const parsed = raw
+          .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+          .map((item) => {
+            const id = typeof item?.id === 'string' ? item.id : null;
+            const title = typeof item?.title === 'string' ? item.title : null;
+            const createdAt = typeof item?.createdAt === 'string' ? item.createdAt : null;
+            if (!id || !title || !createdAt) return null;
+            return {
+              id,
+              title,
+              body: typeof item?.body === 'string' ? item.body : null,
+              isRead: item?.isRead === true,
+              createdAt,
+            } satisfies UserNotificationItem;
+          })
+          .filter((item): item is UserNotificationItem => !!item);
+
+        setUserNotifications(parsed);
+        setNotificationUnreadCount(typeof obj?.unreadCount === 'number' ? obj.unreadCount : 0);
+        if (parsed.length === 0) setNotificationMsg('通知はありません');
+      } catch (e) {
+        setUserNotifications([]);
+        setNotificationUnreadCount(0);
+        setNotificationMsg(e instanceof Error ? `通知取得に失敗: ${e.message}` : '通知取得に失敗しました');
+      } finally {
+        setIsNotificationLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setPasswordMsg(null);
+    setResetPassword('');
+    setResetPasswordConfirm('');
+    if (!permTargetUserId) {
+      setUserNotifications([]);
+      setNotificationUnreadCount(0);
+      setNotificationMsg(null);
+      return;
+    }
+    void loadUserNotifications(permTargetUserId);
+  }, [loadUserNotifications, permTargetUserId]);
 
   useEffect(() => {
     void loadSites();
@@ -944,6 +1069,92 @@ export default function ManagementPage() {
                 {permTarget?.canGrantScheduleEdit === true ? '付与権限 解除' : '付与権限 付与'}
               </button>
             </div>
+
+            {permTarget ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div
+                  data-color-edit-slot="border"
+                  className="rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40"
+                >
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">個人パスワード管理</div>
+                  <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    状態: {permTarget.passwordConfigured === true ? '設定済み' : '未設定'} / 更新日: {formatDateTimeText(permTarget.passwordSetAt)}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <input
+                      type="password"
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      placeholder="新しい個人パスワード"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                    <input
+                      type="password"
+                      value={resetPasswordConfirm}
+                      onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                      placeholder="新しい個人パスワード（確認）"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                    <button
+                      type="button"
+                      disabled={isPasswordSaving}
+                      onClick={() => void resetUserPassword(permTarget.id)}
+                      className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                    >
+                      {isPasswordSaving ? '更新中…' : 'パスワード再設定'}
+                    </button>
+                  </div>
+                  {passwordMsg ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{passwordMsg}</div> : null}
+                </div>
+
+                <div
+                  data-color-edit-slot="border"
+                  className="rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">個人通知</div>
+                      <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">未読: {notificationUnreadCount}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadUserNotifications(permTarget.id)}
+                      disabled={isNotificationLoading}
+                      className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      更新
+                    </button>
+                  </div>
+                  <div className="mt-2 max-h-48 overflow-auto rounded-md border border-zinc-200 bg-white/60 p-2 dark:border-zinc-800 dark:bg-black/60">
+                    {isNotificationLoading ? (
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div>
+                    ) : userNotifications.length === 0 ? (
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">{notificationMsg ?? '通知はありません'}</div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {userNotifications.map((item) => (
+                          <div
+                            key={item.id}
+                            data-color-edit-slot="border"
+                            className={`rounded-md border px-2 py-2 text-xs dark:border-zinc-800 ${
+                              item.isRead
+                                ? 'border-zinc-200 bg-white/60 dark:bg-black/60'
+                                : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1 truncate font-medium text-zinc-700 dark:text-zinc-200">{item.title}</div>
+                              <div className="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">{formatDateTimeText(item.createdAt)}</div>
+                            </div>
+                            {item.body ? <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{item.body}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {permMsg ? <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{permMsg}</div> : null}
           </div>

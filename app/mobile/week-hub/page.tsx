@@ -130,6 +130,7 @@ function MobileWeekHubInner() {
         setAuthUser(json.user ?? null);
       })
       .catch(() => {
+        if (controller.signal.aborted) return;
         setAuthUser(null);
       });
     return () => controller.abort();
