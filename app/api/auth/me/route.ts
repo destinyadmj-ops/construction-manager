@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     const mobileRequest = isMobileRequest(request);
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: mobileRequest ? { id: true } : { id: true, passwordHash: true },
+      select: { id: true, passwordHash: true },
     });
     if (!user) return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         return Response.json({ ok: false, error: 'Saved login could not be restored on this device' }, { status: 401 });
       }
     } else if (!mobileRequest) {
-      const passwordHash = 'passwordHash' in user ? user.passwordHash : null;
+      const passwordHash = 'passwordHash' in user && typeof user.passwordHash === 'string' ? user.passwordHash : null;
       if (!passwordHash) {
         const passwordError = validateUserPassword(parsed.data.newPassword ?? '');
         if (passwordError) {

@@ -7,7 +7,7 @@ export type CachedUserCandidate = {
   name: string | null;
   email: string | null;
   kind: CachedUserKind;
-  passwordConfigured: boolean | null;
+  passwordConfigured?: boolean | null;
 };
 
 export const USER_CANDIDATES_UPDATED_EVENT = 'masterHub:userCandidatesUpdated';
