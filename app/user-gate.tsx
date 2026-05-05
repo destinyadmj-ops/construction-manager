@@ -26,7 +26,12 @@ type LoginMemory = {
 };
 
 type MeResponse =
-  | { ok: true; user: { id: string; name: string | null; email: string | null; kind: UserKind } | null }
+  | {
+      ok: true;
+      user:
+        | { id: string; name: string | null; email: string | null; kind: UserKind; passwordConfigured?: boolean | null }
+        | null;
+    }
   | { ok: false; error: string };
 
 type ExistingLoginMode = 'select' | 'password' | 'setup';
@@ -156,6 +161,7 @@ function readDomUserCandidates(defaultKind: UserKind): ApiUser[] {
       name: label || null,
       email: null,
       kind,
+      passwordConfigured: null,
     });
   }
 
@@ -397,13 +403,14 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           .map((o) => {
             const id = getString(o, 'id');
             if (!id) return null;
-            return {
+            const user: ApiUser = {
               id,
               name: getString(o, 'name'),
               email: getString(o, 'email'),
               kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
               passwordConfigured: typeof o?.passwordConfigured === 'boolean' ? (o.passwordConfigured as boolean) : null,
-            } satisfies ApiUser;
+            };
+            return user;
           })
           .filter((x): x is ApiUser => !!x);
 
@@ -441,17 +448,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     };
   }, [candidateRevision, currentKind, open]);
 
+  const selectedExistingUser = (() => {
+    const userId = selectedExistingId.trim();
+    return userId ? users.find((user) => user.id === userId) ?? null : null;
+  })();
+
   if (loading) return <>{children}</>;
 
   const closeIfPossible = () => {
     if (!me) return;
     setOpen(false);
   };
-
-  const selectedExistingUser = useMemo(() => {
-    const userId = selectedExistingId.trim();
-    return userId ? users.find((user) => user.id === userId) ?? null : null;
-  }, [selectedExistingId, users]);
 
   const fetchUsersFromApi = async () => {
     const r = await fetch('/api/users?kind=all', { cache: 'no-store' });
@@ -463,13 +470,14 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       .map((o) => {
         const id = getString(o, 'id');
         if (!id) return null;
-        return {
+        const user: ApiUser = {
           id,
           name: getString(o, 'name'),
           email: getString(o, 'email'),
           kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
           passwordConfigured: typeof o?.passwordConfigured === 'boolean' ? (o.passwordConfigured as boolean) : null,
-        } satisfies ApiUser;
+        };
+        return user;
       })
       .filter((x): x is ApiUser => !!x);
 
@@ -575,7 +583,13 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       writeLoginMemory(j2.user.id, j2.user.kind);
       writeCachedUserCandidates([
         ...users,
-        { id: j2.user.id, name: j2.user.name, email: j2.user.email, kind: j2.user.kind },
+        {
+          id: j2.user.id,
+          name: j2.user.name,
+          email: j2.user.email,
+          kind: j2.user.kind,
+          passwordConfigured: j2.user.passwordConfigured,
+        },
       ]);
       setExistingLoginMode('select');
       setScreen('home');
@@ -638,7 +652,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         writeLoginMemory(userId, currentKind);
         writeCachedUserCandidates([
           ...users,
-          { id: userId, name: n, email: email.trim() || null, kind: currentKind },
+          { id: userId, name: n, email: email.trim() || null, kind: currentKind, passwordConfigured: !isMobileBrowser },
         ]);
       }
       window.location.reload();

@@ -138,8 +138,11 @@ function MobileWeekHubInner() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setIsLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      setIsLoading(true);
+      setError(null);
+    });
 
     Promise.all([
       fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&kind=${encodeURIComponent(scheduleKind)}`, {
@@ -173,15 +176,15 @@ function MobileWeekHubInner() {
     return () => controller.abort();
   }, [scheduleKind, viewMonth, weekStart]);
 
-  const currentUser = useMemo(() => {
+  const currentUser = (() => {
     if (!authUser || !schedule?.users) return null;
     return schedule.users.find((user) => user.id === authUser.id) ?? null;
-  }, [authUser, schedule?.users]);
+  })();
 
-  const currentUserGrid = useMemo(() => {
+  const currentUserGrid = (() => {
     if (!currentUser || !schedule?.grid) return {} as Record<string, ApiCell>;
     return schedule.grid[currentUser.id] ?? {};
-  }, [currentUser, schedule?.grid]);
+  })();
 
   const assignedSites = useMemo(() => {
     const byName = new Map(

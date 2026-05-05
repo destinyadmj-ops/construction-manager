@@ -1297,6 +1297,7 @@ function WeekHubInner() {
         name: user.name,
         email: user.email,
         kind: apiKind,
+        passwordConfigured: null,
       })),
     );
   }, [apiKind, currentUsersForOrder]);
