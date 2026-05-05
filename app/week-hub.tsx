@@ -152,6 +152,11 @@ function clampNameColumnWidth(value: number) {
   return Math.max(120, Math.min(280, Math.round(value)));
 }
 
+function buildResponsiveNameColumnTrack(width: number) {
+  const clamped = clampNameColumnWidth(width);
+  return `minmax(clamp(96px, 28vw, ${clamped}px), clamp(96px, 28vw, ${clamped}px))`;
+}
+
 function ColumnResizeHandle({
   onPointerDown,
 }: {
@@ -4017,6 +4022,7 @@ function WeekGrid({
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4122,17 +4128,17 @@ function WeekGrid({
       <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
         <div
           ref={headerScrollRef}
-          className="overflow-x-auto"
+          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
           onScroll={onHeaderScroll}
           data-testid="week-grid-header-scroll"
         >
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative">
+            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
               <ColumnResizeHandle onPointerDown={onStartNameColResize} />
             </div>
             {dayLabels.map((d) => (
@@ -4159,14 +4165,14 @@ function WeekGrid({
       {/* Body: horizontal scroll */}
       <div
         ref={scrollRootRef}
-        className="overflow-x-auto"
+        className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
         onScroll={onBodyScroll}
         data-testid="week-grid-body-scroll"
       >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -5167,7 +5173,7 @@ function Row({
         data-user-label={(user.name ?? user.email ?? user.id).trim()}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
-        className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-2 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-400 dark:after:bg-zinc-600 ${
+        className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-1.5 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-400 dark:after:bg-zinc-600 sm:px-2 ${
           isSelectedUser ? 'bg-zinc-50 dark:bg-zinc-950' : ''
         }`}
       >

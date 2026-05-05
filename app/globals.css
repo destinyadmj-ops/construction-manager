@@ -38,6 +38,15 @@ body {
 }
 
 @layer utilities {
+  .mh-scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .mh-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Full-screen color edit mode (UI helper) */
   body.mh-color-edit-mode {
     cursor: crosshair;
