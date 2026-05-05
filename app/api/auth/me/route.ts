@@ -1,11 +1,16 @@
 import { prisma } from '@/server/db/prisma';
 import { canRestoreUserLogin, rememberUserLoginDevice } from '@/server/auth/login-memory';
 import { getCookieName as getEditModeCookieName, isEditModeConfigured, validateEditCookieValue } from '@/server/auth/edit-mode';
+import { isMobileRequest } from '@/server/auth/schedule-edit';
+import { hashUserPassword, validateUserPassword, verifyUserPassword } from '@/server/auth/user-password';
+import { createUserLoginNotification } from '@/server/notifications/user-login';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
+
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 const COOKIE_NAME = 'masterHub.uid';
 
@@ -23,6 +28,8 @@ const SetSchema = z
   .object({
     userId: z.string().min(1).max(200),
     restore: z.boolean().optional(),
+    password: z.string().max(200).optional(),
+    newPassword: z.string().max(200).optional(),
     device: DeviceSchema.optional(),
   })
   .strict();
@@ -33,19 +40,51 @@ export async function GET() {
     const userId = (jar.get(COOKIE_NAME)?.value ?? '').trim();
     const editConfigured = isEditModeConfigured();
     const editEnabled = editConfigured ? validateEditCookieValue(jar.get(getEditModeCookieName())?.value) : true;
-    if (!userId) return Response.json({ ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } });
+    if (!userId) {
+      return Response.json(
+        { ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } },
+        { headers: NO_STORE_HEADERS },
+      );
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, kind: true, canEditSchedule: true, canGrantScheduleEdit: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        kind: true,
+        canEditSchedule: true,
+        canGrantScheduleEdit: true,
+        passwordHash: true,
+        passwordSetAt: true,
+      },
     });
 
-    if (!user) return Response.json({ ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } });
-    return Response.json({ ok: true, user, editMode: { configured: editConfigured, enabled: editEnabled } });
+    if (!user) {
+      return Response.json(
+        { ok: true, user: null, editMode: { configured: editConfigured, enabled: editEnabled } },
+        { headers: NO_STORE_HEADERS },
+      );
+    }
+    return Response.json({
+      ok: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        kind: user.kind,
+        canEditSchedule: user.canEditSchedule,
+        canGrantScheduleEdit: user.canGrantScheduleEdit,
+        passwordConfigured: !!user.passwordHash,
+        passwordSetAt: user.passwordSetAt,
+      },
+      editMode: { configured: editConfigured, enabled: editEnabled },
+    }, { headers: NO_STORE_HEADERS });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
-      { status: 503 },
+      { status: 503, headers: NO_STORE_HEADERS },
     );
   }
 }
@@ -59,13 +98,42 @@ export async function POST(request: Request) {
 
   try {
     const userId = parsed.data.userId.trim();
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
     if (!user) return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
 
     if (parsed.data.restore) {
       const canRestore = await canRestoreUserLogin(request, userId, parsed.data.device);
       if (!canRestore) {
         return Response.json({ ok: false, error: 'Saved login could not be restored on this device' }, { status: 401 });
+      }
+    } else if (!isMobileRequest(request)) {
+      if (!user.passwordHash) {
+        const passwordError = validateUserPassword(parsed.data.newPassword ?? '');
+        if (passwordError) {
+          return Response.json(
+            { ok: false, error: passwordError, code: 'PASSWORD_SETUP_REQUIRED' },
+            { status: 428 },
+          );
+        }
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            passwordHash: await hashUserPassword(parsed.data.newPassword ?? ''),
+            passwordSetAt: new Date(),
+          },
+        });
+      } else {
+        const verified = await verifyUserPassword(parsed.data.password ?? '', user.passwordHash);
+        if (!verified) {
+          return Response.json(
+            { ok: false, error: 'パスワードが正しくありません', code: 'INVALID_PASSWORD' },
+            { status: 401 },
+          );
+        }
       }
     }
 
@@ -81,6 +149,9 @@ export async function POST(request: Request) {
     });
 
     await rememberUserLoginDevice(request, userId, parsed.data.device);
+    if (!parsed.data.restore) {
+      await createUserLoginNotification(request, userId, parsed.data.device);
+    }
     return res;
   } catch (e) {
     return Response.json(

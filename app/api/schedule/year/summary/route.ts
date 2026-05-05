@@ -2,6 +2,8 @@ import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
 
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
 function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -76,5 +78,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({ ok: true, year, months, users, grid });
+  return Response.json({ ok: true, year, months, users, grid }, { headers: NO_STORE_HEADERS });
 }

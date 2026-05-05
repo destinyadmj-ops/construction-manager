@@ -54,6 +54,27 @@ type AppVersionInfo = {
   nodeEnv: string;
 };
 
+type PersonalNotification = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+};
+
+function formatNotificationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('ja-JP', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function versionId(info: AppVersionInfo): string {
   return `${info.version}|${info.gitSha ?? ''}|${info.buildTime ?? ''}`;
 }
@@ -104,6 +125,11 @@ export default function AppHeader() {
 
   const [alertCount, setAlertCount] = useState<number>(0);
   const [alertLoading, setAlertLoading] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const [notifications, setNotifications] = useState<PersonalNotification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
 
   const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
 
@@ -437,11 +463,73 @@ export default function AppHeader() {
   const openUserGate = useCallback(() => {
     try {
       window.dispatchEvent(new Event('masterHub:openUserGate'));
+      setIsNotificationsOpen(false);
       setIsSettingsOpen(false);
     } catch {
       // ignore
     }
   }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!headerUserId || isMobileBrowser) {
+      setNotifications([]);
+      setNotificationUnreadCount(0);
+      return;
+    }
+
+    setNotificationLoading(true);
+    try {
+      const res = await fetch('/api/notifications', { cache: 'no-store' });
+      const json = (await res.json().catch(() => null)) as unknown;
+      const obj = asObject(json);
+      if (!res.ok || obj?.ok !== true) return;
+
+      const items = Array.isArray(obj.notifications) ? obj.notifications : [];
+      const parsed: PersonalNotification[] = items
+        .map((item) => asObject(item))
+        .map((item) => {
+          const id = typeof item?.id === 'string' ? item.id : null;
+          const title = typeof item?.title === 'string' ? item.title : null;
+          const createdAt = typeof item?.createdAt === 'string' ? item.createdAt : null;
+          if (!id || !title || !createdAt) return null;
+          return {
+            id,
+            kind: typeof item?.kind === 'string' ? item.kind : 'LOGIN',
+            title,
+            body: typeof item?.body === 'string' ? item.body : null,
+            isRead: item?.isRead === true,
+            readAt: typeof item?.readAt === 'string' ? item.readAt : null,
+            createdAt,
+          } satisfies PersonalNotification;
+        })
+        .filter((item): item is PersonalNotification => !!item);
+
+      setNotifications(parsed);
+      setNotificationUnreadCount(typeof obj.unreadCount === 'number' ? obj.unreadCount : 0);
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [headerUserId, isMobileBrowser]);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!headerUserId) return;
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ markAllRead: true }),
+      });
+      const json = (await res.json().catch(() => null)) as unknown;
+      const obj = asObject(json);
+      if (!res.ok || obj?.ok !== true) return;
+
+      const readAt = new Date().toISOString();
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true, readAt })));
+      setNotificationUnreadCount(typeof obj.unreadCount === 'number' ? obj.unreadCount : 0);
+    } catch {
+      // ignore
+    }
+  }, [headerUserId]);
 
   useEffect(() => {
     setIsHistoryOpen(false);
@@ -449,6 +537,10 @@ export default function AppHeader() {
 
   useEffect(() => {
     setIsOverflowMenuOpen(false);
+  }, [routeKey]);
+
+  useEffect(() => {
+    setIsNotificationsOpen(false);
   }, [routeKey]);
 
   useOutsidePointerDown({
@@ -493,6 +585,22 @@ export default function AppHeader() {
       document.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = notificationsRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setIsNotificationsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [isNotificationsOpen]);
 
   useEffect(() => {
     if (!isMultiMenuOpen) return;
@@ -598,6 +706,23 @@ export default function AppHeader() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!headerUserId || isMobileBrowser) {
+      setNotifications([]);
+      setNotificationUnreadCount(0);
+      return;
+    }
+
+    void fetchNotifications();
+    const interval = window.setInterval(() => {
+      void fetchNotifications();
+    }, 60 * 1000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [fetchNotifications, headerUserId, isMobileBrowser]);
 
   useEffect(() => {
     if (pathname !== '/') return;
@@ -926,6 +1051,86 @@ export default function AppHeader() {
             </button>
 
           <div className="flex min-w-0 items-center gap-2">
+            {!isMobileBrowser ? (
+              <div ref={notificationsRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    setIsNotificationsOpen((current) => {
+                      const next = !current;
+                      if (next) {
+                        void fetchNotifications();
+                      }
+                      return next;
+                    });
+                  }}
+                  aria-expanded={isNotificationsOpen}
+                  className="relative rounded-md border border-zinc-200 bg-white/60 px-2.5 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  title="個人通知"
+                >
+                  <span className="flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M12 4a4 4 0 0 0-4 4v2.4c0 .6-.2 1.1-.6 1.5L6 13.3V15h12v-1.7l-1.4-1.4c-.4-.4-.6-.9-.6-1.5V8a4 4 0 0 0-4-4Z" />
+                      <path d="M10 18a2 2 0 0 0 4 0" />
+                    </svg>
+                  </span>
+                  {notificationUnreadCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                      {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+                    </span>
+                  ) : null}
+                </button>
+
+                {isNotificationsOpen ? (
+                  <div
+                    data-color-edit-slot="border"
+                    className="absolute left-0 top-full z-50 mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      <span>個人通知</span>
+                      <button
+                        type="button"
+                        onClick={() => void markAllNotificationsRead()}
+                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      >
+                        すべて既読
+                      </button>
+                    </div>
+                    <div className="max-h-[320px] overflow-auto overscroll-contain">
+                      {notificationLoading ? (
+                        <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">読み込み中…</div>
+                      ) : notifications.length === 0 ? (
+                        <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">通知はありません</div>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`border-b border-zinc-200 px-3 py-3 text-[11px] last:border-b-0 dark:border-zinc-800 ${
+                              notification.isRead ? 'bg-transparent' : 'bg-red-50/50 dark:bg-red-950/20'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-medium text-zinc-800 dark:text-zinc-100">{notification.title}</div>
+                              {!notification.isRead ? (
+                                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
+                              ) : null}
+                            </div>
+                            {notification.body ? (
+                              <div className="mt-1 break-words text-zinc-600 dark:text-zinc-300">{notification.body}</div>
+                            ) : null}
+                            <div className="mt-1 text-zinc-400 dark:text-zinc-500">
+                              {formatNotificationTime(notification.createdAt)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
               <button
                 type="button"
