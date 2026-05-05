@@ -56,11 +56,23 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where: kind ? { kind } : undefined,
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, email: true, kind: true },
+      select: { id: true, name: true, email: true, kind: true, passwordHash: true },
       take: 200,
     });
 
-    return Response.json({ ok: true, users }, { headers: NO_STORE_HEADERS });
+    return Response.json(
+      {
+        ok: true,
+        users: users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          kind: user.kind,
+          passwordConfigured: !!user.passwordHash,
+        })),
+      },
+      { headers: NO_STORE_HEADERS },
+    );
   } catch (e) {
     return Response.json(
       { ok: false, error: toReadableDbErrorMessage(e) },

@@ -30,6 +30,7 @@ type MeResponse =
   | { ok: false; error: string };
 
 type ExistingLoginMode = 'select' | 'password' | 'setup';
+type GateScreen = 'home' | 'existing-auth';
 
 const LOGIN_MEMORY_KEY = 'masterHub.loginMemory.v1';
 const DEVICE_KEY_STORAGE_KEY = 'masterHub.deviceKey.v1';
@@ -198,6 +199,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const [candidateRevision, setCandidateRevision] = useState(0);
 
   const [selectedExistingId, setSelectedExistingId] = useState<string>('');
+  const [screen, setScreen] = useState<GateScreen>('home');
   const [existingLoginMode, setExistingLoginMode] = useState<ExistingLoginMode>('select');
   const [existingPassword, setExistingPassword] = useState('');
   const [newExistingPassword, setNewExistingPassword] = useState('');
@@ -244,6 +246,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    setScreen('home');
     setExistingLoginMode('select');
     setExistingPassword('');
     setNewExistingPassword('');
@@ -399,6 +402,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
               name: getString(o, 'name'),
               email: getString(o, 'email'),
               kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
+              passwordConfigured: typeof o?.passwordConfigured === 'boolean' ? (o.passwordConfigured as boolean) : null,
             } satisfies ApiUser;
           })
           .filter((x): x is ApiUser => !!x);
@@ -442,6 +446,62 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const closeIfPossible = () => {
     if (!me) return;
     setOpen(false);
+  };
+
+  const selectedExistingUser = useMemo(() => {
+    const userId = selectedExistingId.trim();
+    return userId ? users.find((user) => user.id === userId) ?? null : null;
+  }, [selectedExistingId, users]);
+
+  const fetchUsersFromApi = async () => {
+    const r = await fetch('/api/users?kind=all', { cache: 'no-store' });
+    const j = (await r.json().catch(() => null)) as unknown;
+    const obj = asObject(j);
+    const arr = Array.isArray(obj?.users) ? (obj!.users as unknown[]) : [];
+    const parsed: ApiUser[] = arr
+      .map((x) => asObject(x))
+      .map((o) => {
+        const id = getString(o, 'id');
+        if (!id) return null;
+        return {
+          id,
+          name: getString(o, 'name'),
+          email: getString(o, 'email'),
+          kind: getString(o, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL',
+          passwordConfigured: typeof o?.passwordConfigured === 'boolean' ? (o.passwordConfigured as boolean) : null,
+        } satisfies ApiUser;
+      })
+      .filter((x): x is ApiUser => !!x);
+
+    if (parsed.length > 0) {
+      writeCachedUserCandidates(mergeUserCandidates(users, parsed));
+      setUsers((current) => sortUserCandidates(mergeUserCandidates(current, parsed), readLoginMemory()?.userId ?? null, currentKind));
+    }
+
+    return parsed;
+  };
+
+  const onContinueExisting = async () => {
+    setError(null);
+    const userId = selectedExistingId.trim();
+    if (!userId) {
+      setError('ユーザーを選択してください');
+      return;
+    }
+
+    if (isMobileBrowser) {
+      await onPickExisting();
+      return;
+    }
+
+    let nextUser = selectedExistingUser;
+    if (!nextUser || nextUser.passwordConfigured == null) {
+      const fetched = await fetchUsersFromApi().catch(() => [] as ApiUser[]);
+      nextUser = fetched.find((user) => user.id === userId) ?? nextUser;
+    }
+
+    setExistingLoginMode(nextUser?.passwordConfigured ? 'password' : 'setup');
+    setScreen('existing-auth');
   };
 
   const onPickExisting = async () => {
@@ -489,11 +549,13 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         const code = typeof obj?.code === 'string' ? obj.code : null;
         if (!isMobileBrowser && code === 'PASSWORD_SETUP_REQUIRED') {
           setExistingLoginMode('setup');
+          setScreen('existing-auth');
           setError(msg);
           return;
         }
         if (!isMobileBrowser && code === 'INVALID_PASSWORD') {
           setExistingLoginMode('password');
+          setScreen('existing-auth');
           setError(msg);
           return;
         }
@@ -516,6 +578,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         { id: j2.user.id, name: j2.user.name, email: j2.user.email, kind: j2.user.kind },
       ]);
       setExistingLoginMode('select');
+      setScreen('home');
       setExistingPassword('');
       setNewExistingPassword('');
       setNewExistingPasswordConfirm('');
@@ -645,42 +708,46 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
             <div className="mt-4">
               <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">既存ユーザーから選ぶ</div>
-              <div className="mt-2 flex gap-2">
-                <select
-                  value={selectedExistingId}
-                  onChange={(e) => setSelectedExistingId(e.target.value)}
-                  className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                >
-                  {users.length === 0 ? <option value="">（ユーザーなし）</option> : null}
-                  {users.map((u) => {
-                    const label = (u.name ?? u.email ?? u.id).trim();
-                    return (
-                      <option key={u.id} value={u.id}>
-                        {label} {u.kind === 'DAILY' ? '［日報］' : '［通常］'}
-                      </option>
-                    );
-                  })}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => void onPickExisting()}
-                  disabled={usersLoading}
-                  className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                >
-                  切替
-                </button>
-              </div>
-              {usersLoading ? <div className="mt-1 text-[11px] text-zinc-500">読み込み中…</div> : null}
-              {!usersLoading && users.length > 0 ? (
-                <div className="mt-1 text-[11px] text-zinc-500">
-                  現在表示中の予定種別（{currentKind === 'DAILY' ? '日報' : '通常'}）に近いユーザーを先頭に表示しています。
-                </div>
-              ) : null}
-              {!isMobileBrowser && existingLoginMode !== 'select' ? (
-                <div className="mt-2 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-[11px] dark:border-zinc-800 dark:bg-zinc-950/60">
+              {screen === 'home' ? (
+                <>
+                  <div className="mt-2 flex gap-2">
+                    <select
+                      value={selectedExistingId}
+                      onChange={(e) => setSelectedExistingId(e.target.value)}
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    >
+                      {users.length === 0 ? <option value="">（ユーザーなし）</option> : null}
+                      {users.map((u) => {
+                        const label = (u.name ?? u.email ?? u.id).trim();
+                        return (
+                          <option key={u.id} value={u.id}>
+                            {label} {u.kind === 'DAILY' ? '［日報］' : '［通常］'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void onContinueExisting()}
+                      disabled={usersLoading}
+                      className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      {isMobileBrowser ? '切替' : '次へ'}
+                    </button>
+                  </div>
+                  {usersLoading ? <div className="mt-1 text-[11px] text-zinc-500">読み込み中…</div> : null}
+                  {!usersLoading && users.length > 0 ? (
+                    <div className="mt-1 text-[11px] text-zinc-500">
+                      現在表示中の予定種別（{currentKind === 'DAILY' ? '日報' : '通常'}）に近いユーザーを先頭に表示しています。
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="mt-2 space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-[11px] dark:border-zinc-800 dark:bg-zinc-950/60">
+                  <div className="text-zinc-600 dark:text-zinc-300">選択中: {selectedExistingUser ? candidateLabel(selectedExistingUser) : '（未選択）'}</div>
                   {existingLoginMode === 'password' ? (
                     <>
-                      <div className="text-zinc-600 dark:text-zinc-300">このユーザーは個人パスワード入力が必要です。</div>
+                      <div className="text-zinc-600 dark:text-zinc-300">このアカウントは個人パスワード入力でログインします。</div>
                       <input
                         type="password"
                         value={existingPassword}
@@ -692,7 +759,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                   ) : (
                     <>
                       <div className="text-zinc-600 dark:text-zinc-300">
-                        初回ログインのため、このPCで使う個人パスワードを設定してください。
+                        初回ログインのため、次の画面でこのPC用の個人パスワードを設定します。
                       </div>
                       <input
                         type="password"
@@ -710,8 +777,28 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                       />
                     </>
                   )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setScreen('home');
+                        setExistingLoginMode('select');
+                      }}
+                      className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                    >
+                      戻る
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onPickExisting()}
+                      className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      {existingLoginMode === 'password' ? 'ログイン' : '設定してログイン'}
+                    </button>
+                  </div>
                 </div>
-              ) : null}
+              )}
             </div>
 
             <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">

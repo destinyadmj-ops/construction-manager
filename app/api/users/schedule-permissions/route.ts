@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/prisma';
-import { cookies } from 'next/headers';
+import { requireUserManager } from '@/server/auth/user-admin';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -7,26 +7,6 @@ export const runtime = 'nodejs';
 const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, max-age=0, must-revalidate',
 };
-
-const AUTH_COOKIE = 'masterHub.uid';
-
-function isAdminTokenAuthorized(request: Request): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  if (!token) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('x-admin-token') === token;
-}
-
-async function canGrantByUserCookie(): Promise<boolean> {
-  try {
-    const jar = await cookies();
-    const uid = (jar.get(AUTH_COOKIE)?.value ?? '').trim();
-    if (!uid) return false;
-    const u = await prisma.user.findUnique({ where: { id: uid }, select: { canGrantScheduleEdit: true } });
-    return u?.canGrantScheduleEdit === true;
-  } catch {
-    return false;
-  }
-}
 
 const UpdateSchema = z
   .object({
@@ -45,11 +25,35 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where: kind ? { kind } : undefined,
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, email: true, kind: true, canEditSchedule: true, canGrantScheduleEdit: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        kind: true,
+        canEditSchedule: true,
+        canGrantScheduleEdit: true,
+        passwordHash: true,
+        passwordSetAt: true,
+      },
       take: 500,
     });
 
-    return Response.json({ ok: true, users }, { headers: NO_STORE_HEADERS });
+    return Response.json(
+      {
+        ok: true,
+        users: users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          kind: user.kind,
+          canEditSchedule: user.canEditSchedule,
+          canGrantScheduleEdit: user.canGrantScheduleEdit,
+          passwordConfigured: !!user.passwordHash,
+          passwordSetAt: user.passwordSetAt,
+        })),
+      },
+      { headers: NO_STORE_HEADERS },
+    );
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
@@ -59,10 +63,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const allow = isAdminTokenAuthorized(request) || (await canGrantByUserCookie());
-  if (!allow) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = await requireUserManager(request);
+  if (authError) return authError;
 
   const json = await request.json().catch(() => null);
   const parsed = UpdateSchema.safeParse(json ?? {});

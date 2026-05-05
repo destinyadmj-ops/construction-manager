@@ -7,6 +7,7 @@ export type CachedUserCandidate = {
   name: string | null;
   email: string | null;
   kind: CachedUserKind;
+  passwordConfigured: boolean | null;
 };
 
 export const USER_CANDIDATES_UPDATED_EVENT = 'masterHub:userCandidatesUpdated';
@@ -24,6 +25,7 @@ function normalizeCandidate(input: unknown): CachedUserCandidate | null {
     name: typeof obj.name === 'string' ? obj.name : null,
     email: typeof obj.email === 'string' ? obj.email : null,
     kind: obj.kind === 'DAILY' ? 'DAILY' : 'NORMAL',
+    passwordConfigured: typeof obj.passwordConfigured === 'boolean' ? obj.passwordConfigured : null,
   };
 }
 
@@ -36,6 +38,7 @@ function normalizeList(users: CachedUserCandidate[]): CachedUserCandidate[] {
       name: user.name ?? existing?.name ?? null,
       email: user.email ?? existing?.email ?? null,
       kind: user.kind ?? existing?.kind ?? 'NORMAL',
+      passwordConfigured: user.passwordConfigured ?? existing?.passwordConfigured ?? null,
     });
   }
   return Array.from(byId.values());

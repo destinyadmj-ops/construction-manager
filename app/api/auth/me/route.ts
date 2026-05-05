@@ -56,8 +56,6 @@ export async function GET() {
         kind: true,
         canEditSchedule: true,
         canGrantScheduleEdit: true,
-        passwordHash: true,
-        passwordSetAt: true,
       },
     });
 
@@ -76,8 +74,8 @@ export async function GET() {
         kind: user.kind,
         canEditSchedule: user.canEditSchedule,
         canGrantScheduleEdit: user.canGrantScheduleEdit,
-        passwordConfigured: !!user.passwordHash,
-        passwordSetAt: user.passwordSetAt,
+        passwordConfigured: null,
+        passwordSetAt: null,
       },
       editMode: { configured: editConfigured, enabled: editEnabled },
     }, { headers: NO_STORE_HEADERS });
@@ -98,9 +96,10 @@ export async function POST(request: Request) {
 
   try {
     const userId = parsed.data.userId.trim();
+    const mobileRequest = isMobileRequest(request);
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, passwordHash: true },
+      select: mobileRequest ? { id: true } : { id: true, passwordHash: true },
     });
     if (!user) return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
 
@@ -109,8 +108,9 @@ export async function POST(request: Request) {
       if (!canRestore) {
         return Response.json({ ok: false, error: 'Saved login could not be restored on this device' }, { status: 401 });
       }
-    } else if (!isMobileRequest(request)) {
-      if (!user.passwordHash) {
+    } else if (!mobileRequest) {
+      const passwordHash = 'passwordHash' in user ? user.passwordHash : null;
+      if (!passwordHash) {
         const passwordError = validateUserPassword(parsed.data.newPassword ?? '');
         if (passwordError) {
           return Response.json(
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
           },
         });
       } else {
-        const verified = await verifyUserPassword(parsed.data.password ?? '', user.passwordHash);
+        const verified = await verifyUserPassword(parsed.data.password ?? '', passwordHash);
         if (!verified) {
           return Response.json(
             { ok: false, error: 'パスワードが正しくありません', code: 'INVALID_PASSWORD' },
