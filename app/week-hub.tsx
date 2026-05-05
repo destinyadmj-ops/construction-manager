@@ -3895,10 +3895,6 @@ function WeekGrid({
     };
   }, [monthWeekTabs.monthKey]);
 
-  const headerTop = useMemo(() => {
-    return `calc(var(--app-header-h) + var(--mode-tabs-h) + ${weekTabsH}px)`;
-  }, [weekTabsH]);
-
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
@@ -3944,101 +3940,105 @@ function WeekGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="week-grid"
     >
-      {/* Week switch tabs: sticky at the top (viewport) */}
       <div
-        ref={weekTabsRef}
-        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
+        className="sticky z-40"
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onPrevMonth}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              aria-label="前の月"
-            >
-              ←
-            </button>
+        {/* Week switch tabs: sticky stack top row */}
+        <div
+          ref={weekTabsRef}
+          className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onPrevMonth}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="前の月"
+              >
+                ←
+              </button>
 
-            <div className="flex items-center gap-1 overflow-x-auto rounded-md border border-zinc-200 bg-white/60 px-2 py-1 dark:border-zinc-800 dark:bg-black/60">
-              {monthWeekTabs.tabs.map((t) => {
-                const k = toYmd(t);
-                const active = k === activeWeekKey;
-                const label = `${t.getMonth() + 1}/${t.getDate()}`;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => onSelectWeekStart(t)}
-                    className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
-                      active
-                        ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                        : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                    }`}
-                    aria-current={active ? 'true' : undefined}
-                    title={k}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+              <div className="flex items-center gap-1 overflow-x-auto rounded-md border border-zinc-200 bg-white/60 px-2 py-1 dark:border-zinc-800 dark:bg-black/60">
+                {monthWeekTabs.tabs.map((t) => {
+                  const k = toYmd(t);
+                  const active = k === activeWeekKey;
+                  const label = `${t.getMonth() + 1}/${t.getDate()}`;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => onSelectWeekStart(t)}
+                      className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
+                        active
+                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                      }`}
+                      aria-current={active ? 'true' : undefined}
+                      title={k}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={onNextMonth}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="次の月"
+              >
+                →
+              </button>
             </div>
 
             <button
               type="button"
-              onClick={onNextMonth}
+              onClick={onToday}
               className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              aria-label="次の月"
             >
-              →
+              今週
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onToday}
-            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-          >
-            今週
-          </button>
         </div>
-      </div>
 
-      {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
-      <div className="border-b border-zinc-400 dark:border-zinc-600">
-        <div
-          ref={headerScrollRef}
-          className="sticky z-30 mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-          style={{ top: headerTop }}
-          onScroll={onHeaderScroll}
-          data-testid="week-grid-header-scroll"
-        >
+        {/* Date header row: sticky stack second row */}
+        <div className="border-b border-zinc-400 dark:border-zinc-600">
           <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
-            }}
+            ref={headerScrollRef}
+            className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+            onScroll={onHeaderScroll}
+            data-testid="week-grid-header-scroll"
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
-              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
-            </div>
-            {dayLabels.map((d) => (
-              <div
-                key={d.key}
-                className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
-                  d.isSun
-                    ? 'text-red-600 dark:text-red-400'
-                    : d.isSat
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-zinc-600 dark:text-zinc-300'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <span className="tabular-nums">{d.dayNum}</span>
-                  <span>{d.dow}</span>
-                </div>
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              }}
+            >
+              <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
+                <ColumnResizeHandle onPointerDown={onStartNameColResize} />
               </div>
-            ))}
+              {dayLabels.map((d) => (
+                <div
+                  key={d.key}
+                  className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
+                    d.isSun
+                      ? 'text-red-600 dark:text-red-400'
+                      : d.isSat
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-zinc-600 dark:text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="tabular-nums">{d.dayNum}</span>
+                    <span>{d.dow}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
