@@ -5,16 +5,28 @@ import { useOutsidePointerDown } from './use-outside-pointerdown';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  WEEK_GRID_BG_OPTIONS,
+  WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS,
+  WEEK_GRID_COMPACT_HEIGHT_OPTIONS,
+  WEEK_GRID_DAY_WIDTH_OPTIONS,
+  WEEK_GRID_NAME_WIDTH_OPTIONS,
+  WEEK_GRID_PREFS_VERSION,
+  WEEK_GRID_TEXT_COLOR_OPTIONS,
+  defaultWeekGridPrefs,
+  isWeekGridCellBg,
+  isWeekGridTextColor,
+  normalizeWeekGridPrefs,
+  type WeekGridPrefs,
+} from '@/shared/week-grid-prefs';
 import { useHeaderActions } from './header-actions';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
-import { normalizeThemeShade } from './color-ramp';
 import {
   applyUiTheme,
   defaultUiTheme,
   normalizeUiTheme,
   readLocalUiTheme,
   UI_THEME_SETTING_KEY,
-  type UiThemeColor,
   writeLocalUiTheme,
 } from './ui-theme';
 
@@ -26,83 +38,6 @@ function asObject(v: unknown): JsonObject | null {
 
 function toMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-type WeekGridPrefs = {
-  gridLayout: 'compact' | 'comfortable';
-  cellTextColor: UiThemeColor;
-  cellTextShade: number;
-  cellBgColor: UiThemeColor;
-  cellBgShade: number;
-  cellMinW: number;
-  cellMinHCompact: number;
-  cellMinHComfortable: number;
-};
-
-function clampInt(n: number, min: number, max: number, fallback: number) {
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(n)));
-}
-
-function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
-  const o = asObject(raw);
-  const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
-  const rawTextColor = typeof o?.cellTextColor === 'string' ? (o.cellTextColor as string) : '';
-  const cellTextColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawTextColor as UiThemeColor,
-  )
-    ? (rawTextColor as UiThemeColor)
-    : 'default';
-  const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
-
-  const rawBgColor = typeof o?.cellBgColor === 'string' ? (o.cellBgColor as string) : '';
-  const cellBgColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawBgColor as UiThemeColor,
-  )
-    ? (rawBgColor as UiThemeColor)
-    : 'default';
-  const cellBgShade = (() => {
-    if (typeof o?.cellBgShade === 'number') return normalizeThemeShade(o.cellBgShade, 0);
-    // v1 compatibility
-    if (o?.cellBg === 'soft') return 25;
-    return 0;
-  })();
-  const cellMinW = clampInt(typeof o?.cellMinW === 'number' ? (o.cellMinW as number) : NaN, 60, 240, 112);
-  const cellMinHCompact = clampInt(
-    typeof o?.cellMinHCompact === 'number' ? (o.cellMinHCompact as number) : NaN,
-    32,
-    120,
-    48,
-  );
-  const cellMinHComfortable = clampInt(
-    typeof o?.cellMinHComfortable === 'number' ? (o.cellMinHComfortable as number) : NaN,
-    32,
-    120,
-    64,
-  );
-  return {
-    gridLayout,
-    cellTextColor,
-    cellTextShade,
-    cellBgColor,
-    cellBgShade,
-    cellMinW,
-    cellMinHCompact,
-    cellMinHComfortable,
-  };
-}
-
-function defaultWeekGridPrefs(): WeekGridPrefs {
-  return {
-    gridLayout: 'compact',
-    cellTextColor: 'default',
-    cellTextShade: 50,
-    cellBgColor: 'default',
-    cellBgShade: 0,
-    cellMinW: 112,
-    cellMinHCompact: 48,
-    cellMinHComfortable: 64,
-  };
 }
 
 type MonthLegendState = {
@@ -359,14 +294,26 @@ export default function AppHeader() {
     }
   }, []);
 
+  const readWeekGridPrefsRaw = useCallback((key: string): JsonObject => {
+    try {
+      const localKey = `masterHub.ui:${key}`;
+      const txt = window.localStorage.getItem(localKey);
+      if (!txt) return {};
+      return asObject(JSON.parse(txt) as unknown) ?? {};
+    } catch {
+      return {};
+    }
+  }, []);
+
   const writeWeekGridPrefsPatch = useCallback(
     (patch: Partial<WeekGridPrefs>) => {
       if (!weekGridPrefsKey) return;
       try {
         const localKey = `masterHub.ui:${weekGridPrefsKey}`;
         const current = readWeekGridPrefs(weekGridPrefsKey);
-        const next = normalizeWeekGridPrefs({ ...current, ...patch });
-        const payload = { v: 2, ...next };
+        const currentRaw = readWeekGridPrefsRaw(weekGridPrefsKey);
+        const next = normalizeWeekGridPrefs({ ...currentRaw, ...current, ...patch });
+        const payload = { ...currentRaw, ...next, v: WEEK_GRID_PREFS_VERSION };
         const nextTxt = JSON.stringify(payload);
         const prevTxt = window.localStorage.getItem(localKey);
         if (prevTxt !== nextTxt) {
@@ -380,15 +327,39 @@ export default function AppHeader() {
           void fetch('/api/ui-settings', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId: headerUserId, key: weekGridPrefsKey, value: { v: 2, ...next } }),
+            body: JSON.stringify({ userId: headerUserId, key: weekGridPrefsKey, value: payload }),
           }).catch(() => null);
         }
       } catch {
         // ignore
       }
     },
-    [headerUserId, readWeekGridPrefs, weekGridPrefsKey],
+    [headerUserId, readWeekGridPrefs, readWeekGridPrefsRaw, weekGridPrefsKey],
   );
+
+  useEffect(() => {
+    if (!weekGridPrefsKey) return;
+
+    const apply = (event?: Event) => {
+      if (event instanceof StorageEvent) {
+        if (event.key && event.key !== `masterHub.ui:${weekGridPrefsKey}`) return;
+      }
+
+      if (event instanceof CustomEvent) {
+        const detail = asObject(event.detail);
+        if (typeof detail?.key === 'string' && detail.key !== weekGridPrefsKey) return;
+      }
+
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+    };
+
+    window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+    window.addEventListener('storage', apply as EventListener);
+    return () => {
+      window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+      window.removeEventListener('storage', apply as EventListener);
+    };
+  }, [readWeekGridPrefs, weekGridPrefsKey]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -418,7 +389,10 @@ export default function AppHeader() {
 
         try {
           const localKey = `masterHub.ui:${weekGridPrefsKey}`;
-          window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
+          window.localStorage.setItem(
+            localKey,
+            JSON.stringify({ ...(vObj ?? {}), ...next, v: WEEK_GRID_PREFS_VERSION }),
+          );
         } catch {
           // ignore
         }
@@ -1191,9 +1165,49 @@ export default function AppHeader() {
                   {pathname === '/' && weekGridPrefsKey ? (
                     <>
                       <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        セル（週予定）
+                        表示（セル）
                       </div>
                       <div className="p-2 space-y-2">
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">背景</div>
+                          <select
+                            value={weekGridPrefs.cellBg}
+                            onChange={(e) =>
+                              writeWeekGridPrefsPatch({
+                                cellBg: isWeekGridCellBg(e.target.value) ? e.target.value : 'default',
+                              })
+                            }
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="背景"
+                          >
+                            {WEEK_GRID_BG_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">文字色</div>
+                          <select
+                            value={weekGridPrefs.cellTextColor}
+                            onChange={(e) =>
+                              writeWeekGridPrefsPatch({
+                                cellTextColor: isWeekGridTextColor(e.target.value) ? e.target.value : 'default',
+                              })
+                            }
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="文字色"
+                          >
+                            {WEEK_GRID_TEXT_COLOR_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">表示密度</div>
                           <div className="grid grid-cols-2 gap-2">
@@ -1223,63 +1237,71 @@ export default function AppHeader() {
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
-                          <div className="grid grid-cols-3 gap-2">
-                            {[84, 112, 140].map((w) => (
-                              <button
-                                key={w}
-                                type="button"
-                                onClick={() => writeWeekGridPrefsPatch({ cellMinW: w })}
-                                className={`rounded-md border px-2 py-2 text-[11px] ${
-                                  weekGridPrefs.cellMinW === w
-                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                                }`}
-                              >
-                                {w === 84 ? '狭' : w === 112 ? '標準' : '広'}
-                              </button>
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">名前幅(px)</div>
+                          <select
+                            value={String(weekGridPrefs.nameColW)}
+                            onChange={(e) => writeWeekGridPrefsPatch({ nameColW: Number(e.target.value) })}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="名前幅(px)"
+                          >
+                            {WEEK_GRID_NAME_WIDTH_OPTIONS.map((width) => (
+                              <option key={width} value={width}>
+                                {width}px
+                              </option>
                             ))}
-                          </div>
+                          </select>
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(狭)</div>
-                          <div className="grid grid-cols-3 gap-2">
-                            {[40, 48, 56].map((h) => (
-                              <button
-                                key={h}
-                                type="button"
-                                onClick={() => writeWeekGridPrefsPatch({ cellMinHCompact: h })}
-                                className={`rounded-md border px-2 py-2 text-[11px] ${
-                                  weekGridPrefs.cellMinHCompact === h
-                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                                }`}
-                              >
-                                {h === 40 ? '低' : h === 48 ? '標準' : '高'}
-                              </button>
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">日幅(px)</div>
+                          <select
+                            value={String(weekGridPrefs.cellMinW)}
+                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinW: Number(e.target.value) })}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="日幅(px)"
+                          >
+                            {WEEK_GRID_DAY_WIDTH_OPTIONS.map((width) => (
+                              <option key={width} value={width}>
+                                {width}px
+                              </option>
                             ))}
-                          </div>
+                          </select>
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(広)</div>
-                          <div className="grid grid-cols-3 gap-2">
-                            {[56, 64, 72].map((h) => (
-                              <button
-                                key={h}
-                                type="button"
-                                onClick={() => writeWeekGridPrefsPatch({ cellMinHComfortable: h })}
-                                className={`rounded-md border px-2 py-2 text-[11px] ${
-                                  weekGridPrefs.cellMinHComfortable === h
-                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                                }`}
-                              >
-                                {h === 56 ? '低' : h === 64 ? '標準' : '高'}
-                              </button>
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">低(px)</div>
+                          <select
+                            value={String(weekGridPrefs.cellMinHCompact)}
+                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinHCompact: Number(e.target.value) })}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="低(px)"
+                          >
+                            {WEEK_GRID_COMPACT_HEIGHT_OPTIONS.map((height) => (
+                              <option key={height} value={height}>
+                                {height}px
+                              </option>
                             ))}
-                          </div>
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高(px)</div>
+                          <select
+                            value={String(weekGridPrefs.cellMinHComfortable)}
+                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinHComfortable: Number(e.target.value) })}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                            aria-label="高(px)"
+                          >
+                            {WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS.map((height) => (
+                              <option key={height} value={height}>
+                                {height}px
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          現在: 名前 {weekGridPrefs.nameColW}px / 日幅 {weekGridPrefs.cellMinW}px / 低 {weekGridPrefs.cellMinHCompact}px / 高 {weekGridPrefs.cellMinHComfortable}px
                         </div>
                       </div>
                     </>
