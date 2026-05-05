@@ -54,11 +54,17 @@ enum UserKind {
   DAILY
 }
 
+enum UserNotificationKind {
+  LOGIN
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String?  @unique
   name      String?
   kind      UserKind @default(NORMAL)
+  passwordHash String?
+  passwordSetAt DateTime?
 
   // Per-user schedule edit permission (granted from admin UI)
   canEditSchedule Boolean @default(false)
@@ -72,6 +78,7 @@ model User {
   workEntries    WorkEntry[]
   integrations   IntegrationAccount[]
   loginMemories  UserLoginMemory[]
+  notifications  UserNotification[]
   uiSettings     UserUiSetting[]
   targetScheduleChanges ScheduleChangeHistory[] @relation("TargetUserScheduleChangeHistory")
   editorScheduleChanges ScheduleChangeHistory[] @relation("EditorUserScheduleChangeHistory")
@@ -143,6 +150,23 @@ model UserUiSetting {
 
   @@unique([userId, key])
   @@index([userId, key])
+}
+
+model UserNotification {
+  id        String               @id @default(cuid())
+  userId    String
+  kind      UserNotificationKind @default(LOGIN)
+  title     String
+  body      String?
+  metadata  Json?
+  isRead    Boolean              @default(false)
+  readAt    DateTime?
+  createdAt DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead, createdAt])
 }
 
 model CalendarEvent {
