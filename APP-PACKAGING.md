@@ -83,10 +83,12 @@ GitHub Actions で deploy している本番は、repo secrets に次を設定:
 ```env
 PROD_DESKTOP_APP_VERSION="0.1.1"
 PROD_DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
-PROD_DESKTOP_APP_RELEASE_NOTES="スマホ表示・予定編集・履歴保持・更新案内を改善"
+PROD_DESKTOP_APP_RELEASE_NOTES_B64="44K544Oe44Ob6KGo56S644O75LqI5a6a57eo6ZuG44O75bGl5q205L+d5oyB44O75pu05paw5qGI5YaF44KS5pS55ZaE"
 PROD_DESKTOP_APP_PUBLISHED_AT="2026-05-05T00:00:00Z"
 PROD_DESKTOP_APP_CHANNEL="stable"
 ```
+
+`PROD_DESKTOP_APP_RELEASE_NOTES_B64` は UTF-8 の release notes を base64 化した値。ASCII だけなら `PROD_DESKTOP_APP_RELEASE_NOTES` をそのまま使ってもよい。
 
 手動 deploy や GitHub Actions を使わない構成では、従来どおり Vultr 側の環境変数に `DESKTOP_APP_*` を設定:
 
