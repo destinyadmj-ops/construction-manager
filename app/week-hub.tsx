@@ -3871,34 +3871,37 @@ function WeekGrid({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
-
-  const weekTabsRef = useRef<HTMLDivElement | null>(null);
-  const [weekTabsH, setWeekTabsH] = useState(0);
-
-  useEffect(() => {
-    const el = weekTabsRef.current;
-    if (!el) return;
-
-    const apply = () => {
-      const h = Math.max(0, Math.round(el.getBoundingClientRect().height));
-      setWeekTabsH((prev) => (prev === h ? prev : h));
-    };
-
-    const raf = window.requestAnimationFrame(apply);
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(el);
-    window.addEventListener('resize', apply);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-    };
-  }, [monthWeekTabs.monthKey]);
+  const stickyStackRef = useRef<HTMLDivElement | null>(null);
+  const [bodyTopInset, setBodyTopInset] = useState(0);
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
+
+  useEffect(() => {
+    const stack = stickyStackRef.current;
+    const body = scrollRootRef.current;
+    if (!stack || !body) return;
+
+    const apply = () => {
+      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
+      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
+    };
+
+    const raf = window.requestAnimationFrame(apply);
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(stack);
+    ro.observe(body);
+    window.addEventListener('resize', apply);
+    window.addEventListener('scroll', apply, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('scroll', apply, true);
+    };
+  }, [monthWeekTabs.monthKey]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -3941,14 +3944,12 @@ function WeekGrid({
       data-testid="week-grid"
     >
       <div
+        ref={stickyStackRef}
         className="sticky z-40"
         style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
       >
         {/* Week switch tabs: sticky stack top row */}
-        <div
-          ref={weekTabsRef}
-          className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
-        >
+        <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1">
               <button
@@ -4047,6 +4048,7 @@ function WeekGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="week-grid-body-scroll"
       >
