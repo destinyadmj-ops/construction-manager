@@ -4005,10 +4005,11 @@ function WeekGrid({
       </div>
 
       {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
-      <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
+      <div className="border-b border-zinc-400 dark:border-zinc-600">
         <div
           ref={headerScrollRef}
-          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+          className="sticky z-30 mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+          style={{ top: headerTop }}
           onScroll={onHeaderScroll}
           data-testid="week-grid-header-scroll"
         >
