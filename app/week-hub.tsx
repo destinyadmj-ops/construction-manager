@@ -14,6 +14,15 @@ import {
   type WheelEvent,
 } from 'react';
 import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
+import {
+  DEFAULT_WEEK_GRID_PREFS,
+  WEEK_GRID_PREFS_VERSION,
+  buildNameColumnTrack,
+  clampNameColumnWidth,
+  normalizeWeekGridPrefs,
+  type WeekGridCellBg as CellBg,
+  type WeekGridTextColor as CellTextColor,
+} from '@/shared/week-grid-prefs';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -25,8 +34,6 @@ type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 type LabelColor = (typeof LABEL_COLORS)[number];
-type CellTextColor = LabelColor;
-type CellBg = 'default' | 'soft';
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
@@ -115,17 +122,6 @@ type ScheduleChangeHistoryItem = {
 
 const HISTORY_GROUP_MS = 800;
 
-const LABEL_COLOR_OPTIONS: Array<{ value: LabelColor; label: string }> = [
-  { value: 'default', label: '通常' },
-  { value: 'red', label: '赤' },
-  { value: 'orange', label: '橙' },
-  { value: 'yellow', label: '黄' },
-  { value: 'green', label: '緑' },
-  { value: 'blue', label: '青' },
-  { value: 'purple', label: '紫' },
-  { value: 'pink', label: '桃' },
-];
-
 function isLabelColor(value: unknown): value is LabelColor {
   return typeof value === 'string' && (LABEL_COLORS as readonly string[]).includes(value);
 }
@@ -146,15 +142,6 @@ function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): strin
   if (color === 'blue') return tone === 'primary' ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500 dark:text-blue-300';
   if (color === 'purple') return tone === 'primary' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-500 dark:text-violet-300';
   return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
-}
-
-function clampNameColumnWidth(value: number) {
-  return Math.max(120, Math.min(280, Math.round(value)));
-}
-
-function buildResponsiveNameColumnTrack(width: number) {
-  const clamped = clampNameColumnWidth(width);
-  return `minmax(clamp(96px, 28vw, ${clamped}px), clamp(96px, 28vw, ${clamped}px))`;
 }
 
 function ColumnResizeHandle({
@@ -456,18 +443,16 @@ function WeekHubInner() {
     el.scrollTop += e.deltaY;
   }, []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [nameColW, setNameColW] = useState<number>(160);
+  const [nameColW, setNameColW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.nameColW);
   // たたみ時のセル幅
-  const [cellMinW, setCellMinW] = useState<number>(112);
-  const [cellMinHCompact, setCellMinHCompact] = useState<number>(48);
-  const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(64);
-  const [cellBg, setCellBg] = useState<CellBg>('default');
+  const [cellMinW, setCellMinW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinW);
+  const [cellMinHCompact, setCellMinHCompact] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinHCompact);
+  const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinHComfortable);
+  const [cellBg, setCellBg] = useState<CellBg>(DEFAULT_WEEK_GRID_PREFS.cellBg);
   const [cellClickAction, setCellClickAction] = useState<CellClickAction>('toggle');
-  const [cellTextColor, setCellTextColor] = useState<CellTextColor>('default');
+  const [cellTextColor, setCellTextColor] = useState<CellTextColor>(DEFAULT_WEEK_GRID_PREFS.cellTextColor);
   const [cellActionMsg, setCellActionMsg] = useState<string | null>(null);
   const cellActionMsgTimer = useRef<number | null>(null);
-  const [isCellSettingsOpen, setIsCellSettingsOpen] = useState(false);
-  const cellSettingsRef = useRef<HTMLDivElement | null>(null);
   const [isNameColResizing, setIsNameColResizing] = useState(false);
   const nameColResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -502,22 +487,6 @@ function WeekHubInner() {
       setMode(m);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    if (!isCellSettingsOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = cellSettingsRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsCellSettingsOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isCellSettingsOpen]);
 
   const stopNameColResize = useCallback(() => {
     nameColResizeRef.current = null;
@@ -640,10 +609,36 @@ function WeekHubInner() {
   const gridPrefsLoadedRef = useRef<Record<string, true>>({});
   const gridPrefsSaveTimerRef = useRef<number | null>(null);
 
+  const readLocalGridPrefs = useCallback((key: string) => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const txt = window.localStorage.getItem(`masterHub.ui:${key}`);
+      if (!txt) return null;
+      return JSON.parse(txt) as unknown;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const applyGridPrefs = useCallback((raw: unknown) => {
+    const next = normalizeWeekGridPrefs(raw);
+    setGridLayout(next.gridLayout);
+    setCellTextColor(next.cellTextColor);
+    setCellBg(next.cellBg);
+    setNameColW(next.nameColW);
+    setCellMinW(next.cellMinW);
+    setCellMinHCompact(next.cellMinHCompact);
+    setCellMinHComfortable(next.cellMinHComfortable);
+  }, []);
+
   const loadGridPrefs = useCallback(async (userId: string | null, key: string) => {
-    if (!userId) return;
     if (gridPrefsLoadedRef.current[key]) return;
     gridPrefsLoadedRef.current[key] = true;
+
+    const localRaw = readLocalGridPrefs(key);
+    if (localRaw) applyGridPrefs(localRaw);
+
+    if (!userId) return;
 
     try {
       const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(key)}`);
@@ -655,9 +650,7 @@ function WeekHubInner() {
       const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
       if (!o) return;
 
-      const nextLayout =
-        o.gridLayout === 'comfortable' ? 'comfortable' : o.gridLayout === 'compact' ? 'compact' : null;
-      if (nextLayout) setGridLayout(nextLayout);
+      applyGridPrefs(o);
 
       const nextAction =
         o.cellClickAction === 'toggle' ||
@@ -670,46 +663,47 @@ function WeekHubInner() {
           : null;
       if (nextAction) setCellClickAction(nextAction);
 
-      const nextTextColor = isLabelColor(o.cellTextColor) ? o.cellTextColor : null;
-      if (nextTextColor) setCellTextColor(nextTextColor);
-
-      const nextBg = o.cellBg === 'soft' ? 'soft' : o.cellBg === 'default' ? 'default' : null;
-      if (nextBg) setCellBg(nextBg);
-
-      const nextNameColW = typeof o.nameColW === 'number' ? o.nameColW : null;
-      if (nextNameColW !== null && Number.isFinite(nextNameColW)) {
-        setNameColW(clampNameColumnWidth(nextNameColW));
-      }
-
-      const w = typeof o.cellMinW === 'number' ? o.cellMinW : null;
-      if (w && Number.isFinite(w)) {
-        const clamped = Math.max(60, Math.min(240, Math.round(w)));
-        setCellMinW(clamped);
-      }
-
-      const hc = typeof o.cellMinHCompact === 'number' ? o.cellMinHCompact : null;
-      if (hc && Number.isFinite(hc)) {
-        const clamped = Math.max(32, Math.min(120, Math.round(hc)));
-        setCellMinHCompact(clamped);
-      }
-
-      const hh = typeof o.cellMinHComfortable === 'number' ? o.cellMinHComfortable : null;
-      if (hh && Number.isFinite(hh)) {
-        const clamped = Math.max(40, Math.min(180, Math.round(hh)));
-        setCellMinHComfortable(clamped);
+      if (typeof window !== 'undefined') {
+        try {
+          const normalized = normalizeWeekGridPrefs(o);
+          window.localStorage.setItem(
+            `masterHub.ui:${key}`,
+            JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
+          );
+        } catch {
+          // ignore
+        }
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [applyGridPrefs, readLocalGridPrefs]);
 
   const saveGridPrefs = useCallback(async (userId: string | null, key: string, value: unknown) => {
+    const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    const normalized = normalizeWeekGridPrefs(value);
+    const payload = { ...raw, ...normalized, v: WEEK_GRID_PREFS_VERSION };
+
+    if (typeof window !== 'undefined') {
+      try {
+        const localKey = `masterHub.ui:${key}`;
+        const nextTxt = JSON.stringify(payload);
+        const prevTxt = window.localStorage.getItem(localKey);
+        if (prevTxt !== nextTxt) {
+          window.localStorage.setItem(localKey, nextTxt);
+          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key } }));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (!userId) return;
     try {
       await fetch('/api/ui-settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId, key, value }),
+        body: JSON.stringify({ userId, key, value: payload }),
       });
     } catch {
       // ignore
@@ -806,7 +800,31 @@ function WeekHubInner() {
   }, [gridPrefsKey, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
 
   useEffect(() => {
-    if (!effectiveUserId) return;
+    if (typeof window === 'undefined') return;
+
+    const apply = (event?: Event) => {
+      if (event instanceof StorageEvent) {
+        if (event.key && event.key !== `masterHub.ui:${gridPrefsKey}`) return;
+      }
+
+      if (event instanceof CustomEvent) {
+        const detail = event.detail && typeof event.detail === 'object' ? (event.detail as Record<string, unknown>) : null;
+        if (typeof detail?.key === 'string' && detail.key !== gridPrefsKey) return;
+      }
+
+      const raw = readLocalGridPrefs(gridPrefsKey);
+      if (raw) applyGridPrefs(raw);
+    };
+
+    window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+    window.addEventListener('storage', apply as EventListener);
+    return () => {
+      window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+      window.removeEventListener('storage', apply as EventListener);
+    };
+  }, [applyGridPrefs, gridPrefsKey, readLocalGridPrefs]);
+
+  useEffect(() => {
     if (!gridPrefsLoadedRef.current[gridPrefsKey]) return;
     if (typeof window === 'undefined') return;
 
@@ -816,7 +834,6 @@ function WeekHubInner() {
     }
 
     const payload = {
-      v: 1,
       gridLayout,
       cellClickAction,
       cellTextColor,
@@ -1059,140 +1076,6 @@ function WeekHubInner() {
             </button>
           );
         })}
-      </div>
-
-      <div className="ml-2 flex items-center gap-1">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">文字色</span>
-        <select
-          value={cellTextColor}
-          onChange={(e) => setCellTextColor((isLabelColor(e.target.value) ? e.target.value : 'default') satisfies CellTextColor)}
-          className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-          aria-label="文字色"
-        >
-          {LABEL_COLOR_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div ref={cellSettingsRef} className="relative ml-2 flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => setIsCellSettingsOpen((v) => !v)}
-          aria-expanded={isCellSettingsOpen}
-          className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] text-zinc-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black"
-        >
-          設定
-        </button>
-
-        {isCellSettingsOpen ? (
-          <div className="absolute right-0 top-full z-[70] mt-1 w-[min(360px,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
-            <div className="border-b border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
-              表示（セル）
-            </div>
-
-            <div className="space-y-2 px-3 py-2 text-[11px] text-zinc-700 dark:text-zinc-200">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 背景</div>
-                <select
-                  value={cellBg}
-                  onChange={(e) => setCellBg((e.target.value === 'soft' ? 'soft' : 'default') satisfies CellBg)}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="背景"
-                >
-                  <option value="default">白</option>
-                  <option value="soft">薄</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 高さ</div>
-                <select
-                  value={gridLayout}
-                  onChange={(e) =>
-                    setGridLayout((e.target.value === 'comfortable' ? 'comfortable' : 'compact') satisfies GridLayout)
-                  }
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="高さ"
-                >
-                  <option value="compact">低</option>
-                  <option value="comfortable">高</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 低(px)</div>
-                <select
-                  value={String(cellMinHCompact)}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setCellMinHCompact(Number.isFinite(n) ? n : 48);
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="低(px)"
-                >
-                  <option value="40">40</option>
-                  <option value="48">48</option>
-                  <option value="56">56</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 高(px)</div>
-                <select
-                  value={String(cellMinHComfortable)}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setCellMinHComfortable(Number.isFinite(n) ? n : 64);
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="高(px)"
-                >
-                  <option value="56">56</option>
-                  <option value="64">64</option>
-                  <option value="80">80</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">├ 名前幅</div>
-                <select
-                  value={String(nameColW)}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setNameColW(Number.isFinite(n) ? clampNameColumnWidth(n) : 160);
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="名前幅"
-                >
-                  <option value="140">狭</option>
-                  <option value="160">標準</option>
-                  <option value="180">広</option>
-                  <option value="220">最大</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400">└ 日幅</div>
-                <select
-                  value={String(cellMinW)}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setCellMinW(Number.isFinite(n) ? n : 112);
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200"
-                  aria-label="幅"
-                >
-                  <option value="84">狭</option>
-                  <option value="112">標準</option>
-                  <option value="140">広</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   ) : null;
@@ -2146,9 +2029,7 @@ function WeekHubInner() {
     <div
       id="mode-tabs"
       ref={modeTabsRef}
-      className={`sticky top-[var(--app-header-h)] scroll-mt-20 rounded-lg border border-zinc-200 bg-white px-2 py-2 sm:rounded-xl sm:px-3 dark:border-zinc-800 dark:bg-black ${
-        isCellSettingsOpen ? 'z-[60]' : 'z-40'
-      }`}
+      className="sticky top-[var(--app-header-h)] z-40 scroll-mt-20 rounded-lg border border-zinc-200 bg-white px-2 py-2 sm:rounded-xl sm:px-3 dark:border-zinc-800 dark:bg-black"
     >
       <div className="flex flex-col gap-1.5 sm:gap-3">
         <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 lg:gap-4">
@@ -4021,7 +3902,7 @@ function WeekGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4357,7 +4238,7 @@ function MonthGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4661,7 +4542,7 @@ function YearGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
