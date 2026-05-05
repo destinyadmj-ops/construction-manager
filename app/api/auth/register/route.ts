@@ -1,5 +1,8 @@
 import { prisma } from '@/server/db/prisma';
 import { rememberUserLoginDevice } from '@/server/auth/login-memory';
+import { isMobileRequest } from '@/server/auth/schedule-edit';
+import { hashUserPassword, validateUserPassword } from '@/server/auth/user-password';
+import { createUserLoginNotification } from '@/server/notifications/user-login';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -23,6 +26,7 @@ const RegisterSchema = z
     email: z.string().email().max(320).optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
     registrationPassword: z.string().max(200).optional().nullable(),
+    userPassword: z.string().max(200).optional().nullable(),
     device: DeviceSchema.optional(),
   })
   .strict();
@@ -60,29 +64,65 @@ export async function POST(request: Request) {
   const email = typeof parsed.data.email === 'string' ? parsed.data.email.trim() || null : null;
   const kind = parsed.data.kind ?? 'NORMAL';
   const password = (parsed.data.registrationPassword ?? '').toString();
+  const userPassword = (parsed.data.userPassword ?? '').toString();
 
   if (!isRegistrationAllowed(password)) {
     return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
+  const isDesktopRegistration = !isMobileRequest(request);
+  if (isDesktopRegistration) {
+    const passwordError = validateUserPassword(userPassword);
+    if (passwordError) {
+      return Response.json({ ok: false, error: passwordError, code: 'USER_PASSWORD_REQUIRED' }, { status: 400 });
+    }
+  }
+
   try {
     let userId: string;
+    const nextPasswordHash = userPassword ? await hashUserPassword(userPassword) : null;
+    const nextPasswordSetAt = nextPasswordHash ? new Date() : null;
 
     if (email) {
-      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      const existing = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, passwordHash: true },
+      });
       if (existing) {
         const updated = await prisma.user.update({
           where: { id: existing.id },
-          data: { name, kind },
+          data: {
+            name,
+            kind,
+            ...(nextPasswordHash && !existing.passwordHash
+              ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt }
+              : {}),
+          },
           select: { id: true },
         });
         userId = updated.id;
       } else {
-        const created = await prisma.user.create({ data: { name, email, kind }, select: { id: true } });
+        const created = await prisma.user.create({
+          data: {
+            name,
+            email,
+            kind,
+            ...(nextPasswordHash ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt } : {}),
+          },
+          select: { id: true },
+        });
         userId = created.id;
       }
     } else {
-      const created = await prisma.user.create({ data: { name, email: null, kind }, select: { id: true } });
+      const created = await prisma.user.create({
+        data: {
+          name,
+          email: null,
+          kind,
+          ...(nextPasswordHash ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt } : {}),
+        },
+        select: { id: true },
+      });
       userId = created.id;
     }
 
@@ -98,6 +138,7 @@ export async function POST(request: Request) {
     });
 
     await rememberUserLoginDevice(request, userId, parsed.data.device);
+    await createUserLoginNotification(request, userId, parsed.data.device);
     return res;
   } catch (e) {
     return Response.json(

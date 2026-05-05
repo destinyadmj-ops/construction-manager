@@ -757,7 +757,7 @@ function WeekHubInner() {
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/auth/me')
+    fetch('/api/auth/me', { cache: 'no-store' })
       .then(async (r) => {
         const j = (await r.json().catch(() => null)) as unknown;
         const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
@@ -1326,6 +1326,7 @@ function WeekHubInner() {
             try {
               const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
                 signal: controller.signal,
+                cache: 'no-store',
               });
               if (!res.ok) {
                 if (attempt === 0 && (res.status === 500 || res.status === 503)) {
@@ -1372,18 +1373,23 @@ function WeekHubInner() {
   const refreshCurrentView = useCallback(async () => {
     try {
       if (mode === 'week') {
-        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`);
+        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
+          cache: 'no-store',
+        });
         if (res.ok) setData((await res.json()) as ApiResponse);
         return;
       }
       if (mode === 'month') {
-        const res = await fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`);
+        const res = await fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`, {
+          cache: 'no-store',
+        });
         if (res.ok) setMonthData((await res.json()) as MonthApiResponse);
         return;
       }
       if (mode === 'year') {
         const res = await fetch(
           `/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}&${kindQuery}`,
+          { cache: 'no-store' },
         );
         if (res.ok) setYearData((await res.json()) as YearSummaryApiResponse);
       }
@@ -1485,7 +1491,9 @@ function WeekHubInner() {
   const refreshSites = useCallback(async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`);
+        const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`, {
+          cache: 'no-store',
+        });
         if (!r.ok) {
           if (attempt === 0 && (r.status === 500 || r.status === 503)) {
             await new Promise((resolve) => window.setTimeout(resolve, 350));
@@ -1767,7 +1775,10 @@ function WeekHubInner() {
     const controller = new AbortController();
     queueMicrotask(() => setIsLoading(true));
 
-    fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`, { signal: controller.signal })
+    fetch(`/api/schedule/month?month=${encodeURIComponent(viewMonth)}&${kindQuery}`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
         return (await res.json()) as MonthApiResponse;
@@ -1789,6 +1800,7 @@ function WeekHubInner() {
 
     fetch(`/api/schedule/year/summary?year=${encodeURIComponent(String(viewYear))}&${kindQuery}`, {
       signal: controller.signal,
+      cache: 'no-store',
     })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
@@ -1841,7 +1853,10 @@ function WeekHubInner() {
     const loadScheduleSites = async () => {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const r = await fetch(`/api/schedule/sites?${kindQuery}`, { signal: controller.signal });
+          const r = await fetch(`/api/schedule/sites?${kindQuery}`, {
+            signal: controller.signal,
+            cache: 'no-store',
+          });
           if (!r.ok) {
             if (attempt === 0 && (r.status === 500 || r.status === 503)) {
               await new Promise((resolve) => window.setTimeout(resolve, 350));

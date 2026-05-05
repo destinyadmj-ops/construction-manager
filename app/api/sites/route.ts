@@ -13,6 +13,8 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
 const SiteLabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
 
 const RepeatRuleSchema = z
@@ -106,7 +108,7 @@ export async function GET(request: Request) {
     });
 
     if (!monthRange || sites.length === 0) {
-      return Response.json({ ok: true, sites });
+      return Response.json({ ok: true, sites }, { headers: NO_STORE_HEADERS });
     }
 
     const siteIds = sites.map((s) => s.id);
@@ -178,11 +180,11 @@ export async function GET(request: Request) {
       };
     });
 
-    return Response.json({ ok: true, sites: sitesWithAlerts });
+    return Response.json({ ok: true, sites: sitesWithAlerts }, { headers: NO_STORE_HEADERS });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
-      { status: 503 },
+      { status: 503, headers: NO_STORE_HEADERS },
     );
   }
 }

@@ -2,6 +2,8 @@ import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
 
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 type LabelColor = (typeof LABEL_COLORS)[number];
 
@@ -189,5 +191,8 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({ ok: true, month: `${base.getFullYear()}-${pad2(base.getMonth() + 1)}`, days, users, grid });
+  return Response.json(
+    { ok: true, month: `${base.getFullYear()}-${pad2(base.getMonth() + 1)}`, days, users, grid },
+    { headers: NO_STORE_HEADERS },
+  );
 }

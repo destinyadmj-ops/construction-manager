@@ -29,6 +29,8 @@ type MeResponse =
   | { ok: true; user: { id: string; name: string | null; email: string | null; kind: UserKind } | null }
   | { ok: false; error: string };
 
+type ExistingLoginMode = 'select' | 'password' | 'setup';
+
 const LOGIN_MEMORY_KEY = 'masterHub.loginMemory.v1';
 const DEVICE_KEY_STORAGE_KEY = 'masterHub.deviceKey.v1';
 
@@ -196,10 +198,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const [candidateRevision, setCandidateRevision] = useState(0);
 
   const [selectedExistingId, setSelectedExistingId] = useState<string>('');
+  const [existingLoginMode, setExistingLoginMode] = useState<ExistingLoginMode>('select');
+  const [existingPassword, setExistingPassword] = useState('');
+  const [newExistingPassword, setNewExistingPassword] = useState('');
+  const [newExistingPasswordConfirm, setNewExistingPasswordConfirm] = useState('');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [registrationPassword, setRegistrationPassword] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userPasswordConfirm, setUserPasswordConfirm] = useState('');
+  const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -224,6 +233,22 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     window.addEventListener(USER_CANDIDATES_UPDATED_EVENT, onUpdated as EventListener);
     return () => window.removeEventListener(USER_CANDIDATES_UPDATED_EVENT, onUpdated as EventListener);
   }, []);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const userAgent = navigator.userAgent;
+    const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
+    const isElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
+    const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    setIsMobileBrowser(mobile && !isElectronShell);
+  }, []);
+
+  useEffect(() => {
+    setExistingLoginMode('select');
+    setExistingPassword('');
+    setNewExistingPassword('');
+    setNewExistingPasswordConfirm('');
+  }, [open, selectedExistingId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,12 +452,30 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (!isMobileBrowser && existingLoginMode === 'password' && !existingPassword.trim()) {
+      setError('パスワードを入力してください');
+      return;
+    }
+
+    if (!isMobileBrowser && existingLoginMode === 'setup') {
+      if (!newExistingPassword.trim()) {
+        setError('新しいパスワードを入力してください');
+        return;
+      }
+      if (newExistingPassword !== newExistingPasswordConfirm) {
+        setError('確認用パスワードが一致しません');
+        return;
+      }
+    }
+
     try {
       const r = await fetch('/api/auth/me', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           userId,
+          ...(!isMobileBrowser && existingLoginMode === 'password' ? { password: existingPassword } : {}),
+          ...(!isMobileBrowser && existingLoginMode === 'setup' ? { newPassword: newExistingPassword } : {}),
           device: {
             deviceKey: getOrCreateDeviceKey(),
             ...getDeviceContext(),
@@ -443,6 +486,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       const obj = asObject(j);
       if (!r.ok || obj?.ok !== true) {
         const msg = typeof obj?.error === 'string' ? (obj.error as string) : `HTTP ${r.status}`;
+        const code = typeof obj?.code === 'string' ? obj.code : null;
+        if (!isMobileBrowser && code === 'PASSWORD_SETUP_REQUIRED') {
+          setExistingLoginMode('setup');
+          setError(msg);
+          return;
+        }
+        if (!isMobileBrowser && code === 'INVALID_PASSWORD') {
+          setExistingLoginMode('password');
+          setError(msg);
+          return;
+        }
         setError(msg);
         return;
       }
@@ -461,6 +515,10 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         ...users,
         { id: j2.user.id, name: j2.user.name, email: j2.user.email, kind: j2.user.kind },
       ]);
+      setExistingLoginMode('select');
+      setExistingPassword('');
+      setNewExistingPassword('');
+      setNewExistingPasswordConfirm('');
       setOpen(false);
       window.location.reload();
     } catch {
@@ -477,6 +535,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (!isMobileBrowser) {
+      if (!userPassword.trim()) {
+        setError('個人パスワードを入力してください');
+        return;
+      }
+      if (userPassword !== userPasswordConfirm) {
+        setError('個人パスワード（確認）が一致しません');
+        return;
+      }
+    }
+
     try {
       const r = await fetch('/api/auth/register', {
         method: 'POST',
@@ -486,6 +555,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           email: email.trim() || null,
           kind: currentKind,
           registrationPassword: registrationPassword.trim() || null,
+          userPassword: !isMobileBrowser ? userPassword : null,
           device: {
             deviceKey: getOrCreateDeviceKey(),
             ...getDeviceContext(),
@@ -606,6 +676,42 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                   現在表示中の予定種別（{currentKind === 'DAILY' ? '日報' : '通常'}）に近いユーザーを先頭に表示しています。
                 </div>
               ) : null}
+              {!isMobileBrowser && existingLoginMode !== 'select' ? (
+                <div className="mt-2 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-[11px] dark:border-zinc-800 dark:bg-zinc-950/60">
+                  {existingLoginMode === 'password' ? (
+                    <>
+                      <div className="text-zinc-600 dark:text-zinc-300">このユーザーは個人パスワード入力が必要です。</div>
+                      <input
+                        type="password"
+                        value={existingPassword}
+                        onChange={(e) => setExistingPassword(e.target.value)}
+                        placeholder="個人パスワード"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-zinc-600 dark:text-zinc-300">
+                        初回ログインのため、このPCで使う個人パスワードを設定してください。
+                      </div>
+                      <input
+                        type="password"
+                        value={newExistingPassword}
+                        onChange={(e) => setNewExistingPassword(e.target.value)}
+                        placeholder="新しい個人パスワード"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                      <input
+                        type="password"
+                        value={newExistingPasswordConfirm}
+                        onChange={(e) => setNewExistingPasswordConfirm(e.target.value)}
+                        placeholder="新しい個人パスワード（確認）"
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                      />
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
@@ -629,6 +735,24 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                   placeholder="登録パスワード（任意 / 設定時のみ必要）"
                   className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                 />
+                {!isMobileBrowser ? (
+                  <>
+                    <input
+                      type="password"
+                      value={userPassword}
+                      onChange={(e) => setUserPassword(e.target.value)}
+                      placeholder="個人パスワード（8文字以上）"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                    <input
+                      type="password"
+                      value={userPasswordConfirm}
+                      onChange={(e) => setUserPasswordConfirm(e.target.value)}
+                      placeholder="個人パスワード（確認）"
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </>
+                ) : null}
 
                 <button
                   type="button"

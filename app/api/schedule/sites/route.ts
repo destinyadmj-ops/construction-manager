@@ -2,6 +2,8 @@ import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
 
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
+
 function extractSiteNames(meta: unknown): string[] {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return [];
   const m = meta as Record<string, unknown>;
@@ -67,13 +69,16 @@ export async function GET(request: Request) {
     );
 
   if (ledgerItems.length > 0) {
-    return Response.json({
-      ok: true,
-      // Prefer the ledger list (DB sites) when available.
-      // Return up to the fetched size (take: 500) so newly-created sites show up without relying on sort/first-200.
-      sites: ledgerItems,
-      names: ledgerItems.map((x) => x.label),
-    });
+    return Response.json(
+      {
+        ok: true,
+        // Prefer the ledger list (DB sites) when available.
+        // Return up to the fetched size (take: 500) so newly-created sites show up without relying on sort/first-200.
+        sites: ledgerItems,
+        names: ledgerItems.map((x) => x.label),
+      },
+      { headers: NO_STORE_HEADERS },
+    );
   }
 
   const rows = await prisma.workEntry.findMany({
@@ -96,5 +101,5 @@ export async function GET(request: Request) {
   }
 
   const unique = Array.from(new Set(names)).slice(0, 200);
-  return Response.json({ ok: true, names: unique, sites: [] });
+  return Response.json({ ok: true, names: unique, sites: [] }, { headers: NO_STORE_HEADERS });
 }
