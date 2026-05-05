@@ -4021,7 +4021,6 @@ function WeekGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
   const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
 
   useEffect(() => {
@@ -4358,7 +4357,7 @@ function MonthGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4440,17 +4439,17 @@ function MonthGrid({
       <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
         <div
           ref={headerScrollRef}
-          className="overflow-x-auto"
+          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
           onScroll={onHeaderScroll}
           data-testid="month-grid-header-scroll"
         >
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative">
+            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
               <ColumnResizeHandle onPointerDown={onStartNameColResize} />
             </div>
             {dayLabels.map((d) => (
@@ -4477,14 +4476,14 @@ function MonthGrid({
       {/* Body: horizontal scroll */}
       <div
         ref={scrollRootRef}
-        className="overflow-x-auto"
+        className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
         onScroll={onBodyScroll}
         data-testid="month-grid-body-scroll"
       >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -4662,7 +4661,7 @@ function YearGrid({
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
-  const nameColumnWidth = useMemo(() => clampNameColumnWidth(nameColW), [nameColW]);
+  const nameColumnTrack = useMemo(() => buildResponsiveNameColumnTrack(nameColW), [nameColW]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
@@ -4714,17 +4713,17 @@ function YearGrid({
       >
         <div
           ref={headerScrollRef}
-          className="overflow-x-auto"
+          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
           onScroll={onHeaderScroll}
           data-testid="year-grid-header-scroll"
         >
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
             }}
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative">
+            <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative sm:px-3">
               <ColumnResizeHandle onPointerDown={onStartNameColResize} />
             </div>
 
@@ -4749,14 +4748,14 @@ function YearGrid({
       {/* Body: horizontal scroll */}
       <div
         ref={scrollRootRef}
-        className="overflow-x-auto"
+        className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
         onScroll={onBodyScroll}
         data-testid="year-grid-body-scroll"
       >
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `minmax(${nameColumnWidth}px, ${nameColumnWidth}px) repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
           }}
         >
           {users.length === 0 ? (
@@ -4795,7 +4794,7 @@ function YearGrid({
                     aria-current={isSelectedUser ? 'true' : undefined}
                     data-user-row={u.id}
                     data-testid={`user-row-${u.id}`}
-                    className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-2 py-2 text-left text-[13px] dark:border-zinc-800 relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-200 dark:after:bg-zinc-800 ${
+                    className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-1.5 py-2 text-left text-[13px] dark:border-zinc-800 relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-200 dark:after:bg-zinc-800 sm:px-2 ${
                       isSelectedUser ? selectedBg : baseBg
                     }`}
                   >
