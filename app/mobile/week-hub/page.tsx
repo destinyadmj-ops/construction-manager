@@ -73,6 +73,11 @@ function normalizeScheduleKind(kind: AuthMeUser['kind']): ScheduleKind {
   return kind === 'DAILY' ? 'daily' : 'normal';
 }
 
+function readRequestedScheduleKind(searchParams: ReturnType<typeof useSearchParams>): ScheduleKind | null {
+  const raw = (searchParams.get('kind') ?? '').trim().toLowerCase();
+  return raw === 'daily' ? 'daily' : raw === 'normal' ? 'normal' : null;
+}
+
 function userLabel(user: ApiUser | AuthMeUser | null) {
   if (!user) return '未ログイン';
   return (user.name ?? user.email ?? user.id).trim();
@@ -112,11 +117,20 @@ function MobileWeekHubInner() {
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs('mobile'));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshRevision, setRefreshRevision] = useState(0);
+
+  const requestedScheduleKind = useMemo(() => readRequestedScheduleKind(searchParams), [searchParams]);
+
+  const scheduleKind = useMemo(
+    () => requestedScheduleKind ?? normalizeScheduleKind(authUser?.kind),
+    [authUser?.kind, requestedScheduleKind],
+  );
 
   const activeTab = useMemo<MobileTab>(() => {
+    if (scheduleKind === 'daily') return 'week';
     const raw = (searchParams.get('tab') ?? '').trim().toLowerCase();
     return raw === 'personal' ? 'personal' : 'week';
-  }, [searchParams]);
+  }, [scheduleKind, searchParams]);
 
   const weekStart = useMemo(() => {
     return startOfWeekMonday(cursorDate);
@@ -133,8 +147,8 @@ function MobileWeekHubInner() {
     return tabs;
   }, [cursorDate]);
 
-  const scheduleKind = useMemo(() => normalizeScheduleKind(authUser?.kind), [authUser?.kind]);
   const weekGridPrefsKey = useMemo(() => `week-hub:${scheduleKind}:week:gridPrefs`, [scheduleKind]);
+  const weekViewLabel = useMemo(() => (scheduleKind === 'daily' ? '日常予定' : '週予定'), [scheduleKind]);
 
   const viewMonth = useMemo(() => `${weekStart.getFullYear()}-${pad2(weekStart.getMonth() + 1)}`, [weekStart]);
 
@@ -288,7 +302,7 @@ function MobileWeekHubInner() {
       });
 
     return () => controller.abort();
-  }, [scheduleKind, viewMonth, weekStart]);
+  }, [refreshRevision, scheduleKind, viewMonth, weekStart]);
 
   const currentUser = (() => {
     if (!authUser || !schedule?.users) return null;
@@ -324,15 +338,40 @@ function MobileWeekHubInner() {
     return items;
   }, [currentUserGrid, dayLabels, sites]);
 
+  const siteIdByScheduleEntry = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const site of sites) {
+      const key = normalizeSiteLookupKey(site.name.trim());
+      if (!key || map.has(key)) continue;
+      map.set(key, site.id);
+    }
+    return map;
+  }, [sites]);
+
   const handleSiteClick = useCallback((siteId: string) => {
     router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=${encodeURIComponent(scheduleKind)}#punch`);
   }, [router, scheduleKind]);
 
-  const handleTabChange = useCallback((tab: MobileTab) => {
+  const handleScheduleEntryClick = useCallback((entry: string) => {
+    const siteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry));
+    if (!siteId) return;
+    handleSiteClick(siteId);
+  }, [handleSiteClick, siteIdByScheduleEntry]);
+
+  const handleTabChange = useCallback((tab: MobileTab, nextKind?: ScheduleKind) => {
     const next = new URLSearchParams(searchParams.toString());
     next.set('tab', tab);
+    if (nextKind) {
+      next.set('kind', nextKind);
+    } else {
+      next.delete('kind');
+    }
     router.replace(`/mobile/week-hub?${next.toString()}`, { scroll: false });
   }, [router, searchParams]);
+
+  const handleReload = useCallback(() => {
+    setRefreshRevision((current) => current + 1);
+  }, []);
 
   const setWeekStartByDate = useCallback((date: Date) => {
     setCursorDate(new Date(date));
@@ -372,30 +411,52 @@ function MobileWeekHubInner() {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold">週予定</h1>
+              <h1 className="text-lg font-semibold">{weekViewLabel}</h1>
             </div>
-            <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-center justify-end gap-2">
+              <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('week', 'normal')}
+                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                    activeTab === 'week' && scheduleKind === 'normal'
+                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                      : 'text-zinc-500 dark:text-zinc-400'
+                  }`}
+                >
+                  週予定
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('personal', 'normal')}
+                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                    activeTab === 'personal' && scheduleKind === 'normal'
+                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                      : 'text-zinc-500 dark:text-zinc-400'
+                  }`}
+                >
+                  個人
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('week', 'daily')}
+                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                    activeTab === 'week' && scheduleKind === 'daily'
+                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                      : 'text-zinc-500 dark:text-zinc-400'
+                  }`}
+                >
+                  日常
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => handleTabChange('week')}
-                className={`rounded-md px-3 py-1.5 text-sm transition ${
-                  activeTab === 'week'
-                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                    : 'text-zinc-500 dark:text-zinc-400'
-                }`}
+                onClick={handleReload}
+                disabled={isLoading}
+                className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                aria-label="再読込"
               >
-                週予定
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTabChange('personal')}
-                className={`rounded-md px-3 py-1.5 text-sm transition ${
-                  activeTab === 'personal'
-                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                    : 'text-zinc-500 dark:text-zinc-400'
-                }`}
-              >
-                個人
+                {isLoading ? '更新中…' : '再読込'}
               </button>
             </div>
           </div>
@@ -444,7 +505,9 @@ function MobileWeekHubInner() {
           </div>
 
           <div className="text-sm text-zinc-500 dark:text-zinc-400">
-            {activeTab === 'personal' ? `表示対象: ${userLabel(currentUser ?? authUser)}` : '表示対象: 全従業員'}
+            {activeTab === 'personal'
+              ? `表示対象: ${userLabel(currentUser ?? authUser)}`
+              : `表示対象: ${scheduleKind === 'daily' ? '日常予定（全従業員）' : '全従業員'}`}
           </div>
 
         </div>
@@ -459,7 +522,7 @@ function MobileWeekHubInner() {
 
         {activeTab === 'week' ? (
           <>
-            <h2 className="mb-4 text-base font-medium">週予定</h2>
+            <h2 className="mb-4 text-base font-medium">{weekViewLabel}</h2>
 
             {isLoading ? (
               <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
@@ -523,13 +586,16 @@ function MobileWeekHubInner() {
                               {entries.length > 0 ? (
                                 <div className="space-y-1">
                                   {entries.map((entry) => (
-                                    <div
+                                    <button
                                       key={`${user.id}:${day.key}:${entry}`}
+                                      type="button"
+                                      onClick={() => handleScheduleEntryClick(entry)}
                                       className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
                                       style={{ fontSize: scheduleCellFontSize }}
+                                      title="現場詳細を開く"
                                     >
                                       {entry}
-                                    </div>
+                                    </button>
                                   ))}
                                 </div>
                               ) : (
@@ -581,13 +647,16 @@ function MobileWeekHubInner() {
                       {entries.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {entries.map((entry) => (
-                            <span
+                            <button
                               key={`${day.key}:${entry}`}
+                              type="button"
+                              onClick={() => handleScheduleEntryClick(entry)}
                               className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                               style={{ fontSize: scheduleCellFontSize }}
+                              title="現場詳細を開く"
                             >
                               {entry}
-                            </span>
+                            </button>
                           ))}
                         </div>
                       ) : (
