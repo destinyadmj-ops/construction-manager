@@ -93,7 +93,7 @@ export default function MobileWeekHub() {
 function MobileWeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [cursorDate] = useState<Date>(() => new Date());
+  const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
@@ -107,6 +107,17 @@ function MobileWeekHubInner() {
 
   const weekStart = useMemo(() => {
     return startOfWeekMonday(cursorDate);
+  }, [cursorDate]);
+
+  const monthWeekTabs = useMemo(() => {
+    const monthStart = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
+    const monthEnd = new Date(cursorDate.getFullYear(), cursorDate.getMonth() + 1, 0);
+    const first = startOfWeekMonday(monthStart);
+    const tabs: Date[] = [];
+    for (let d = new Date(first); d <= monthEnd; d.setDate(d.getDate() + 7)) {
+      tabs.push(new Date(d));
+    }
+    return tabs;
   }, [cursorDate]);
 
   const scheduleKind = useMemo(() => normalizeScheduleKind(authUser?.kind), [authUser?.kind]);
@@ -227,12 +238,30 @@ function MobileWeekHubInner() {
     router.replace(`/mobile/week-hub?${next.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
+  const setWeekStartByDate = useCallback((date: Date) => {
+    setCursorDate(new Date(date));
+  }, []);
+
+  const goPrevMonth = useCallback(() => {
+    setCursorDate((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
+  }, []);
+
+  const goNextMonth = useCallback(() => {
+    setCursorDate((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
+  }, []);
+
+  const rangeLabel = useMemo(() => {
+    return `${toYmd(weekStart)}〜${toYmd(addDays(weekStart, 6))}`;
+  }, [weekStart]);
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold">週予定</h1>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold">週予定</h1>
+            </div>
             <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
               <button
                 type="button"
@@ -258,32 +287,71 @@ function MobileWeekHubInner() {
               </button>
             </div>
           </div>
-          <div className="text-right text-sm text-zinc-500 dark:text-zinc-400">
-            <div>{toYmd(weekStart)}〜{toYmd(addDays(weekStart, 6))}</div>
+
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={goPrevMonth}
+              className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-black"
+              aria-label="前の月"
+            >
+              ←
+            </button>
+            <div className="flex min-w-max items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+              {monthWeekTabs.map((tab) => {
+                const label = `${tab.getMonth() + 1}/${tab.getDate()}`;
+                const active = toYmd(startOfWeekMonday(tab)) === toYmd(weekStart);
+                return (
+                  <button
+                    key={toYmd(tab)}
+                    type="button"
+                    onClick={() => setWeekStartByDate(tab)}
+                    className={`rounded-md px-3 py-1.5 text-sm transition ${
+                      active
+                        ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                        : 'text-zinc-600 dark:text-zinc-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={goNextMonth}
+              className="shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-black"
+              aria-label="次の月"
+            >
+              →
+            </button>
           </div>
-        </div>
 
-        <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          {activeTab === 'personal' ? `表示対象: ${userLabel(currentUser ?? authUser)}` : '表示対象: 全従業員'}
-        </div>
+          <div className="text-right text-sm text-zinc-500 dark:text-zinc-400">
+            <div>{rangeLabel}</div>
+          </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
-            {dayLabels.map((d) => (
-              <div
-                key={d.key}
-                className={`flex-1 min-w-[60px] rounded-md border px-2 py-3 text-center text-sm ${
-                  d.isSun
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
-                    : d.isSat
-                      ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300'
-                      : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black'
-                }`}
-              >
-                <div className="text-xs text-zinc-500 dark:text-zinc-400">{d.dow}</div>
-                <div className="font-medium">{d.dayNum}</div>
-              </div>
-            ))}
+          <div className="text-sm text-zinc-500 dark:text-zinc-400">
+            {activeTab === 'personal' ? `表示対象: ${userLabel(currentUser ?? authUser)}` : '表示対象: 全従業員'}
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max gap-1">
+              {dayLabels.map((d) => (
+                <div
+                  key={d.key}
+                  className={`flex-1 min-w-[52px] rounded-md border px-2 py-2 text-center text-sm ${
+                    d.isSun
+                      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+                      : d.isSat
+                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300'
+                        : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black'
+                  }`}
+                >
+                  <div className="font-medium">{d.dow}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
