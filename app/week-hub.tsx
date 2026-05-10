@@ -4923,14 +4923,20 @@ function Row({
       setSlotContextMenu(null);
     };
 
+    const handleScroll = (event: Event) => {
+      const menu = contextMenuRef.current;
+      if (menu && event.target instanceof Node && menu.contains(event.target)) return;
+      setSlotContextMenu(null);
+    };
+
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleClose);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleClose);
     };
   }, [slotContextMenu]);
