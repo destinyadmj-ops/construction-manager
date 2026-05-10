@@ -41,10 +41,10 @@ export const WEEK_GRID_TEXT_COLOR_OPTIONS: Array<{ value: WeekGridTextColor; lab
   { value: 'pink', label: '桃' },
 ];
 
-export const WEEK_GRID_NAME_WIDTH_OPTIONS = [88, 96, 104, 112, 120, 128, 136, 144, 160, 176, 192, 224, 256] as const;
-export const WEEK_GRID_DAY_WIDTH_OPTIONS = [60, 72, 84, 96, 108, 112, 124, 136, 148, 160, 176, 192, 224] as const;
-export const WEEK_GRID_COMPACT_HEIGHT_OPTIONS = [32, 36, 40, 44, 48, 52, 56, 60, 64] as const;
-export const WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS = [48, 56, 64, 72, 80, 88, 96, 112, 128] as const;
+export const WEEK_GRID_NAME_WIDTH_OPTIONS = [112, 120, 128, 136, 144, 160, 176, 192, 224, 256] as const;
+export const WEEK_GRID_DAY_WIDTH_OPTIONS = [84, 96, 108, 112, 124, 136, 148, 160, 176, 192, 224] as const;
+export const WEEK_GRID_COMPACT_HEIGHT_OPTIONS = [40, 44, 48, 52, 56, 60, 64] as const;
+export const WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS = [56, 64, 72, 80, 88, 96, 112, 128] as const;
 
 type JsonObject = Record<string, unknown>;
 
@@ -66,7 +66,7 @@ export function isWeekGridCellBg(value: unknown): value is WeekGridCellBg {
 }
 
 export function clampNameColumnWidth(value: number) {
-  return clampInt(value, 88, 280, DEFAULT_WEEK_GRID_PREFS.nameColW);
+  return clampInt(value, 112, 280, DEFAULT_WEEK_GRID_PREFS.nameColW);
 }
 
 export function buildNameColumnTrack(width: number) {
@@ -90,19 +90,19 @@ export function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
   const nameColW = clampNameColumnWidth(typeof obj?.nameColW === 'number' ? obj.nameColW : Number.NaN);
   const cellMinW = clampInt(
     typeof obj?.cellMinW === 'number' ? obj.cellMinW : Number.NaN,
-    60,
+    84,
     240,
     DEFAULT_WEEK_GRID_PREFS.cellMinW,
   );
   const cellMinHCompact = clampInt(
     typeof obj?.cellMinHCompact === 'number' ? obj.cellMinHCompact : Number.NaN,
-    32,
+    40,
     120,
     DEFAULT_WEEK_GRID_PREFS.cellMinHCompact,
   );
   const cellMinHComfortableBase = clampInt(
     typeof obj?.cellMinHComfortable === 'number' ? obj.cellMinHComfortable : Number.NaN,
-    40,
+    56,
     180,
     DEFAULT_WEEK_GRID_PREFS.cellMinHComfortable,
   );
