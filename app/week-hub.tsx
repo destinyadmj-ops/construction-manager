@@ -6,6 +6,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  type MouseEvent as ReactMouseEvent,
   useMemo,
   useRef,
   useState,
@@ -4087,7 +4088,9 @@ function WeekGrid({
                 <Row
                   key={u.id}
                   user={u}
+                  allUsers={users}
                   dayLabels={dayLabels}
+                  allGrid={grid}
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
                   selectedSite={selectedSite}
@@ -4402,7 +4405,9 @@ function MonthGrid({
                 <Row
                   key={u.id}
                   user={u}
+                  allUsers={users}
                   dayLabels={dayLabels}
+                  allGrid={grid}
                   grid={grid[u.id] ?? {}}
                   apiKind={apiKind}
                   selectedSite={selectedSite}
@@ -4789,7 +4794,9 @@ function YearGrid({
 
 function Row({
   user,
+  allUsers,
   dayLabels,
+  allGrid,
   grid,
   apiKind,
   selectedSite,
@@ -4834,7 +4841,9 @@ function Row({
   suggestionLoading,
 }: {
   user: ApiUser;
+  allUsers: ApiUser[];
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
+  allGrid: Record<string, Record<string, ApiCell>>;
   grid: Record<string, ApiCell>;
   apiKind: 'NORMAL' | 'DAILY';
   selectedSite: SiteItem | null;
@@ -4880,13 +4889,263 @@ function Row({
 }) {
   const isSelectedUser = selectedUserId === user.id;
   const isCurrentUser = currentUserId === user.id;
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [slotContextMenu, setSlotContextMenu] = useState<null | {
+    day: string;
+    siteName: string;
+    color: LabelColor;
+    beforeFallback: CellSlots;
+    x: number;
+    y: number;
+    mode: 'actions' | 'assign-users';
+    selectedUserIds: string[];
+  }>(null);
+
+  const closeSlotContextMenu = useCallback(() => {
+    setSlotContextMenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!slotContextMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const menu = contextMenuRef.current;
+      if (!menu) return;
+      if (event.target instanceof Node && menu.contains(event.target)) return;
+      setSlotContextMenu(null);
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setSlotContextMenu(null);
+    };
+
+    const handleClose = () => {
+      setSlotContextMenu(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [slotContextMenu]);
+
+  const assignedUserIdsForSite = useCallback(
+    (day: string, siteName: string) => {
+      const targetName = siteName.trim();
+      if (!targetName) return [];
+      return allUsers
+        .filter((candidate) =>
+          apiCellToEntries(allGrid[candidate.id]?.[day]).some((entry) => entry.label === targetName),
+        )
+        .map((candidate) => candidate.id);
+    },
+    [allGrid, allUsers],
+  );
+
+  const openSlotContextMenu = useCallback(
+    (
+      event: ReactMouseEvent<HTMLElement>,
+      input: { day: string; siteName: string; color: LabelColor; beforeFallback: CellSlots },
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!isEditable) {
+        onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
+        return;
+      }
+
+      setSlotContextMenu({
+        day: input.day,
+        siteName: input.siteName,
+        color: input.color,
+        beforeFallback: input.beforeFallback,
+        x: event.clientX,
+        y: event.clientY,
+        mode: 'actions',
+        selectedUserIds: assignedUserIdsForSite(input.day, input.siteName),
+      });
+    },
+    [assignedUserIdsForSite, isEditable, onNotify],
+  );
+
+  const slotContextUserOptions = useMemo(() => {
+    if (!slotContextMenu || slotContextMenu.mode !== 'assign-users') return [];
+    const selected = new Set(slotContextMenu.selectedUserIds);
+    return allUsers.map((candidate) => {
+      const entries = apiCellToEntries(allGrid[candidate.id]?.[slotContextMenu.day]);
+      const hasSite = entries.some((entry) => entry.label === slotContextMenu.siteName);
+      const isFull = entries.length >= 2 && !hasSite;
+      return {
+        userId: candidate.id,
+        userLabel: (candidate.name ?? candidate.email ?? candidate.id).trim(),
+        checked: selected.has(candidate.id),
+        hasSite,
+        disabled: isFull,
+      };
+    });
+  }, [allGrid, allUsers, slotContextMenu]);
+
+  const toggleSlotContextUser = useCallback((targetUserId: string) => {
+    setSlotContextMenu((current) => {
+      if (!current || current.mode !== 'assign-users') return current;
+      const next = new Set(current.selectedUserIds);
+      if (next.has(targetUserId)) next.delete(targetUserId);
+      else next.add(targetUserId);
+      return { ...current, selectedUserIds: Array.from(next) };
+    });
+  }, []);
+
+  const persistCellSet = useCallback(
+    async (input: { targetUser: ApiUser; day: string; beforeCell: ApiCell; nextCell: ApiCell }) => {
+      if (apiCellsEqual(input.beforeCell, input.nextCell)) {
+        return { changed: false, failed: false as const };
+      }
+
+      onPreviewCellChange?.({ userId: input.targetUser.id, day: input.day, cell: input.nextCell });
+
+      try {
+        const r = await fetch('/api/schedule/cell/set', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userId: input.targetUser.id,
+            day: input.day,
+            kind: apiKind,
+            slot1: input.nextCell.slot1,
+            slot2: input.nextCell.slot2,
+            slot1Color: input.nextCell.color1,
+            slot2Color: input.nextCell.color2,
+          }),
+        });
+
+        const json = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+        if (!r.ok || !json || json.ok !== true) {
+          onPreviewCellChange?.({ userId: input.targetUser.id, day: input.day, cell: input.beforeCell });
+          return {
+            changed: false,
+            failed: true as const,
+            message: json?.error ?? `HTTP ${r.status}`,
+          };
+        }
+
+        onCellHistory?.({
+          kind: 'cell',
+          userId: input.targetUser.id,
+          day: input.day,
+          before: [input.beforeCell.slot1, input.beforeCell.slot2],
+          after: [input.nextCell.slot1, input.nextCell.slot2],
+          editorLabel: currentEditorLabel,
+          at: Date.now(),
+        });
+
+        return { changed: true, failed: false as const };
+      } catch {
+        onPreviewCellChange?.({ userId: input.targetUser.id, day: input.day, cell: input.beforeCell });
+        return { changed: false, failed: true as const, message: '通信に失敗しました' };
+      }
+    },
+    [apiKind, currentEditorLabel, onCellHistory, onPreviewCellChange],
+  );
+
+  const applySelectedUsersToSite = useCallback(async () => {
+    const current = slotContextMenu;
+    if (!current || current.mode !== 'assign-users') return;
+
+    const selected = new Set(current.selectedUserIds);
+    let addedCount = 0;
+    let removedCount = 0;
+    let recoloredCount = 0;
+    let skippedFullCount = 0;
+    let failedCount = 0;
+
+    for (const targetUser of allUsers) {
+      const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
+      const entries = apiCellToEntries(beforeCell);
+      const hitIndex = entries.findIndex((entry) => entry.label === current.siteName);
+      let nextEntries = entries;
+      let changeKind: 'added' | 'removed' | 'recolored' | null = null;
+
+      if (selected.has(targetUser.id)) {
+        if (hitIndex >= 0) {
+          if (entries[hitIndex]!.color !== current.color) {
+            nextEntries = entries.map((entry, index) =>
+              index === hitIndex ? { ...entry, color: current.color } : entry,
+            );
+            changeKind = 'recolored';
+          }
+        } else {
+          if (entries.length >= 2) {
+            skippedFullCount += 1;
+            continue;
+          }
+          nextEntries = [...entries, { label: current.siteName, color: current.color }];
+          changeKind = 'added';
+        }
+      } else {
+        if (hitIndex < 0) continue;
+        nextEntries = entries.filter((_, index) => index !== hitIndex);
+        changeKind = 'removed';
+      }
+
+      if (!changeKind) continue;
+      const result = await persistCellSet({
+        targetUser,
+        day: current.day,
+        beforeCell,
+        nextCell: entriesToApiCell(nextEntries),
+      });
+      if (result.failed) {
+        failedCount += 1;
+        continue;
+      }
+
+      if (changeKind === 'added') addedCount += 1;
+      if (changeKind === 'removed') removedCount += 1;
+      if (changeKind === 'recolored') recoloredCount += 1;
+    }
+
+    closeSlotContextMenu();
+
+    if (addedCount || removedCount || recoloredCount) {
+      void Promise.resolve(onAssigned()).catch(() => undefined);
+    }
+
+    const messages: string[] = [];
+    if (addedCount) messages.push(`${addedCount}名追加`);
+    if (removedCount) messages.push(`${removedCount}名削除`);
+    if (recoloredCount) messages.push(`${recoloredCount}名色同期`);
+    if (skippedFullCount) messages.push(`${skippedFullCount}名は2枠埋まり`);
+    if (failedCount) messages.push(`${failedCount}名失敗`);
+    onNotify?.(messages.length > 0 ? `同日・同現場を更新: ${messages.join(' / ')}` : '変更はありません');
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu]);
 
   const renderSlotLabel = useCallback(
-    (value: string | null, className: string, fontSize: string) => {
+    (
+      value: string | null,
+      className: string,
+      fontSize: string,
+      contextInput?: { day: string; beforeFallback: CellSlots; color: LabelColor },
+    ) => {
       if (!value) return <div className={className} style={{ fontSize }} />;
+      const handleContextMenu = contextInput
+        ? (event: ReactMouseEvent<HTMLElement>) => {
+            openSlotContextMenu(event, {
+              day: contextInput.day,
+              siteName: value,
+              color: contextInput.color,
+              beforeFallback: contextInput.beforeFallback,
+            });
+          }
+        : undefined;
       if (!onOpenSiteFromCell) {
         return (
-          <div className={className} style={{ fontSize }}>
+          <div className={className} style={{ fontSize }} onContextMenu={handleContextMenu}>
             {value}
           </div>
         );
@@ -4899,6 +5158,7 @@ function Row({
             event.stopPropagation();
             onOpenSiteFromCell(value);
           }}
+          onContextMenu={handleContextMenu}
           className={`${className} w-full text-left hover:underline`}
           style={{ fontSize }}
           title="現場詳細を開く"
@@ -4907,7 +5167,7 @@ function Row({
         </button>
       );
     },
-    [onOpenSiteFromCell],
+    [onOpenSiteFromCell, openSlotContextMenu],
   );
 
   const formatCellActionReason = (
@@ -5139,6 +5399,7 @@ function Row({
         const slot2 = cell?.slot2 ?? null;
         const c1 = cell?.color1 ?? 'default';
         const c2 = cell?.color2 ?? 'default';
+        const beforeFallback: CellSlots = [slot1, slot2];
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
@@ -5164,7 +5425,6 @@ function Row({
             onDrop={(e) => {
               if (!isEditable) return;
               e.preventDefault();
-              const beforeFallback: CellSlots = [slot1, slot2];
               
               if (draggedSite) {
                 // 現場リストからドラッグされた現場をセルに入力
@@ -5207,7 +5467,6 @@ function Row({
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
                 // 現場が選択されている場合は通常のアクション
-                const beforeFallback: CellSlots = [slot1, slot2];
                 void runCellAction({
                   day: d.key,
                   action: cellClickAction,
@@ -5241,7 +5500,6 @@ function Row({
                 setSiteSuggestions?.([]);
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
-                const beforeFallback: CellSlots = [slot1, slot2];
                 void runCellAction({
                   day: d.key,
                   action: cellClickAction,
@@ -5282,7 +5540,6 @@ function Row({
                         if (siteSuggestions && siteSuggestions.length > 0) {
                           // 最初の候補を選択
                           const site = siteSuggestions[0];
-                          const beforeFallback: CellSlots = [slot1, slot2];
                           setEditingCell?.(null);
                           setEditingInput?.('');
                           setSiteSuggestions?.([]);
@@ -5297,7 +5554,6 @@ function Row({
                         } else if (editingInput?.trim()) {
                           // 直接入力
                           const siteName = editingInput.trim();
-                          const beforeFallback: CellSlots = [slot1, slot2];
                           setEditingCell?.(null);
                           setEditingInput?.('');
                           setSiteSuggestions?.([]);
@@ -5327,7 +5583,6 @@ function Row({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            const beforeFallback: CellSlots = [slot1, slot2];
                             setEditingCell?.(null);
                             setEditingInput?.('');
                             setSiteSuggestions?.([]);
@@ -5359,15 +5614,146 @@ function Row({
                     slot1,
                     `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c1, 'primary')}`,
                     'var(--weekhub-cell-font-size, 12px)',
+                    { day: d.key, beforeFallback, color: c1 },
                   )}
                   {renderSlotLabel(
                     slot2,
                     `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c2, 'secondary')}`,
                     'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
+                    { day: d.key, beforeFallback, color: c2 },
                   )}
                 </>
               )}
             </div>
+            {slotContextMenu?.day === d.key ? (
+              <div
+                ref={contextMenuRef}
+                className="fixed z-[90] min-w-[260px] max-w-[min(92vw,320px)] rounded-lg border border-zinc-200 bg-white p-2 text-xs shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
+                style={{ left: `${slotContextMenu.x}px`, top: `${slotContextMenu.y}px` }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <div className="border-b border-zinc-200 px-1 pb-2 dark:border-zinc-800">
+                  <div className="truncate font-medium text-zinc-900 dark:text-zinc-100">{slotContextMenu.siteName}</div>
+                  <div className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{slotContextMenu.day}</div>
+                </div>
+
+                {slotContextMenu.mode === 'actions' ? (
+                  <div className="mt-2 space-y-1">
+                    <button
+                      type="button"
+                      disabled={slotContextMenu.color === 'red'}
+                      onClick={() => {
+                        const current = slotContextMenu;
+                        if (!current) return;
+                        closeSlotContextMenu();
+                        void runCellAction({
+                          day: current.day,
+                          action: 'recolor',
+                          color: 'red',
+                          siteName: current.siteName,
+                          beforeFallback: current.beforeFallback,
+                        });
+                      }}
+                      className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                    >
+                      当該現場を赤文字表示
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSlotContextMenu((current) => {
+                          if (!current) return current;
+                          return {
+                            ...current,
+                            mode: 'assign-users',
+                            selectedUserIds: assignedUserIdsForSite(current.day, current.siteName),
+                          };
+                        });
+                      }}
+                      className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                    >
+                      同日・同現場の従業員を選択
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = slotContextMenu;
+                        if (!current) return;
+                        closeSlotContextMenu();
+                        void runCellAction({
+                          day: current.day,
+                          action: 'remove',
+                          color: current.color,
+                          siteName: current.siteName,
+                          beforeFallback: current.beforeFallback,
+                        });
+                      }}
+                      className="w-full rounded-md border border-red-200 px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                    >
+                      当該現場をセルから削除
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+                      同日・同現場に入れる従業員を複数選択
+                    </div>
+                    <div className="max-h-56 space-y-1 overflow-auto pr-1">
+                      {slotContextUserOptions.map((option) => (
+                        <label
+                          key={option.userId}
+                          className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                            option.disabled
+                              ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
+                              : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={option.checked}
+                            disabled={option.disabled}
+                            onChange={() => toggleSlotContextUser(option.userId)}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{option.userLabel}</span>
+                          {option.disabled ? (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400">2枠埋まり</span>
+                          ) : option.hasSite ? (
+                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
+                          ) : null}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                        }}
+                        className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      >
+                        戻る
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void applySelectedUsersToSite();
+                        }}
+                        className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                      >
+                        決定
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         );
       })}
