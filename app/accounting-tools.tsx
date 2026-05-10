@@ -105,6 +105,8 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   const { setAddAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mailLogsRequestInFlightRef = useRef(false);
+  const exportsRequestInFlightRef = useRef(false);
+  const presetListRequestInFlightRef = useRef(false);
   const selectedSiteLabel = props.selectedSiteLabel ?? null;
   const [effectiveSiteLabel, setEffectiveSiteLabel] = useState<string | null>(selectedSiteLabel);
 
@@ -424,7 +426,8 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   }, []);
 
   const loadExports = useCallback(async () => {
-    if (exportsLoading) return;
+    if (exportsRequestInFlightRef.current) return;
+    exportsRequestInFlightRef.current = true;
     setExportsLoading(true);
     setExportsError(null);
     try {
@@ -448,9 +451,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
     } catch (e) {
       setExportsError(e instanceof Error ? e.message : '一覧の取得に失敗しました');
     } finally {
+      exportsRequestInFlightRef.current = false;
       setExportsLoading(false);
     }
-  }, [exportsLoading]);
+  }, []);
 
   const deleteExport = useCallback(
     async (fileName: string) => {
@@ -478,7 +482,8 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
   );
 
   const loadPresetList = useCallback(async () => {
-    if (presetsLoading) return;
+    if (presetListRequestInFlightRef.current) return;
+    presetListRequestInFlightRef.current = true;
     setPresetsLoading(true);
     setPresetsError(null);
     try {
@@ -503,9 +508,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
     } catch (e) {
       setPresetsError(e instanceof Error ? e.message : 'テンプレ一覧の取得に失敗しました');
     } finally {
+      presetListRequestInFlightRef.current = false;
       setPresetsLoading(false);
     }
-  }, [presetsLoading]);
+  }, []);
 
   const loadPreset = useCallback(async (key: string) => {
     setPresetSaveMsg(null);

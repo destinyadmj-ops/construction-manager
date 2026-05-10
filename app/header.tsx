@@ -852,14 +852,14 @@ export default function AppHeader() {
   const applyFontSize = useCallback(
     (px: number | null) => {
       // 予定セルのみ適用（全体のフォントサイズは変えない）
-      if (pathname !== '/') {
+      if (!isWeekHubPage) {
         document.documentElement.style.removeProperty('--weekhub-cell-font-size');
         return;
       }
       const v = px && Number.isFinite(px) ? Math.max(10, Math.min(30, Math.round(px))) : 12;
       document.documentElement.style.setProperty('--weekhub-cell-font-size', `${v}px`);
     },
-    [pathname],
+    [isWeekHubPage],
   );
 
   useEffect(() => {
