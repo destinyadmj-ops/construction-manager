@@ -335,24 +335,6 @@ function MobileWeekHubInner() {
             {activeTab === 'personal' ? `表示対象: ${userLabel(currentUser ?? authUser)}` : '表示対象: 全従業員'}
           </div>
 
-          <div className="overflow-x-auto">
-            <div className="flex min-w-max gap-1">
-              {dayLabels.map((d) => (
-                <div
-                  key={d.key}
-                  className={`flex-1 min-w-[52px] rounded-md border px-2 py-2 text-center text-sm ${
-                    d.isSun
-                      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
-                      : d.isSat
-                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300'
-                        : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black'
-                  }`}
-                >
-                  <div className="font-medium">{d.dow}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
