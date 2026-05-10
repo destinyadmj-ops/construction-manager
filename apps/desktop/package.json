@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "node main.cjs",
     "start": "node main.cjs",
-    "pack": "node generate-icons.mjs && electron-builder --dir",
-    "dist": "node generate-icons.mjs && electron-builder"
+    "pack": "node write-runtime-config.mjs && node generate-icons.mjs && electron-builder --dir",
+    "dist": "node write-runtime-config.mjs && node generate-icons.mjs && electron-builder"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
