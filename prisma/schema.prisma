@@ -63,6 +63,7 @@ model User {
   email     String?  @unique
   name      String?
   kind      UserKind @default(NORMAL)
+  showInSchedule Boolean @default(true)
   passwordHash String?
   passwordSetAt DateTime?
 
