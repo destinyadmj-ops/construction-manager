@@ -104,6 +104,7 @@ async function downloadFromResponse(res: Response, fallbackName: string) {
 export default function AccountingTools(props: { selectedSiteLabel?: string | null }) {
   const { setAddAction, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const mailLogsRequestInFlightRef = useRef(false);
   const selectedSiteLabel = props.selectedSiteLabel ?? null;
   const [effectiveSiteLabel, setEffectiveSiteLabel] = useState<string | null>(selectedSiteLabel);
 
@@ -210,7 +211,8 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
       setMailLogs([]);
       return;
     }
-    if (mailLogsLoading) return;
+    if (mailLogsRequestInFlightRef.current) return;
+    mailLogsRequestInFlightRef.current = true;
     setMailLogsLoading(true);
     setMailLogsError(null);
     try {
@@ -266,9 +268,10 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
       setMailLogs([]);
       setMailLogsError(e instanceof Error ? e.message : '履歴の取得に失敗しました');
     } finally {
+      mailLogsRequestInFlightRef.current = false;
       setMailLogsLoading(false);
     }
-  }, [mailLogsLoading, mailPartnerId, mailSiteId]);
+  }, [mailPartnerId, mailSiteId]);
 
   useEffect(() => {
     void loadMailLogs();
