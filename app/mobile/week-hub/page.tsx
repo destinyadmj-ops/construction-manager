@@ -109,7 +109,7 @@ function MobileWeekHubInner() {
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
-  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
+  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs('mobile'));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,10 +156,10 @@ function MobileWeekHubInner() {
     try {
       const localKey = `masterHub.ui:${key}`;
       const txt = window.localStorage.getItem(localKey);
-      if (!txt) return defaultWeekGridPrefs();
-      return normalizeWeekGridPrefs(JSON.parse(txt) as unknown);
+      if (!txt) return defaultWeekGridPrefs('mobile');
+      return normalizeWeekGridPrefs(JSON.parse(txt) as unknown, defaultWeekGridPrefs('mobile'));
     } catch {
-      return defaultWeekGridPrefs();
+      return defaultWeekGridPrefs('mobile');
     }
   }, []);
 
@@ -213,7 +213,7 @@ function MobileWeekHubInner() {
 
         const raw = (obj as { value?: unknown }).value;
         const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw, defaultWeekGridPrefs('mobile'));
         if (cancelled) return;
         setWeekGridPrefs(next);
 
