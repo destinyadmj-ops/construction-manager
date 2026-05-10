@@ -47,7 +47,7 @@ export const WEEK_GRID_TEXT_COLOR_OPTIONS: Array<{ value: WeekGridTextColor; lab
 ];
 
 export const WEEK_GRID_NAME_WIDTH_OPTIONS = [80, 88, 96, 104, 112, 120, 128, 136, 144, 160, 176, 192, 224, 256] as const;
-export const WEEK_GRID_DAY_WIDTH_OPTIONS = [84, 96, 108, 112, 124, 136, 148, 160, 176, 192, 224] as const;
+export const WEEK_GRID_DAY_WIDTH_OPTIONS = [60, 68, 76, 84, 96, 108, 112, 124, 136, 148, 160, 176, 192, 224] as const;
 export const WEEK_GRID_COMPACT_HEIGHT_OPTIONS = [40, 44, 48, 52, 56, 60, 64] as const;
 export const WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS = [56, 64, 72, 80, 88, 96, 112, 128] as const;
 
@@ -95,7 +95,7 @@ export function normalizeWeekGridPrefs(raw: unknown, defaults: WeekGridPrefs = D
   const nameColW = clampNameColumnWidth(typeof obj?.nameColW === 'number' ? obj.nameColW : Number.NaN, defaults.nameColW);
   const cellMinW = clampInt(
     typeof obj?.cellMinW === 'number' ? obj.cellMinW : Number.NaN,
-    84,
+    60,
     240,
     defaults.cellMinW,
   );
