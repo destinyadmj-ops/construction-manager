@@ -54,6 +54,14 @@ type AppVersionInfo = {
   nodeEnv: string;
 };
 
+type DesktopReleaseInfo = {
+  version: string;
+  downloadUrl: string | null;
+  notes: string | null;
+  publishedAt: string | null;
+  channel: string;
+};
+
 type PersonalNotification = {
   id: string;
   kind: string;
@@ -119,6 +127,8 @@ export default function AppHeader() {
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
   const [, setAppVersionBase] = useState<string | null>(null);
   const [appVersionError, setAppVersionError] = useState<string | null>(null);
+  const [desktopRelease, setDesktopRelease] = useState<DesktopReleaseInfo | null>(null);
+  const [desktopReleaseError, setDesktopReleaseError] = useState<string | null>(null);
   const [isUpdateAvailableByVersion, setIsUpdateAvailableByVersion] = useState(false);
   const [isUpdateAvailableBySw, setIsUpdateAvailableBySw] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -220,10 +230,33 @@ export default function AppHeader() {
     }
   }, []);
 
+  const fetchDesktopRelease = useCallback(async () => {
+    try {
+      setDesktopReleaseError(null);
+      const r = await fetch('/api/desktop-release', { cache: 'no-store' });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      const release = obj?.release && typeof obj.release === 'object' ? (obj.release as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true || !release) throw new Error('bad_response');
+
+      setDesktopRelease({
+        version: typeof release.version === 'string' ? release.version : '0.0.0',
+        downloadUrl: typeof release.downloadUrl === 'string' ? release.downloadUrl : null,
+        notes: typeof release.notes === 'string' ? release.notes : null,
+        publishedAt: typeof release.publishedAt === 'string' ? release.publishedAt : null,
+        channel: typeof release.channel === 'string' ? release.channel : 'stable',
+      });
+    } catch {
+      setDesktopRelease(null);
+      setDesktopReleaseError('取得に失敗しました');
+    }
+  }, []);
+
   useEffect(() => {
     if (!isSettingsOpen) return;
     void fetchAppVersion();
-  }, [fetchAppVersion, isSettingsOpen]);
+    void fetchDesktopRelease();
+  }, [fetchAppVersion, fetchDesktopRelease, isSettingsOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -263,10 +296,11 @@ export default function AppHeader() {
         if (reg?.waiting) setIsUpdateAvailableBySw(true);
       }
       await fetchAppVersion();
+      await fetchDesktopRelease();
     } finally {
       setIsCheckingUpdate(false);
     }
-  }, [fetchAppVersion]);
+  }, [fetchAppVersion, fetchDesktopRelease]);
 
   const applyUpdateAndReload = useCallback(async () => {
     try {
@@ -1553,6 +1587,41 @@ export default function AppHeader() {
                         ) : (
                           <div>取得中…</div>
                         )}
+                      </div>
+
+                      <div className="rounded-md border border-zinc-200 bg-white/50 p-2 text-[11px] dark:border-zinc-800 dark:bg-black/40">
+                        <div className="font-medium text-zinc-700 dark:text-zinc-200">PCパッケージアプリ</div>
+                        <div className="mt-1 text-zinc-600 dark:text-zinc-400">
+                          {desktopRelease ? (
+                            <>
+                              <div>
+                                配布版 v{desktopRelease.version}
+                                {desktopRelease.channel ? ` / ${desktopRelease.channel}` : ''}
+                              </div>
+                              {desktopRelease.publishedAt ? <div>{desktopRelease.publishedAt}</div> : null}
+                              {desktopRelease.notes ? <div className="mt-1 break-words">{desktopRelease.notes}</div> : null}
+                              {desktopRelease.downloadUrl ? (
+                                <>
+                                  <a
+                                    href={desktopRelease.downloadUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-2 inline-flex rounded-md border border-zinc-200 bg-white px-3 py-2 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                                  >
+                                    PCアプリをダウンロード
+                                  </a>
+                                  <div className="mt-2 break-all">{desktopRelease.downloadUrl}</div>
+                                </>
+                              ) : (
+                                <div className="mt-2">ダウンロードリンク未設定</div>
+                              )}
+                            </>
+                          ) : desktopReleaseError ? (
+                            <div>{desktopReleaseError}</div>
+                          ) : (
+                            <div>取得中…</div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
