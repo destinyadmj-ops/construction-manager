@@ -53,11 +53,17 @@ npm install
 npm run dist
 ```
 
+- `npm run dist` / `npm run pack` は `MASTER_HUB_URL` が必須です。
+- 例: `set MASTER_HUB_URL=https://YOUR_DOMAIN/` の後に実行します。
+
 またはルートから接続先を固定して生成:
 
 ```powershell
 .\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1"
 ```
+
+- `scripts/package-desktop.ps1` も `-MasterHubUrl` が必須です。
+- `localhost` / `127.0.0.1` を配布用に埋め込むことは既定で禁止しています。ローカル検証で必要な場合だけ `-AllowLocalhostUrl` を付けてください。
 
 - 出力: `apps/desktop/dist/`
 - 生成物例: `Master Hub-Setup-0.1.1.exe`
