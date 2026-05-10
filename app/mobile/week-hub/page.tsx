@@ -1,9 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 type ScheduleKind = 'normal' | 'daily';
+type MobileTab = 'week' | 'personal';
 
 type AuthMeUser = {
   id: string;
@@ -91,12 +92,18 @@ export default function MobileWeekHub() {
 
 function MobileWeekHubInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [cursorDate] = useState<Date>(() => new Date());
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const activeTab = useMemo<MobileTab>(() => {
+    const raw = (searchParams.get('tab') ?? '').trim().toLowerCase();
+    return raw === 'personal' ? 'personal' : 'week';
+  }, [searchParams]);
 
   const weekStart = useMemo(() => {
     return startOfWeekMonday(cursorDate);
@@ -214,18 +221,50 @@ function MobileWeekHubInner() {
     router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=${encodeURIComponent(scheduleKind)}#punch`);
   }, [router, scheduleKind]);
 
+  const handleTabChange = useCallback((tab: MobileTab) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', tab);
+    router.replace(`/mobile/week-hub?${next.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">週予定</h1>
-          <div className="text-sm text-zinc-500 dark:text-zinc-400">
-            {toYmd(weekStart)}〜{toYmd(addDays(weekStart, 6))}
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold">週予定</h1>
+            <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => handleTabChange('week')}
+                className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  activeTab === 'week'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                    : 'text-zinc-500 dark:text-zinc-400'
+                }`}
+              >
+                週予定
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTabChange('personal')}
+                className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  activeTab === 'personal'
+                    ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
+                    : 'text-zinc-500 dark:text-zinc-400'
+                }`}
+              >
+                個人
+              </button>
+            </div>
+          </div>
+          <div className="text-right text-sm text-zinc-500 dark:text-zinc-400">
+            <div>{toYmd(weekStart)}〜{toYmd(addDays(weekStart, 6))}</div>
           </div>
         </div>
 
         <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          表示対象: {userLabel(currentUser ?? authUser)}
+          {activeTab === 'personal' ? `表示対象: ${userLabel(currentUser ?? authUser)}` : '表示対象: 全従業員'}
         </div>
 
         <div className="mt-4 overflow-x-auto">
@@ -256,90 +295,169 @@ function MobileWeekHubInner() {
           </div>
         ) : null}
 
-        <h2 className="mb-4 text-base font-medium">今週の予定</h2>
+        {activeTab === 'week' ? (
+          <>
+            <h2 className="mb-4 text-base font-medium">週予定</h2>
 
-        {isLoading ? (
-          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
-            読み込み中...
-          </div>
-        ) : !currentUser ? (
-          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
-            ログイン中ユーザーの予定を表示できません。
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {dayLabels.map((day) => {
-              const entries = cellEntries(currentUserGrid[day.key]);
-              return (
+            {isLoading ? (
+              <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                読み込み中...
+              </div>
+            ) : !schedule || schedule.users.length === 0 ? (
+              <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                表示できる従業員予定がありません。
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
                 <div
-                  key={day.key}
-                  className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-black"
+                  className="grid min-w-[760px]"
+                  style={{ gridTemplateColumns: 'minmax(132px, 160px) repeat(7, minmax(88px, 1fr))' }}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm text-zinc-500 dark:text-zinc-400">{day.key}</div>
-                      <div className="font-medium">
-                        {day.dow} {day.dayNum}日
-                      </div>
-                    </div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {entries.length > 0 ? `${entries.length}件` : '予定なし'}
-                    </div>
+                  <div className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                    従業員
                   </div>
+                  {dayLabels.map((day) => (
+                    <div
+                      key={`header:${day.key}`}
+                      className={`border-b border-l border-zinc-200 px-2 py-3 text-center text-xs dark:border-zinc-800 ${
+                        day.isSun
+                          ? 'text-red-600 dark:text-red-400'
+                          : day.isSat
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-zinc-500 dark:text-zinc-400'
+                      }`}
+                    >
+                      <div>{day.dow}</div>
+                      <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{day.dayNum}</div>
+                    </div>
+                  ))}
 
-                  {entries.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {entries.map((entry) => (
-                        <span
-                          key={`${day.key}:${entry}`}
-                          className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  {schedule.users.map((user) => {
+                    const isCurrentUser = user.id === authUser?.id;
+                    return (
+                      <Fragment key={user.id}>
+                        <div
+                          className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-3 py-3 text-sm font-medium dark:border-zinc-800 ${
+                            isCurrentUser ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-white dark:bg-black'
+                          }`}
                         >
-                          {entry}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">この日の予定はありません。</div>
-                  )}
+                          {userLabel(user)}
+                        </div>
+                        {dayLabels.map((day) => {
+                          const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
+                          return (
+                            <div
+                              key={`${user.id}:${day.key}`}
+                              className={`border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
+                                isCurrentUser ? 'bg-blue-50/60 dark:bg-blue-950/10' : ''
+                              }`}
+                            >
+                              {entries.length > 0 ? (
+                                <div className="space-y-1">
+                                  {entries.map((entry) => (
+                                    <div
+                                      key={`${user.id}:${day.key}:${entry}`}
+                                      className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                    >
+                                      {entry}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-zinc-300 dark:text-zinc-700">-</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        <h2 className="mb-4 mt-8 text-base font-medium">今週の現場リスト</h2>
-
-        {assignedSites.length === 0 ? (
-          <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
-            今週の割当現場はありません
-          </div>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="space-y-3">
-            {assignedSites.map((site) => (
-              site.id ? (
-                <button
-                  key={`${site.id}:${site.label}`}
-                  onClick={() => handleSiteClick(site.id!)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                >
-                  <div className="font-medium">{site.label}</div>
-                  <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    タップして打刻・詳細を表示
-                  </div>
-                </button>
-              ) : (
-                <div
-                  key={site.label}
-                  className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm dark:border-zinc-800 dark:bg-black"
-                >
-                  <div className="font-medium">{site.label}</div>
-                  <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    台帳未紐付けの予定名です
-                  </div>
-                </div>
-              )
-            ))}
-          </div>
+          <>
+            <h2 className="mb-4 text-base font-medium">今週の予定</h2>
+
+            {isLoading ? (
+              <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                読み込み中...
+              </div>
+            ) : !currentUser ? (
+              <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                ログイン中ユーザーの予定を表示できません。
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {dayLabels.map((day) => {
+                  const entries = cellEntries(currentUserGrid[day.key]);
+                  return (
+                    <div
+                      key={day.key}
+                      className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-black"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm text-zinc-500 dark:text-zinc-400">{day.key}</div>
+                          <div className="font-medium">
+                            {day.dow} {day.dayNum}日
+                          </div>
+                        </div>
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {entries.length > 0 ? `${entries.length}件` : '予定なし'}
+                        </div>
+                      </div>
+
+                      {entries.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {entries.map((entry) => (
+                            <span
+                              key={`${day.key}:${entry}`}
+                              className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                            >
+                              {entry}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">この日の予定はありません。</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 text-base font-medium">今週の現場リスト</h2>
+
+            {assignedSites.length === 0 ? (
+              <div className="py-8 text-center text-zinc-500 dark:text-zinc-400">今週の割当現場はありません</div>
+            ) : (
+              <div className="space-y-3">
+                {assignedSites.map((site) =>
+                  site.id ? (
+                    <button
+                      key={`${site.id}:${site.label}`}
+                      onClick={() => handleSiteClick(site.id!)}
+                      className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+                    >
+                      <div className="font-medium">{site.label}</div>
+                      <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">タップして打刻・詳細を表示</div>
+                    </button>
+                  ) : (
+                    <div
+                      key={site.label}
+                      className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm dark:border-zinc-800 dark:bg-black"
+                    >
+                      <div className="font-medium">{site.label}</div>
+                      <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">台帳未紐付けの予定名です</div>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
