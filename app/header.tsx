@@ -167,7 +167,15 @@ export default function AppHeader() {
     return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
   }, [isWeekHubPage, weekModeKey, weekScheduleKindKey]);
 
-  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
+  const defaultWeekGridPrefsForPage = useMemo(
+    () => defaultWeekGridPrefs(isMobileWeekHub ? 'mobile' : 'desktop'),
+    [isMobileWeekHub],
+  );
+  const defaultWeekHubCellFontSize = isMobileWeekHub ? 10 : 12;
+
+  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() =>
+    defaultWeekGridPrefs(isMobileWeekHub ? 'mobile' : 'desktop'),
+  );
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
   const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
   const overflowMenuRef = useRef<HTMLDivElement | null>(null);
@@ -350,13 +358,13 @@ export default function AppHeader() {
     try {
       const localKey = `masterHub.ui:${key}`;
       const txt = window.localStorage.getItem(localKey);
-      if (!txt) return defaultWeekGridPrefs();
+      if (!txt) return defaultWeekGridPrefsForPage;
       const parsed = JSON.parse(txt) as unknown;
-      return normalizeWeekGridPrefs(parsed);
+      return normalizeWeekGridPrefs(parsed, defaultWeekGridPrefsForPage);
     } catch {
-      return defaultWeekGridPrefs();
+      return defaultWeekGridPrefsForPage;
     }
-  }, []);
+  }, [defaultWeekGridPrefsForPage]);
 
   const readWeekGridPrefsRaw = useCallback((key: string): JsonObject => {
     try {
@@ -376,7 +384,7 @@ export default function AppHeader() {
         const localKey = `masterHub.ui:${weekGridPrefsKey}`;
         const current = readWeekGridPrefs(weekGridPrefsKey);
         const currentRaw = readWeekGridPrefsRaw(weekGridPrefsKey);
-        const next = normalizeWeekGridPrefs({ ...currentRaw, ...current, ...patch });
+        const next = normalizeWeekGridPrefs({ ...currentRaw, ...current, ...patch }, defaultWeekGridPrefsForPage);
         const payload = { ...currentRaw, ...next, v: WEEK_GRID_PREFS_VERSION };
         const nextTxt = JSON.stringify(payload);
         const prevTxt = window.localStorage.getItem(localKey);
@@ -398,7 +406,7 @@ export default function AppHeader() {
         // ignore
       }
     },
-    [headerUserId, readWeekGridPrefs, readWeekGridPrefsRaw, weekGridPrefsKey],
+    [defaultWeekGridPrefsForPage, headerUserId, readWeekGridPrefs, readWeekGridPrefsRaw, weekGridPrefsKey],
   );
 
   useEffect(() => {
@@ -447,7 +455,7 @@ export default function AppHeader() {
 
         const raw = (obj as { value?: unknown }).value;
         const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw, defaultWeekGridPrefsForPage);
         if (cancelled) return;
         setWeekGridPrefs(next);
 
@@ -469,7 +477,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
+  }, [defaultWeekGridPrefsForPage, headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
   const routeKey = useMemo(() => {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
@@ -856,15 +864,15 @@ export default function AppHeader() {
         document.documentElement.style.removeProperty('--weekhub-cell-font-size');
         return;
       }
-      const v = px && Number.isFinite(px) ? Math.max(10, Math.min(30, Math.round(px))) : 12;
+      const v = px && Number.isFinite(px) ? Math.max(10, Math.min(30, Math.round(px))) : defaultWeekHubCellFontSize;
       document.documentElement.style.setProperty('--weekhub-cell-font-size', `${v}px`);
     },
-    [isWeekHubPage],
+    [defaultWeekHubCellFontSize, isWeekHubPage],
   );
 
   useEffect(() => {
     // Apply on navigation (local first)
-    const local = readLocalPageFontSize(headerUserId);
+    const local = readLocalPageFontSize(headerUserId) ?? (isWeekHubPage ? defaultWeekHubCellFontSize : null);
     setPageFontSize(local);
     setPageFontSizeDraft(local == null ? '' : String(local));
     applyFontSize(local);
@@ -883,14 +891,14 @@ export default function AppHeader() {
         if (cancelled) return;
 
         const raw = obj.value;
-        const n = typeof raw === 'number' ? raw : null;
+        const n = typeof raw === 'number' ? raw : isWeekHubPage ? defaultWeekHubCellFontSize : null;
         setPageFontSize(n);
         setPageFontSizeDraft(n == null ? '' : String(n));
         applyFontSize(n);
         writeLocalPageFontSize(headerUserId, n);
       } catch {
         if (cancelled) return;
-        const fallback = readLocalPageFontSize(headerUserId);
+        const fallback = readLocalPageFontSize(headerUserId) ?? (isWeekHubPage ? defaultWeekHubCellFontSize : null);
         setPageFontSize(fallback);
         setPageFontSizeDraft(fallback == null ? '' : String(fallback));
         applyFontSize(fallback);
@@ -899,7 +907,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [applyFontSize, headerUserId, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
+  }, [applyFontSize, defaultWeekHubCellFontSize, headerUserId, isWeekHubPage, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
 
   const savePageFontSize = useCallback(
     async (px: number) => {

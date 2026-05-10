@@ -25,6 +25,11 @@ export const DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
   cellMinHComfortable: 64,
 };
 
+export const MOBILE_DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
+  ...DEFAULT_WEEK_GRID_PREFS,
+  nameColW: 88,
+};
+
 export const WEEK_GRID_BG_OPTIONS: Array<{ value: WeekGridCellBg; label: string }> = [
   { value: 'default', label: '白' },
   { value: 'soft', label: '薄' },
@@ -41,7 +46,7 @@ export const WEEK_GRID_TEXT_COLOR_OPTIONS: Array<{ value: WeekGridTextColor; lab
   { value: 'pink', label: '桃' },
 ];
 
-export const WEEK_GRID_NAME_WIDTH_OPTIONS = [112, 120, 128, 136, 144, 160, 176, 192, 224, 256] as const;
+export const WEEK_GRID_NAME_WIDTH_OPTIONS = [80, 88, 96, 104, 112, 120, 128, 136, 144, 160, 176, 192, 224, 256] as const;
 export const WEEK_GRID_DAY_WIDTH_OPTIONS = [84, 96, 108, 112, 124, 136, 148, 160, 176, 192, 224] as const;
 export const WEEK_GRID_COMPACT_HEIGHT_OPTIONS = [40, 44, 48, 52, 56, 60, 64] as const;
 export const WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS = [56, 64, 72, 80, 88, 96, 112, 128] as const;
@@ -65,8 +70,8 @@ export function isWeekGridCellBg(value: unknown): value is WeekGridCellBg {
   return value === 'default' || value === 'soft';
 }
 
-export function clampNameColumnWidth(value: number) {
-  return clampInt(value, 112, 280, DEFAULT_WEEK_GRID_PREFS.nameColW);
+export function clampNameColumnWidth(value: number, fallback = DEFAULT_WEEK_GRID_PREFS.nameColW) {
+  return clampInt(value, 80, 280, fallback);
 }
 
 export function buildNameColumnTrack(width: number) {
@@ -74,37 +79,37 @@ export function buildNameColumnTrack(width: number) {
   return `minmax(${clamped}px, ${clamped}px)`;
 }
 
-export function defaultWeekGridPrefs(): WeekGridPrefs {
-  return { ...DEFAULT_WEEK_GRID_PREFS };
+export function defaultWeekGridPrefs(target: 'desktop' | 'mobile' = 'desktop'): WeekGridPrefs {
+  return target === 'mobile' ? { ...MOBILE_DEFAULT_WEEK_GRID_PREFS } : { ...DEFAULT_WEEK_GRID_PREFS };
 }
 
-export function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
+export function normalizeWeekGridPrefs(raw: unknown, defaults: WeekGridPrefs = DEFAULT_WEEK_GRID_PREFS): WeekGridPrefs {
   const obj = asObject(raw);
-  const gridLayout = obj?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
-  const cellTextColor = isWeekGridTextColor(obj?.cellTextColor) ? obj.cellTextColor : DEFAULT_WEEK_GRID_PREFS.cellTextColor;
+  const gridLayout = obj?.gridLayout === 'comfortable' ? 'comfortable' : defaults.gridLayout;
+  const cellTextColor = isWeekGridTextColor(obj?.cellTextColor) ? obj.cellTextColor : defaults.cellTextColor;
   const cellBg = isWeekGridCellBg(obj?.cellBg)
     ? obj.cellBg
     : typeof obj?.cellBgShade === 'number' && obj.cellBgShade > 0
       ? 'soft'
-      : DEFAULT_WEEK_GRID_PREFS.cellBg;
-  const nameColW = clampNameColumnWidth(typeof obj?.nameColW === 'number' ? obj.nameColW : Number.NaN);
+      : defaults.cellBg;
+  const nameColW = clampNameColumnWidth(typeof obj?.nameColW === 'number' ? obj.nameColW : Number.NaN, defaults.nameColW);
   const cellMinW = clampInt(
     typeof obj?.cellMinW === 'number' ? obj.cellMinW : Number.NaN,
     84,
     240,
-    DEFAULT_WEEK_GRID_PREFS.cellMinW,
+    defaults.cellMinW,
   );
   const cellMinHCompact = clampInt(
     typeof obj?.cellMinHCompact === 'number' ? obj.cellMinHCompact : Number.NaN,
     40,
     120,
-    DEFAULT_WEEK_GRID_PREFS.cellMinHCompact,
+    defaults.cellMinHCompact,
   );
   const cellMinHComfortableBase = clampInt(
     typeof obj?.cellMinHComfortable === 'number' ? obj.cellMinHComfortable : Number.NaN,
     56,
     180,
-    DEFAULT_WEEK_GRID_PREFS.cellMinHComfortable,
+    defaults.cellMinHComfortable,
   );
 
   return {
