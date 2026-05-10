@@ -29,6 +29,7 @@ const CreateSchema = z
     name: z.string().max(200).optional().nullable(),
     email: z.string().email().max(320).optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
+    showInSchedule: z.boolean().optional(),
   })
   .strict();
 
@@ -38,6 +39,7 @@ const UpdateSchema = z
     name: z.string().max(200).optional().nullable(),
     email: z.string().email().max(320).optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional().nullable(),
+    showInSchedule: z.boolean().optional(),
   })
   .strict();
 
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where: kind ? { kind } : undefined,
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, email: true, kind: true, passwordHash: true },
+      select: { id: true, name: true, email: true, kind: true, showInSchedule: true, passwordHash: true },
       take: 200,
     });
 
@@ -68,6 +70,7 @@ export async function GET(request: Request) {
           name: user.name,
           email: user.email,
           kind: user.kind,
+          showInSchedule: user.showInSchedule,
           passwordConfigured: !!user.passwordHash,
         })),
       },
@@ -95,6 +98,7 @@ export async function POST(request: Request) {
     const name = typeof parsed.data.name === 'string' ? parsed.data.name.trim() || null : null;
     const email = typeof parsed.data.email === 'string' ? parsed.data.email.trim() || null : null;
     const kind = parsed.data.kind ?? 'NORMAL';
+    const showInSchedule = parsed.data.showInSchedule ?? true;
 
     if (!name && !email) {
       return Response.json({ ok: false, error: 'name or email is required' }, { status: 400 });
@@ -105,16 +109,16 @@ export async function POST(request: Request) {
       if (existing) {
         const user = await prisma.user.update({
           where: { id: existing.id },
-          data: { name, kind },
-          select: { id: true, name: true, email: true },
+          data: { name, kind, ...(showInSchedule ? { showInSchedule: true } : {}) },
+          select: { id: true, name: true, email: true, showInSchedule: true },
         });
         return Response.json({ ok: true, user });
       }
     }
 
     const user = await prisma.user.create({
-      data: { name, email, kind },
-      select: { id: true, name: true, email: true },
+      data: { name, email, kind, showInSchedule },
+      select: { id: true, name: true, email: true, showInSchedule: true },
     });
 
     return Response.json({ ok: true, user });
@@ -141,6 +145,7 @@ export async function PATCH(request: Request) {
     const name = typeof parsed.data.name === 'string' ? parsed.data.name.trim() || null : null;
     const email = typeof parsed.data.email === 'string' ? parsed.data.email.trim() || null : undefined;
     const kind = parsed.data.kind ?? undefined;
+    const showInSchedule = parsed.data.showInSchedule;
 
     const user = await prisma.user.update({
       where: { id },
@@ -148,8 +153,9 @@ export async function PATCH(request: Request) {
         name,
         ...(email !== undefined ? { email } : {}),
         ...(kind !== undefined ? { kind } : {}),
+        ...(showInSchedule !== undefined ? { showInSchedule } : {}),
       },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, showInSchedule: true },
     });
 
     return Response.json({ ok: true, user });

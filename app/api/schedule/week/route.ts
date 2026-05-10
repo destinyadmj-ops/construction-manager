@@ -119,7 +119,7 @@ export async function GET(request: Request) {
   const days = Array.from({ length: 7 }, (_, i) => toYmd(addDays(weekStart, i)));
 
   const users = await prisma.user.findMany({
-    where: { kind },
+    where: { kind, showInSchedule: true },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, email: true },
     take: 200,

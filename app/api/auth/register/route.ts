@@ -25,6 +25,7 @@ const RegisterSchema = z
     name: z.string().min(1).max(200),
     email: z.string().email().max(320).optional().nullable(),
     kind: z.enum(['NORMAL', 'DAILY']).optional(),
+    showInSchedule: z.boolean().optional(),
     registrationPassword: z.string().max(200).optional().nullable(),
     userPassword: z.string().max(200).optional().nullable(),
     device: DeviceSchema.optional(),
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
   const name = parsed.data.name.trim();
   const email = typeof parsed.data.email === 'string' ? parsed.data.email.trim() || null : null;
   const kind = parsed.data.kind ?? 'NORMAL';
+  const showInSchedule = parsed.data.showInSchedule ?? true;
   const password = (parsed.data.registrationPassword ?? '').toString();
   const userPassword = (parsed.data.userPassword ?? '').toString();
 
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
     if (email) {
       const existing = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, passwordHash: true },
+        select: { id: true, passwordHash: true, showInSchedule: true },
       });
       if (existing) {
         const updated = await prisma.user.update({
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
           data: {
             name,
             kind,
+            ...(showInSchedule && !existing.showInSchedule ? { showInSchedule: true } : {}),
             ...(nextPasswordHash && !existing.passwordHash
               ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt }
               : {}),
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
             name,
             email,
             kind,
+            showInSchedule,
             ...(nextPasswordHash ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt } : {}),
           },
           select: { id: true },
@@ -119,6 +123,7 @@ export async function POST(request: Request) {
           name,
           email: null,
           kind,
+          showInSchedule,
           ...(nextPasswordHash ? { passwordHash: nextPasswordHash, passwordSetAt: nextPasswordSetAt } : {}),
         },
         select: { id: true },

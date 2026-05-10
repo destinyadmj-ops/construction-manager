@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad2(i + 1)}`);
 
   const users = await prisma.user.findMany({
-    where: { kind },
+    where: { kind, showInSchedule: true },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, email: true },
     take: 200,

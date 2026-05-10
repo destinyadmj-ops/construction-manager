@@ -216,6 +216,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const [registrationPassword, setRegistrationPassword] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userPasswordConfirm, setUserPasswordConfirm] = useState('');
+  const [registerShowInSchedule, setRegisterShowInSchedule] = useState(true);
   const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -257,6 +258,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     setExistingPassword('');
     setNewExistingPassword('');
     setNewExistingPasswordConfirm('');
+    setRegisterShowInSchedule(true);
   }, [open, selectedExistingId]);
 
   useEffect(() => {
@@ -631,6 +633,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           name: n,
           email: email.trim() || null,
           kind: currentKind,
+          showInSchedule: isMobileBrowser ? true : registerShowInSchedule,
           registrationPassword: registrationPassword.trim() || null,
           userPassword: !isMobileBrowser ? userPassword : null,
           device: {
@@ -838,6 +841,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
                 />
                 {!isMobileBrowser ? (
                   <>
+                    <label className="flex items-start gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={registerShowInSchedule}
+                        onChange={(e) => setRegisterShowInSchedule(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-black"
+                      />
+                      <span>
+                        新規登録後、この名前を{currentKind === 'DAILY' ? '日報' : '週予定'}の一覧に追加する
+                      </span>
+                    </label>
                     <input
                       type="password"
                       value={userPassword}
