@@ -364,6 +364,8 @@ function MobileWeekHubInner() {
     return Math.max(320, weekGridPrefs.nameColW + weekGridPrefs.cellMinW * 7);
   }, [weekGridPrefs.cellMinW, weekGridPrefs.nameColW]);
 
+  const scheduleCellFontSize = 'var(--weekhub-cell-font-size, 12px)';
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
@@ -524,6 +526,7 @@ function MobileWeekHubInner() {
                                     <div
                                       key={`${user.id}:${day.key}:${entry}`}
                                       className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                      style={{ fontSize: scheduleCellFontSize }}
                                     >
                                       {entry}
                                     </div>
@@ -581,6 +584,7 @@ function MobileWeekHubInner() {
                             <span
                               key={`${day.key}:${entry}`}
                               className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                              style={{ fontSize: scheduleCellFontSize }}
                             >
                               {entry}
                             </span>

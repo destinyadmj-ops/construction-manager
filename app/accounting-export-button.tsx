@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 type Props = {
   body?: unknown;
@@ -43,11 +43,13 @@ export default function AccountingExportButton({
   presetKey,
   label = '会計CSVをダウンロード',
 }: Props) {
+  const requestInFlightRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onClick = useCallback(async () => {
-    if (isLoading) return;
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -103,9 +105,10 @@ export default function AccountingExportButton({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Export failed');
     } finally {
+      requestInFlightRef.current = false;
       setIsLoading(false);
     }
-  }, [body, isLoading, presetKey]);
+  }, [body, presetKey]);
 
   return (
     <div className="flex flex-col gap-2">
