@@ -2,6 +2,12 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  buildNameColumnTrack,
+  defaultWeekGridPrefs,
+  normalizeWeekGridPrefs,
+  type WeekGridPrefs,
+} from '@/shared/week-grid-prefs';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -37,6 +43,8 @@ type SiteItem = {
   companyName?: string | null;
   name: string;
 };
+
+type JsonObject = Record<string, unknown>;
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -80,6 +88,10 @@ function normalizeSiteLookupKey(value: string) {
   return value.replace(/\s\+\d+$/, '').trim();
 }
 
+function asObject(value: unknown): JsonObject | null {
+  return value && typeof value === 'object' ? (value as JsonObject) : null;
+}
+
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
 
 export default function MobileWeekHub() {
@@ -97,6 +109,7 @@ function MobileWeekHubInner() {
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
+  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +134,7 @@ function MobileWeekHubInner() {
   }, [cursorDate]);
 
   const scheduleKind = useMemo(() => normalizeScheduleKind(authUser?.kind), [authUser?.kind]);
+  const weekGridPrefsKey = useMemo(() => `week-hub:${scheduleKind}:week:gridPrefs`, [scheduleKind]);
 
   const viewMonth = useMemo(() => `${weekStart.getFullYear()}-${pad2(weekStart.getMonth() + 1)}`, [weekStart]);
 
@@ -137,6 +151,88 @@ function MobileWeekHubInner() {
       isSun: i === 6,
     }));
   }, [days]);
+
+  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
+    try {
+      const localKey = `masterHub.ui:${key}`;
+      const txt = window.localStorage.getItem(localKey);
+      if (!txt) return defaultWeekGridPrefs();
+      return normalizeWeekGridPrefs(JSON.parse(txt) as unknown);
+    } catch {
+      return defaultWeekGridPrefs();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+  }, [readWeekGridPrefs, weekGridPrefsKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const apply = (event?: Event) => {
+      if (event instanceof StorageEvent) {
+        if (event.key && event.key !== `masterHub.ui:${weekGridPrefsKey}`) return;
+      }
+
+      if (event instanceof CustomEvent) {
+        const detail = asObject(event.detail);
+        if (typeof detail?.key === 'string' && detail.key !== weekGridPrefsKey) return;
+      }
+
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+    };
+
+    window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+    window.addEventListener('storage', apply as EventListener);
+    return () => {
+      window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
+      window.removeEventListener('storage', apply as EventListener);
+    };
+  }, [readWeekGridPrefs, weekGridPrefsKey]);
+
+  useEffect(() => {
+    if (!authUser?.id) {
+      if (typeof window !== 'undefined') {
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/ui-settings?userId=${encodeURIComponent(authUser.id)}&key=${encodeURIComponent(weekGridPrefsKey)}`,
+          { cache: 'no-store' },
+        );
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) throw new Error('not ok');
+
+        const raw = (obj as { value?: unknown }).value;
+        const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+        if (cancelled) return;
+        setWeekGridPrefs(next);
+
+        try {
+          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+          window.localStorage.setItem(localKey, JSON.stringify({ ...(vObj ?? {}), ...next }));
+        } catch {
+          // ignore
+        }
+      } catch {
+        if (cancelled || typeof window === 'undefined') return;
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, readWeekGridPrefs, weekGridPrefsKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -254,6 +350,20 @@ function MobileWeekHubInner() {
     return `${toYmd(weekStart)}〜${toYmd(addDays(weekStart, 6))}`;
   }, [weekStart]);
 
+  const weekGridCellMinH = useMemo(() => {
+    return weekGridPrefs.gridLayout === 'comfortable'
+      ? weekGridPrefs.cellMinHComfortable
+      : weekGridPrefs.cellMinHCompact;
+  }, [weekGridPrefs.cellMinHComfortable, weekGridPrefs.cellMinHCompact, weekGridPrefs.gridLayout]);
+
+  const weekGridTemplateColumns = useMemo(() => {
+    return `${buildNameColumnTrack(weekGridPrefs.nameColW)} repeat(7, minmax(${Math.max(60, Math.round(weekGridPrefs.cellMinW))}px, 1fr))`;
+  }, [weekGridPrefs.cellMinW, weekGridPrefs.nameColW]);
+
+  const weekGridMinWidth = useMemo(() => {
+    return Math.max(320, weekGridPrefs.nameColW + weekGridPrefs.cellMinW * 7);
+  }, [weekGridPrefs.cellMinW, weekGridPrefs.nameColW]);
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
@@ -360,10 +470,13 @@ function MobileWeekHubInner() {
             ) : (
               <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
                 <div
-                  className="grid min-w-[760px]"
-                  style={{ gridTemplateColumns: 'minmax(132px, 160px) repeat(7, minmax(88px, 1fr))' }}
+                  className="grid"
+                  style={{ gridTemplateColumns: weekGridTemplateColumns, minWidth: `${weekGridMinWidth}px` }}
                 >
-                  <div className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                  <div
+                    className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400"
+                    style={{ minHeight: `${weekGridCellMinH}px` }}
+                  >
                     従業員
                   </div>
                   {dayLabels.map((day) => (
@@ -376,6 +489,7 @@ function MobileWeekHubInner() {
                             ? 'text-blue-600 dark:text-blue-400'
                             : 'text-zinc-500 dark:text-zinc-400'
                       }`}
+                      style={{ minHeight: `${weekGridCellMinH}px` }}
                     >
                       <div>{day.dow}</div>
                       <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{day.dayNum}</div>
@@ -390,6 +504,7 @@ function MobileWeekHubInner() {
                           className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-3 py-3 text-sm font-medium dark:border-zinc-800 ${
                             isCurrentUser ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-white dark:bg-black'
                           }`}
+                          style={{ minHeight: `${weekGridCellMinH}px` }}
                         >
                           {userLabel(user)}
                         </div>
@@ -401,6 +516,7 @@ function MobileWeekHubInner() {
                               className={`border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
                                 isCurrentUser ? 'bg-blue-50/60 dark:bg-blue-950/10' : ''
                               }`}
+                              style={{ minHeight: `${weekGridCellMinH}px` }}
                             >
                               {entries.length > 0 ? (
                                 <div className="space-y-1">
