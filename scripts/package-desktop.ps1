@@ -4,12 +4,13 @@
 param(
     [switch]$SkipBuild,
     [switch]$DirOnly,
-    [string]$MasterHubUrl = "http://localhost:3000",
+    [string]$MasterHubUrl = "",
     [string]$DesktopReleaseUrl = "",
     [string]$DesktopVersion = "",
     [string]$WindowsCertFile = "",
     [string]$WindowsCertPassword = "",
-    [string]$WindowsCertSha1 = ""
+    [string]$WindowsCertSha1 = "",
+    [switch]$AllowLocalhostUrl
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,25 @@ Write-Host "=== Master Hub Desktop Packaging ===" -ForegroundColor Cyan
 # Check if we're in the root directory
 if (-not (Test-Path "apps/desktop")) {
     Write-Host "Error: apps/desktop not found. Run this from the project root." -ForegroundColor Red
+    exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($MasterHubUrl)) {
+    Write-Host "Error: -MasterHubUrl is required. Example: -MasterHubUrl https://masterhubapp.org/" -ForegroundColor Red
+    exit 1
+}
+
+try {
+    $parsedMasterHubUrl = [Uri]$MasterHubUrl
+} catch {
+    Write-Host "Error: -MasterHubUrl is not a valid URL: $MasterHubUrl" -ForegroundColor Red
+    exit 1
+}
+
+$isLocalhostUrl = $parsedMasterHubUrl.Host -in @('localhost', '127.0.0.1')
+if ($isLocalhostUrl -and -not $AllowLocalhostUrl) {
+    Write-Host "Error: localhost/127.0.0.1 packaging is blocked by default to prevent broken distribution builds." -ForegroundColor Red
+    Write-Host "Use a deployed URL such as https://masterhubapp.org/ or pass -AllowLocalhostUrl intentionally." -ForegroundColor Red
     exit 1
 }
 
@@ -111,15 +131,13 @@ if (-not [string]::IsNullOrWhiteSpace($DesktopReleaseUrl)) {
 
 # 4. Persist runtime config into the packaged app
 Write-Host "`n[4/6] Writing runtime config..." -ForegroundColor Yellow
-$runtimeConfig = [ordered]@{
-    masterHubUrl = $MasterHubUrl
+node write-runtime-config.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Runtime config generation failed!" -ForegroundColor Red
+    Pop-Location
+    exit 1
 }
-if (-not [string]::IsNullOrWhiteSpace($DesktopReleaseUrl)) {
-    $runtimeConfig.desktopReleaseUrl = $DesktopReleaseUrl
-}
-$runtimeConfigPath = Join-Path (Get-Location) "build/runtime-config.json"
-$runtimeConfig | ConvertTo-Json | Set-Content -Path $runtimeConfigPath -Encoding UTF8
-Write-Host "Runtime config written: $runtimeConfigPath" -ForegroundColor Green
+Write-Host "Runtime config written." -ForegroundColor Green
 
 # 5. Generate icons and build
 Write-Host "`n[5/6] Generating icons..." -ForegroundColor Yellow
