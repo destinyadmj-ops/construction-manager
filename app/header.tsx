@@ -143,25 +143,29 @@ export default function AppHeader() {
 
   const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
 
-  const isWeek = pathname === '/' && (!mode || mode === 'week');
+  const isWeekHubRoot = pathname === '/';
+  const isMobileWeekHub = pathname === '/mobile/week-hub';
+  const isWeekHubPage = isWeekHubRoot || isMobileWeekHub;
+  const isWeek = isWeekHubRoot && (!mode || mode === 'week');
 
   const weekModeKey = useMemo(() => {
+    if (isMobileWeekHub) return 'week';
     if (pathname !== '/') return null;
     const m = (mode ?? '').trim();
     if (m === 'month' || m === 'year' || m === 'week') return m;
     return 'week';
-  }, [mode, pathname]);
+  }, [isMobileWeekHub, mode, pathname]);
 
   const weekScheduleKindKey = useMemo(() => {
-    if (pathname !== '/') return null;
+    if (!isWeekHubPage) return null;
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
     return k === 'daily' ? 'daily' : 'normal';
-  }, [pathname, searchParams]);
+  }, [isWeekHubPage, searchParams]);
 
   const weekGridPrefsKey = useMemo(() => {
-    if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
+    if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
     return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
-  }, [pathname, weekModeKey, weekScheduleKindKey]);
+  }, [isWeekHubPage, weekModeKey, weekScheduleKindKey]);
 
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
@@ -1401,7 +1405,7 @@ export default function AppHeader() {
                       </div>
                     </div>
 
-                  {pathname === '/' && weekGridPrefsKey ? (
+                  {isWeekHubPage && weekGridPrefsKey ? (
                     <>
                       <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                         表示（セル）
