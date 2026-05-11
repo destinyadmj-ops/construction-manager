@@ -48,6 +48,7 @@ export default function PartnersPage() {
   const [draftName, setDraftName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [isReloading, setIsReloading] = useState(false);
   const [source, setSource] = useState<'server' | 'local'>('local');
   const [serverPartners, setServerPartners] = useState<ApiPartner[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function PartnersPage() {
   }, []);
 
   const loadFromServer = useCallback(async () => {
+    setIsReloading(true);
     setStatusMsg(null);
     try {
       const r = await fetch('/api/partners');
@@ -118,6 +120,8 @@ export default function PartnersPage() {
     } catch {
       setSource('local');
       setStatusMsg('DB未接続のためローカル表示');
+    } finally {
+      setIsReloading(false);
     }
   }, []);
 
@@ -504,6 +508,16 @@ export default function PartnersPage() {
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">関係会社</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           {source === 'server' ? 'DBの一覧を表示しています。' : 'この端末のローカル保存です（DB未接続時のフォールバック）。'}
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={() => void loadFromServer()}
+            disabled={isReloading}
+            className="mt-2 rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+          >
+            {isReloading ? '再読み込み中…' : '再読み込み'}
+          </button>
         </div>
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
 
