@@ -541,8 +541,7 @@ function WeekHubInner() {
 
   useEffect(() => {
     const k = (searchParams.get('kind') ?? '').toLowerCase();
-    if (k === 'daily') setScheduleKind('daily');
-    if (k === 'normal') setScheduleKind('normal');
+    setScheduleKind(k === 'daily' ? 'daily' : 'normal');
   }, [searchParams]);
 
   useEffect(() => {
