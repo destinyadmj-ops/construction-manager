@@ -1,3 +1,4 @@
+import { normalizeSiteFamilyKey, findSiteFamily } from '@/shared/site-family';
 import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
@@ -99,23 +100,17 @@ function colorForEntry(input: {
   return input.label.includes('!') ? 'red' : 'default';
 }
 
-function normalizeGroupKey(value: string | null | undefined) {
-  return (value ?? '')
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .toLocaleLowerCase('ja-JP');
-}
-
 function formatGroupValue(group: { items: Array<{ label: string }> } | null | undefined) {
   const labels = (group?.items ?? []).map((item) => item.label.trim()).filter((label) => label.length > 0);
   return labels.length > 0 ? labels.join(' / ') : null;
 }
 
-function buildCellGroups(items: Array<{ label: string; color: LabelColor; companyName: string | null }>) {
+function buildCellGroups(items: Array<{ label: string; color: LabelColor }>) {
   const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor }> }> = [];
+  const peerNames = items.map((item) => item.label);
   for (const item of items) {
-    const companyKey = normalizeGroupKey(item.companyName);
-    const key = companyKey ? `company:${companyKey}` : `single:${normalizeGroupKey(item.label)}`;
+    const family = findSiteFamily(item.label, peerNames);
+    const key = family.key ? `family:${family.key}` : `single:${normalizeSiteFamilyKey(item.label)}`;
     const hit = groups.find((group) => group.key === key);
     if (hit) {
       hit.items.push({ label: item.label, color: item.color });
@@ -185,7 +180,7 @@ export async function GET(request: Request) {
 
   for (const u of users) grid[u.id] = {};
 
-  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; companyName: string | null }>>> = {};
+  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor }>>> = {};
 
   for (const e of entries) {
     const day = toYmd(e.startAt);
@@ -197,7 +192,7 @@ export async function GET(request: Request) {
     const color: LabelColor = colorForEntry({ label, site: e.site, accountingMeta: e.accountingMeta });
     if (!cellItems[e.userId]) cellItems[e.userId] = {};
     if (!cellItems[e.userId]![day]) cellItems[e.userId]![day] = [];
-    cellItems[e.userId]![day]!.push({ label, color, companyName: e.site?.companyName ?? null });
+    cellItems[e.userId]![day]!.push({ label, color });
   }
 
   for (const uid of Object.keys(cellItems)) {

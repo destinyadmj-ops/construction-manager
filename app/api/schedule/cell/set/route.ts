@@ -6,6 +6,7 @@ import {
 } from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { ensureSiteDayFolders } from '@/server/site-storage';
+import { findSiteFamily, normalizeSiteFamilyKey } from '@/shared/site-family';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -59,13 +60,6 @@ function addMinutes(d: Date, minutes: number) {
   return x;
 }
 
-function normalizeGroupKey(value: string | null | undefined) {
-  return (value ?? '')
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .toLocaleLowerCase('ja-JP');
-}
-
 function buildSnapshotFromGroups(groups: NormalizedGroup[]) {
   return createScheduleCellSnapshot({
     slot1: groups[0] ? groups[0].items.map((item) => item.label).join(' / ') : null,
@@ -82,28 +76,36 @@ function buildGroupsFromEntries(
     site: { name: string; companyName: string | null } | null;
   }>,
 ): NormalizedGroup[] {
+  const items = entries
+    .map((entry) => {
+      const label =
+        typeof entry.site?.name === 'string' && entry.site.name.trim()
+          ? entry.site.name.trim()
+          : typeof entry.summary === 'string'
+            ? entry.summary.trim()
+            : '';
+      if (!label) return null;
+
+      const meta = entry.accountingMeta && typeof entry.accountingMeta === 'object' && !Array.isArray(entry.accountingMeta)
+        ? (entry.accountingMeta as Record<string, unknown>)
+        : null;
+      const color = LabelColorSchema.safeParse(meta?.labelColor).success
+        ? (meta?.labelColor as LabelColor)
+        : 'default';
+      return { label, color };
+    })
+    .filter((item): item is NormalizedGroupItem => !!item);
+
   const groups: Array<{ key: string; items: NormalizedGroupItem[] }> = [];
-  for (const entry of entries) {
-    const label =
-      typeof entry.site?.name === 'string' && entry.site.name.trim()
-        ? entry.site.name.trim()
-        : typeof entry.summary === 'string'
-          ? entry.summary.trim()
-          : '';
-    if (!label) continue;
-    const meta = entry.accountingMeta && typeof entry.accountingMeta === 'object' && !Array.isArray(entry.accountingMeta)
-      ? (entry.accountingMeta as Record<string, unknown>)
-      : null;
-    const color = LabelColorSchema.safeParse(meta?.labelColor).success
-      ? (meta?.labelColor as LabelColor)
-      : 'default';
-    const companyKey = normalizeGroupKey(entry.site?.companyName);
-    const key = companyKey ? `company:${companyKey}` : `single:${normalizeGroupKey(label)}`;
+  const peerNames = items.map((item) => item.label);
+  for (const item of items) {
+    const family = findSiteFamily(item.label, peerNames);
+    const key = family.key ? `family:${family.key}` : `single:${normalizeSiteFamilyKey(item.label)}`;
     const hit = groups.find((group) => group.key === key);
     if (hit) {
-      hit.items.push({ label, color });
+      hit.items.push(item);
     } else {
-      groups.push({ key, items: [{ label, color }] });
+      groups.push({ key, items: [item] });
     }
   }
   return groups.slice(0, 2).map((group) => ({ items: group.items.slice(0, 4) }));
