@@ -5695,6 +5695,59 @@ function Row({
     return '反映しました';
   };
 
+  const syncSiteColorAcrossUsers = useCallback(
+    async (input: { day: string; siteName: string; color: LabelColor; sourceUserId: string }) => {
+      const targets = allUsers
+        .filter((targetUser) => targetUser.id !== input.sourceUserId)
+        .map((targetUser) => {
+          const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[input.day]);
+          const preview = previewCellAction({
+            cell: beforeCell,
+            action: 'recolor',
+            siteName: input.siteName,
+            color: input.color,
+            familyKeyForSiteName: siteFamilyKeyForName,
+          });
+
+          if (!preview.changed) return null;
+
+          return {
+            targetUser,
+            beforeCell,
+            nextCell: preview.cell,
+          };
+        })
+        .filter(
+          (
+            target,
+          ): target is { targetUser: ApiUser; beforeCell: ApiCell; nextCell: ApiCell } => target !== null,
+        );
+
+      if (targets.length === 0) return { syncedCount: 0, failedCount: 0 };
+
+      const results = await Promise.all(
+        targets.map((target) =>
+          persistCellSet({
+            targetUser: target.targetUser,
+            day: input.day,
+            beforeCell: target.beforeCell,
+            nextCell: target.nextCell,
+          }),
+        ),
+      );
+
+      let syncedCount = 0;
+      let failedCount = 0;
+      for (const result of results) {
+        if (result.failed) failedCount += 1;
+        else if (result.changed) syncedCount += 1;
+      }
+
+      return { syncedCount, failedCount };
+    },
+    [allGrid, allUsers, persistCellSet, siteFamilyKeyForName],
+  );
+
   const runCellAction = async (input: {
     day: string;
     action: CellClickAction;
@@ -5748,13 +5801,30 @@ function Row({
       return;
     }
 
-    onNotify?.(
-      formatCellActionSuccess({
-        action: input.action,
-        toggled: preview.toggled,
-        replaced: preview.replaced,
-      }),
-    );
+    let syncedCount = 0;
+    let failedCount = 0;
+    if (input.action === 'recolor' && resolvedSiteName) {
+      const syncResult = await syncSiteColorAcrossUsers({
+        day: input.day,
+        siteName: resolvedSiteName,
+        color: requestedColor,
+        sourceUserId: user.id,
+      });
+      syncedCount = syncResult.syncedCount;
+      failedCount = syncResult.failedCount;
+    }
+
+    const successMessage = formatCellActionSuccess({
+      action: input.action,
+      toggled: preview.toggled,
+      replaced: preview.replaced,
+    });
+
+    const messages = [successMessage];
+    if (syncedCount > 0) messages.push(`他${syncedCount}名に色同期`);
+    if (failedCount > 0) messages.push(`${failedCount}名失敗`);
+    onNotify?.(messages.join(' / '));
+
     void Promise.resolve(onAssigned()).catch(() => undefined);
   };
 
