@@ -2,7 +2,6 @@ import { prisma } from '@/server/db/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import {
   createScheduleCellSnapshot,
-  createScheduleCellSnapshotFromWorkEntries,
   recordScheduleChangeHistory,
 } from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
@@ -12,6 +11,18 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 
 const LabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
+const CellGroupItemSchema = z
+  .object({
+    label: z.string().trim().min(1).max(200),
+    color: LabelColorSchema.optional().nullable(),
+  })
+  .strict();
+
+const CellGroupSchema = z
+  .object({
+    items: z.array(CellGroupItemSchema).min(1).max(4),
+  })
+  .strict();
 
 const BodySchema = z
   .object({
@@ -22,8 +33,13 @@ const BodySchema = z
     slot2: z.string().trim().max(200).nullable().optional(),
     slot1Color: LabelColorSchema.optional().nullable(),
     slot2Color: LabelColorSchema.optional().nullable(),
+    groups: z.array(CellGroupSchema).max(2).optional().nullable(),
   })
   .strict();
+
+  type LabelColor = z.infer<typeof LabelColorSchema>;
+  type NormalizedGroupItem = { label: string; color: LabelColor };
+  type NormalizedGroup = { items: NormalizedGroupItem[] };
 
 function startOfDayLocal(ymd: string) {
   const d = new Date(`${ymd}T00:00:00`);
@@ -41,6 +57,68 @@ function addMinutes(d: Date, minutes: number) {
   const x = new Date(d);
   x.setMinutes(x.getMinutes() + minutes);
   return x;
+}
+
+function normalizeGroupKey(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .toLocaleLowerCase('ja-JP');
+}
+
+function buildSnapshotFromGroups(groups: NormalizedGroup[]) {
+  return createScheduleCellSnapshot({
+    slot1: groups[0] ? groups[0].items.map((item) => item.label).join(' / ') : null,
+    slot1Color: groups[0]?.items[0]?.color ?? 'default',
+    slot2: groups[1] ? groups[1].items.map((item) => item.label).join(' / ') : null,
+    slot2Color: groups[1]?.items[0]?.color ?? 'default',
+  });
+}
+
+function buildGroupsFromEntries(
+  entries: Array<{
+    summary: string | null;
+    accountingMeta: unknown;
+    site: { name: string; companyName: string | null } | null;
+  }>,
+): NormalizedGroup[] {
+  const groups: Array<{ key: string; items: NormalizedGroupItem[] }> = [];
+  for (const entry of entries) {
+    const label =
+      typeof entry.site?.name === 'string' && entry.site.name.trim()
+        ? entry.site.name.trim()
+        : typeof entry.summary === 'string'
+          ? entry.summary.trim()
+          : '';
+    if (!label) continue;
+    const meta = entry.accountingMeta && typeof entry.accountingMeta === 'object' && !Array.isArray(entry.accountingMeta)
+      ? (entry.accountingMeta as Record<string, unknown>)
+      : null;
+    const color = LabelColorSchema.safeParse(meta?.labelColor).success
+      ? (meta?.labelColor as LabelColor)
+      : 'default';
+    const companyKey = normalizeGroupKey(entry.site?.companyName);
+    const key = companyKey ? `company:${companyKey}` : `single:${normalizeGroupKey(label)}`;
+    const hit = groups.find((group) => group.key === key);
+    if (hit) {
+      hit.items.push({ label, color });
+    } else {
+      groups.push({ key, items: [{ label, color }] });
+    }
+  }
+  return groups.slice(0, 2).map((group) => ({ items: group.items.slice(0, 4) }));
+}
+
+function groupsFromLegacySlots(input: {
+  slot1Name: string | null;
+  slot2Name: string | null;
+  slot1Color: LabelColor;
+  slot2Color: LabelColor;
+}): NormalizedGroup[] {
+  const groups: NormalizedGroup[] = [];
+  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color }] });
+  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color }] });
+  return groups;
 }
 
 async function resolveSiteByName(
@@ -81,58 +159,80 @@ export async function POST(request: Request) {
     const beforeEntries = await prisma.workEntry.findMany({
       where: { userId, kind, startAt: { gte: startAt, lt: until } },
       orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
-      select: { summary: true, accountingMeta: true },
+      select: { summary: true, accountingMeta: true, site: { select: { name: true, companyName: true } } },
     });
-    const beforeSnapshot = createScheduleCellSnapshotFromWorkEntries(beforeEntries);
+    const beforeSnapshot = buildSnapshotFromGroups(buildGroupsFromEntries(beforeEntries));
 
     const slot1Name = (parsed.data.slot1 ?? null)?.trim() || null;
     const slot2Name = (parsed.data.slot2 ?? null)?.trim() || null;
     const slot1Color = parsed.data.slot1Color ?? 'default';
     const slot2Color = parsed.data.slot2Color ?? 'default';
 
-    const [slot1Site, slot2Site] = await Promise.all([
-      slot1Name ? resolveSiteByName(slot1Name, kind) : Promise.resolve(null),
-      slot2Name ? resolveSiteByName(slot2Name, kind) : Promise.resolve(null),
-    ]);
+    const normalizedGroups = parsed.data.groups
+      ? parsed.data.groups
+          .map((group) => ({
+            items: group.items
+              .map((item) => ({
+                label: item.label.trim(),
+                color: item.color ?? 'default',
+              }))
+              .filter((item) => item.label.length > 0),
+          }))
+          .filter((group) => group.items.length > 0)
+      : groupsFromLegacySlots({ slot1Name, slot2Name, slot1Color, slot2Color });
+
+    if (normalizedGroups.length > 2) {
+      return Response.json({ ok: false, error: '最大2枠までです' }, { status: 400 });
+    }
+    if (normalizedGroups.filter((group) => group.items.length > 1).length > 1) {
+      return Response.json({ ok: false, error: '複数店舗を持てる枠は1つだけです' }, { status: 400 });
+    }
+    if (normalizedGroups.some((group) => group.items.length > 4)) {
+      return Response.json({ ok: false, error: '同名別店舗は1枠4件までです' }, { status: 400 });
+    }
+
+    const resolvedGroups = await Promise.all(
+      normalizedGroups.map(async (group) => ({
+        items: await Promise.all(
+          group.items.map(async (item) => {
+            const site = await resolveSiteByName(item.label, kind);
+            return site ? { site, color: item.color } : null;
+          }),
+        ),
+      })),
+    );
+
+    const finalGroups: Array<{ items: Array<{ site: { id: string; name: string }; color: LabelColor }> }> = resolvedGroups.map((group) => ({
+      items: group.items.filter((item): item is { site: { id: string; name: string }; color: LabelColor } => !!item),
+    }));
 
     await prisma.$transaction(async (tx) => {
       await tx.workEntry.deleteMany({ where: { userId, kind, startAt: { gte: startAt, lt: until } } });
 
-      if (slot1Site) {
-        await tx.workEntry.create({
-          data: {
-            userId,
-            kind,
-            startAt: addMinutes(startAt, 0),
-            summary: slot1Site.name,
-            siteId: slot1Site.id,
-            accountingMeta: { siteName: slot1Site.name, labelColor: slot1Color },
-          },
-          select: { id: true },
-        });
-      }
-
-      if (slot2Site) {
-        await tx.workEntry.create({
-          data: {
-            userId,
-            kind,
-            startAt: addMinutes(startAt, 1),
-            summary: slot2Site.name,
-            siteId: slot2Site.id,
-            accountingMeta: { siteName: slot2Site.name, labelColor: slot2Color },
-          },
-          select: { id: true },
-        });
+      let minuteOffset = 0;
+      for (const group of finalGroups) {
+        for (const item of group.items) {
+          await tx.workEntry.create({
+            data: {
+              userId,
+              kind,
+              startAt: addMinutes(startAt, minuteOffset),
+              summary: item.site.name,
+              siteId: item.site.id,
+              accountingMeta: { siteName: item.site.name, labelColor: item.color },
+            },
+            select: { id: true },
+          });
+          minuteOffset += 1;
+        }
       }
     });
 
     try {
-      if (slot1Site) {
-        await ensureSiteDayFolders({ siteId: slot1Site.id, siteName: slot1Site.name, dayYmd: day });
-      }
-      if (slot2Site) {
-        await ensureSiteDayFolders({ siteId: slot2Site.id, siteName: slot2Site.name, dayYmd: day });
+      for (const group of finalGroups) {
+        for (const item of group.items) {
+          await ensureSiteDayFolders({ siteId: item.site.id, siteName: item.site.name, dayYmd: day });
+        }
       }
     } catch {
       // ignore history folder creation failure
@@ -146,12 +246,11 @@ export async function POST(request: Request) {
       dayYmd: day,
       targetLabel: 'スケジュール',
       before: beforeSnapshot,
-      after: createScheduleCellSnapshot({
-        slot1: slot1Site?.name ?? slot1Name,
-        slot1Color,
-        slot2: slot2Site?.name ?? slot2Name,
-        slot2Color,
-      }),
+      after: buildSnapshotFromGroups(
+        finalGroups.map((group) => ({
+          items: group.items.map((item) => ({ label: item.site.name, color: item.color })),
+        })),
+      ),
     });
 
     return Response.json({ ok: true });

@@ -209,7 +209,6 @@ export default function SiteLedgerDetailPage() {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
-  const [site, setSite] = useState<ApiSite | null>(null);
   const [monthAlert, setMonthAlert] = useState<SiteMonthAlert | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
@@ -360,7 +359,6 @@ export default function SiteLedgerDetailPage() {
         ? (obj.monthAlert as Record<string, unknown>)
         : null;
 
-      setSite(parsed);
       setCompanyName(parsed.companyName ?? '');
       setName(parsed.name);
       setAddress(parsed.address ?? '');
@@ -386,7 +384,6 @@ export default function SiteLedgerDetailPage() {
 
       setRepeatRule(parsedRule);
     } catch (e) {
-      setSite(null);
       setMonthAlert(null);
       setStatusMsg(e instanceof Error ? `読み込みに失敗: ${e.message}` : '読み込みに失敗しました');
     } finally {
