@@ -5401,6 +5401,12 @@ function Row({
     [slotContextMenu],
   );
 
+  const slotContextDefaultSiteColor = useMemo<LabelColor>(() => {
+    if (!slotContextMenu || slotContextMenu.entryKind !== 'site') return 'default';
+    const site = resolveStoredSite(slotContextMenu.siteName);
+    return resolveSiteLabelColor(site, 'default');
+  }, [resolveStoredSite, slotContextMenu]);
+
   const toggleSlotContextUser = useCallback((targetUserId: string) => {
     setSlotContextMenu((current) => {
       if (!current || current.mode !== 'assign-users') return current;
@@ -5784,7 +5790,7 @@ function Row({
 
   async function applySlotContextGroupColor(nextColor: LabelColor) {
     const current = slotContextMenu;
-    if (!current || current.mode !== 'actions') return;
+    if (!current || (current.mode !== 'actions' && current.mode !== 'change-color')) return;
 
     const beforeCell = cloneApiCell(current.beforeCell);
     const beforeGroups = apiCellToGroups(beforeCell);
@@ -5841,6 +5847,38 @@ function Row({
     if (failedCount > 0) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.join(' / '));
     void Promise.resolve(onAssigned()).catch(() => undefined);
+  }
+
+  async function applySlotContextSiteDefaultColor(nextColor: LabelColor) {
+    const current = slotContextMenu;
+    if (!current || current.entryKind !== 'site' || (current.mode !== 'actions' && current.mode !== 'change-color')) return;
+
+    const site = resolveStoredSite(current.siteName);
+    if (!site?.id) {
+      onNotify?.('現場マスタが見つかりません');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/sites', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: site.id,
+          scheduleLabelColor: nextColor,
+        }),
+      });
+      const json = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !json?.ok) {
+        onNotify?.(json?.error ? `デフォルト色の保存に失敗しました: ${json.error}` : 'デフォルト色の保存に失敗しました');
+        return;
+      }
+      closeSlotContextMenu();
+      onNotify?.('デフォルト色を保存しました');
+      void Promise.resolve(onAssigned()).catch(() => undefined);
+    } catch {
+      onNotify?.('デフォルト色の保存に失敗しました');
+    }
   }
 
   async function removeSlotContextGroup() {
@@ -6658,12 +6696,11 @@ function Row({
             </div>
           ) : slotContextMenu.mode === 'change-color' ? (
             <div className="mt-2 space-y-2">
-              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">保存後、週予定と月予定の表示に反映します。</div>
+              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">今回だけの色変更</div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
                     void applySlotContextGroupColor('red');
                   }}
                   className={`rounded-md border px-3 py-2 text-left ${
@@ -6677,7 +6714,6 @@ function Row({
                 <button
                   type="button"
                   onClick={() => {
-                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
                     void applySlotContextGroupColor('default');
                   }}
                   className={`rounded-md border px-3 py-2 text-left ${
@@ -6689,6 +6725,39 @@ function Row({
                   黒（デフォルト）
                 </button>
               </div>
+              {slotContextMenu.entryKind === 'site' ? (
+                <>
+                  <div className="pt-1 text-[11px] text-zinc-600 dark:text-zinc-300">当該現場の以降のデフォルト</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void applySlotContextSiteDefaultColor('red');
+                      }}
+                      className={`rounded-md border px-3 py-2 text-left ${
+                        slotContextDefaultSiteColor === 'red'
+                          ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                          : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      デフォルトの赤
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void applySlotContextSiteDefaultColor('default');
+                      }}
+                      className={`rounded-md border px-3 py-2 text-left ${
+                        slotContextDefaultSiteColor === 'default'
+                          ? 'border-zinc-400 bg-zinc-100 text-zinc-900 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100'
+                          : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      デフォルトの黒
+                    </button>
+                  </div>
+                </>
+              ) : null}
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
