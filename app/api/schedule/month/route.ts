@@ -4,6 +4,11 @@ import {
   isScheduleSyncSource,
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
+import {
+  isScheduleCellEntryKind,
+  normalizeScheduleCellEntryKind,
+  type ScheduleCellEntryKind,
+} from '@/shared/schedule-cell-entry';
 import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
@@ -63,12 +68,29 @@ function extractSiteNames(meta: unknown): string[] {
   return Array.from(new Set(result));
 }
 
+function extractManualText(meta: unknown): string {
+  const m = asObject(meta);
+  return typeof m?.scheduleText === 'string' ? m.scheduleText.trim() : '';
+}
+
+function entryKindForEntry(site: { name: string } | null, accountingMeta: unknown): ScheduleCellEntryKind {
+  const meta = asObject(accountingMeta);
+  return normalizeScheduleCellEntryKind(meta?.scheduleEntryKind ?? (site ? 'site' : 'note'));
+}
+
 function labelForEntry(e: {
   site: { name: string } | null;
   summary: string | null;
   note: string | null;
   accountingMeta: unknown;
 }): string | null {
+  const kind = entryKindForEntry(e.site, e.accountingMeta);
+  if (kind === 'note') {
+    const manualText = extractManualText(e.accountingMeta);
+    const fallback = (e.summary ?? e.note ?? '').toString().trim();
+    return manualText || fallback || null;
+  }
+
   const siteFromRelation = e.site?.name?.trim() ?? '';
   if (siteFromRelation) return siteFromRelation;
 
@@ -109,16 +131,20 @@ function formatGroupValue(group: { items: Array<{ label: string }> } | null | un
   return labels.length > 0 ? labels.join(' / ') : null;
 }
 
-function buildCellGroups(items: Array<{ label: string; color: LabelColor; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>) {
+function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>) {
   if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
-    const grouped = new Map<number, Array<{ label: string; color: LabelColor; order: number; syncSource: ScheduleSyncSource | null }>>();
+    const grouped = new Map<
+      number,
+      Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; order: number; syncSource: ScheduleSyncSource | null }>
+    >();
     items.forEach((item, itemOrder) => {
       const groupIndex = item.groupIndex as number;
-      if (groupIndex < 0 || groupIndex > 1) return;
+      if (groupIndex < 0 || groupIndex > 3) return;
       const hit = grouped.get(groupIndex) ?? [];
       hit.push({
         label: item.label,
         color: item.color,
+        kind: item.kind,
         order: typeof item.itemIndex === 'number' ? item.itemIndex : itemOrder,
         syncSource: cloneScheduleSyncSource(item.syncSource),
       });
@@ -131,14 +157,19 @@ function buildCellGroups(items: Array<{ label: string; color: LabelColor; groupI
         items: [...groupItems]
           .sort((left, right) => left.order - right.order)
           .slice(0, 4)
-          .map(({ label, color, syncSource }) => ({ label, color, syncSource })),
+          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource })),
       }))
-      .slice(0, 2);
+      .slice(0, 4);
   }
 
-  const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }> }> = [];
-  const peerNames = items.map((item) => item.label);
+  const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null }> }> = [];
+  const peerNames = items.filter((item) => item.kind === 'site').map((item) => item.label);
   for (const item of items) {
+    if (item.kind === 'note') {
+      groups.push({ key: `note:${groups.length}`, items: [{ label: item.label, color: item.color, kind: item.kind, syncSource: null }] });
+      continue;
+    }
+
     const family = findSiteFamily(item.label, peerNames);
     const explicitPrefix = hasSiteFamilyDisplayPrefix(item.label);
     const key = family.key
@@ -146,12 +177,12 @@ function buildCellGroups(items: Array<{ label: string; color: LabelColor; groupI
       : `${explicitPrefix ? 'prefixed-single' : 'single'}:${normalizeSiteFamilyKey(item.label)}`;
     const hit = groups.find((group) => group.key === key);
     if (hit) {
-      hit.items.push({ label: item.label, color: item.color, syncSource: cloneScheduleSyncSource(item.syncSource) });
+      hit.items.push({ label: item.label, color: item.color, kind: item.kind, syncSource: cloneScheduleSyncSource(item.syncSource) });
     } else {
-      groups.push({ key, items: [{ label: item.label, color: item.color, syncSource: cloneScheduleSyncSource(item.syncSource) }] });
+      groups.push({ key, items: [{ label: item.label, color: item.color, kind: item.kind, syncSource: cloneScheduleSyncSource(item.syncSource) }] });
     }
   }
-  return groups.slice(0, 2).map((group) => ({ items: group.items.slice(0, 4) }));
+  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4) }));
 }
 
 export async function GET(request: Request) {
@@ -203,14 +234,14 @@ export async function GET(request: Request) {
         slot2: string | null;
         color1: LabelColor;
         color2: LabelColor;
-        groups?: Array<{ items: Array<{ label: string; color: LabelColor; syncSource?: ScheduleSyncSource | null }> }>;
+        groups?: Array<{ items: Array<{ label: string; color: LabelColor; kind?: ScheduleCellEntryKind; syncSource?: ScheduleSyncSource | null }> }>;
       }
     >
   > = {};
 
   for (const u of users) grid[u.id] = {};
 
-  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>>> = {};
+  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>>> = {};
 
   for (const e of entries) {
     const day = toYmd(e.startAt);
@@ -227,7 +258,10 @@ export async function GET(request: Request) {
       : null;
     const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
     const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
-    cellItems[e.userId]![day]!.push({ label, color, groupIndex, itemIndex, syncSource: syncSourceForEntry(e.accountingMeta) });
+    const itemKind = isScheduleCellEntryKind(meta?.scheduleEntryKind)
+      ? meta.scheduleEntryKind
+      : entryKindForEntry(e.site, e.accountingMeta);
+    cellItems[e.userId]![day]!.push({ label, color, kind: itemKind, groupIndex, itemIndex, syncSource: syncSourceForEntry(e.accountingMeta) });
   }
 
   for (const uid of Object.keys(cellItems)) {
