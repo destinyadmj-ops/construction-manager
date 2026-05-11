@@ -4,12 +4,28 @@ export type SiteFamilyInfo = {
   memberCount: number;
 };
 
-export function normalizeSiteFamilyText(input: string | null | undefined) {
-  return (input ?? '')
+export function siteFamilyDisplayName(input: string | null | undefined) {
+  let value = (input ?? '')
     .normalize('NFKC')
     .replace(/\u3000/g, ' ')
-    .replace(/\s+/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
+
+  if (!value) return '';
+
+  const slashParts = value.split(/[／/]/u).map((part) => part.trim()).filter((part) => part.length > 0);
+  if (slashParts.length >= 2) {
+    value = slashParts[slashParts.length - 1] ?? value;
+  }
+
+  return value
+    .replace(/^(?:株式会社|有限会社|合同会社|合名会社|合資会社|医療法人|社会福祉法人|学校法人|宗教法人)\s*/u, '')
+    .replace(/^[（(](?:株|有|同|名|資|医|社福|学|宗)[)）]\s*/u, '')
+    .trim();
+}
+
+export function normalizeSiteFamilyText(input: string | null | undefined) {
+  return siteFamilyDisplayName(input).replace(/\s+/g, '').trim();
 }
 
 export function normalizeSiteFamilyKey(input: string | null | undefined) {
@@ -87,12 +103,14 @@ export function stripSiteFamilyLabel(
   siteName: string | null | undefined,
   familyLabel: string | null | undefined,
 ) {
-  const normalizedName = normalizeSiteFamilyText(siteName);
-  const normalizedFamilyLabel = normalizeSiteFamilyText(familyLabel);
-  if (!normalizedName || !normalizedFamilyLabel) return normalizedName;
+  const displayName = siteFamilyDisplayName(siteName);
+  const displayFamilyLabel = siteFamilyDisplayName(familyLabel);
+  const normalizedName = normalizeSiteFamilyText(displayName);
+  const normalizedFamilyLabel = normalizeSiteFamilyText(displayFamilyLabel);
+  if (!normalizedName || !normalizedFamilyLabel) return displayName;
   if (!normalizeSiteFamilyKey(normalizedName).startsWith(normalizeSiteFamilyKey(normalizedFamilyLabel))) {
-    return normalizedName;
+    return displayName;
   }
-  const rest = normalizedName.slice(normalizedFamilyLabel.length).replace(/^[／/・･._()（）-]+/u, '');
-  return rest || normalizedName;
+  const rest = displayName.slice(displayFamilyLabel.length).replace(/^[／/・･._()（）-]+/u, '').trim();
+  return rest || displayName;
 }

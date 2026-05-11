@@ -15,7 +15,7 @@ import {
   type WheelEvent,
 } from 'react';
 import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
-import { findSiteFamily, stripSiteFamilyLabel } from '@/shared/site-family';
+import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/shared/site-family';
 import {
   DEFAULT_WEEK_GRID_PREFS,
   WEEK_GRID_PREFS_VERSION,
@@ -5480,59 +5480,87 @@ function Row({
       return;
     }
 
-    const beforeCell = cloneApiCell(grid[current.day]);
-    const currentEntries = apiCellToEntries(beforeCell);
     const selectedNames = new Set(current.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
     if (selectedNames.size === 0) {
       onNotify?.('少なくとも1店舗は選択してください');
       return;
     }
 
-    const currentGroups = apiCellToGroups(beforeCell);
-    const currentColorByName = new Map(currentEntries.map((entry) => [entry.label, entry.color] as const));
-    const replacementItems = slotContextRelatedSiteOptions
-      .filter((option) => selectedNames.has(option.storedName))
-      .map((option) => ({
-        label: option.storedName,
-        color: currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, current.color),
-      }));
-    const replacementGroup: ApiCellGroup = { items: replacementItems };
-
-    const targetGroupIndex = currentGroups.findIndex((group) =>
-      group.items.some((entry) => entry.label === current.siteName),
-    );
-    const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
-    if (targetGroupIndex >= 0) nextGroups[targetGroupIndex] = replacementGroup;
-    else nextGroups.push(replacementGroup);
-
-    if (replacementGroup.items.length > 4) {
+    const selectedSites = slotContextRelatedSiteOptions.filter((option) => selectedNames.has(option.storedName));
+    if (selectedSites.length > 4) {
       onNotify?.('同名別店舗は4件までです');
       return;
     }
-    if (nextGroups.length > 2) {
-      onNotify?.('2枠を超えるため、この組み合わせでは登録できません');
-      return;
-    }
 
-    const result = await persistCellSet({
-      targetUser: user,
-      day: current.day,
-      beforeCell,
-      nextCell: groupsToApiCell(nextGroups),
-    });
-    if (result.failed) {
-      onNotify?.(result.message ?? '同名別店舗の反映に失敗しました');
-      return;
+    const targetUsers = allUsers.filter((candidate) =>
+      apiCellToGroups(allGrid[candidate.id]?.[current.day]).some((group) =>
+        group.items.some((entry) => siteFamilyKeyForName(entry.label) === anchorFamilyKey),
+      ),
+    );
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    for (const targetUser of targetUsers) {
+      const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
+      const currentEntries = apiCellToEntries(beforeCell);
+      const currentGroups = apiCellToGroups(beforeCell);
+      const targetGroupIndex = currentGroups.findIndex((group) =>
+        group.items.some(
+          (entry) => entry.label === current.siteName || siteFamilyKeyForName(entry.label) === anchorFamilyKey,
+        ),
+      );
+
+      if (targetGroupIndex < 0) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const currentColorByName = new Map(currentEntries.map((entry) => [entry.label, entry.color] as const));
+      const anchorColor = currentColorByName.get(current.siteName) ?? current.color;
+      const replacementGroup: ApiCellGroup = {
+        items: selectedSites.map((option) => ({
+          label: option.storedName,
+          color: currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, anchorColor),
+        })),
+      };
+
+      const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
+      nextGroups[targetGroupIndex] = replacementGroup;
+
+      if (nextGroups.length > 2) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const result = await persistCellSet({
+        targetUser,
+        day: current.day,
+        beforeCell,
+        nextCell: groupsToApiCell(nextGroups),
+      });
+      if (result.failed) {
+        failedCount += 1;
+        continue;
+      }
+      if (result.changed) {
+        updatedCount += 1;
+      }
     }
 
     closeSlotContextMenu();
-    if (!result.changed) {
-      onNotify?.('変更はありません');
-      return;
+
+    if (updatedCount > 0) {
+      void Promise.resolve(onAssigned()).catch(() => undefined);
     }
-    onNotify?.('同名別店舗を反映しました');
-    void Promise.resolve(onAssigned()).catch(() => undefined);
-  }, [closeSlotContextMenu, grid, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
+
+    const messages: string[] = [];
+    if (updatedCount) messages.push(`${updatedCount}名反映`);
+    if (skippedCount) messages.push(`${skippedCount}名スキップ`);
+    if (failedCount) messages.push(`${failedCount}名失敗`);
+    onNotify?.(messages.length > 0 ? `同名別店舗を同期: ${messages.join(' / ')}` : '変更はありません');
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions]);
 
   const renderSiteLabel = useCallback(
     (
@@ -5604,7 +5632,7 @@ function Row({
         const familyLabel = siteFamilyLabelForName(group.items[0]?.label ?? '');
         const renderedItems = group.items.map((entry, itemIndex) => {
           const site = resolveStoredSite(entry.label);
-          const fullName = siteStoredName(site) || entry.label;
+          const fullName = siteFamilyDisplayName(siteStoredName(site) || entry.label);
           return {
             entry,
             storedName: entry.label,
