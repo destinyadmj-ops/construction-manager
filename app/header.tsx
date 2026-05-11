@@ -1091,6 +1091,7 @@ export default function AppHeader() {
             {/* 現場リスト三角ボタン */}
             <button
               type="button"
+              data-color-edit-id="header:site-list-toggle"
               aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
               className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
               style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
@@ -1104,6 +1105,7 @@ export default function AppHeader() {
               <div ref={notificationsRef} className="relative">
                 <button
                   type="button"
+                  data-color-edit-id="header:notifications-toggle"
                   onClick={() => {
                     setIsSettingsOpen(false);
                     setIsNotificationsOpen((current) => {
@@ -1133,6 +1135,7 @@ export default function AppHeader() {
 
                 {isNotificationsOpen ? (
                   <div
+                    data-color-edit-id="header:notifications-panel"
                     data-color-edit-slot="border"
                     className="absolute left-0 top-full z-50 mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                   >
@@ -1140,6 +1143,7 @@ export default function AppHeader() {
                       <span>個人通知</span>
                       <button
                         type="button"
+                        data-color-edit-id="header:notifications-mark-all-read"
                         onClick={() => void markAllNotificationsRead()}
                         className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                       >
@@ -1183,6 +1187,7 @@ export default function AppHeader() {
             <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
               <button
                 type="button"
+                data-color-edit-id="header:settings-toggle"
                 onClick={() => setIsSettingsOpen((v) => !v)}
                 aria-expanded={isSettingsOpen}
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
@@ -1193,6 +1198,7 @@ export default function AppHeader() {
 
               {isSettingsOpen ? (
                 <div
+                  data-color-edit-id="header:settings-panel"
                   data-color-edit-slot="border"
                   className="absolute left-0 top-full mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                 >
@@ -1204,6 +1210,7 @@ export default function AppHeader() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
+                        data-color-edit-id="header:settings-font-size-14"
                         onClick={() => void savePageFontSize(14)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 14
@@ -1215,6 +1222,7 @@ export default function AppHeader() {
                       </button>
                       <button
                         type="button"
+                        data-color-edit-id="header:settings-font-size-16"
                         onClick={() => void savePageFontSize(16)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 16
@@ -1226,6 +1234,7 @@ export default function AppHeader() {
                       </button>
                       <button
                         type="button"
+                        data-color-edit-id="header:settings-font-size-18"
                         onClick={() => void savePageFontSize(18)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 18
