@@ -5387,19 +5387,20 @@ function Row({
         contextInput?: { day: string; beforeFallback: CellSlots; color: LabelColor };
       },
     ) => {
-      const handleContextMenu = input.contextInput
+      const contextInput = input.contextInput;
+      const handleContextMenu = contextInput
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
-              day: input.contextInput.day,
+              day: contextInput.day,
               siteName: input.siteName,
-              color: input.contextInput.color,
-              beforeFallback: input.contextInput.beforeFallback,
+              color: contextInput.color,
+              beforeFallback: contextInput.beforeFallback,
             });
           }
         : undefined;
       if (!onOpenSiteFromCell) {
         return (
-          <div className={input.className} style={{ fontSize }} onContextMenu={handleContextMenu}>
+          <div className={input.className} style={{ fontSize: input.fontSize }} onContextMenu={handleContextMenu}>
             {input.displayValue}
           </div>
         );
@@ -5732,8 +5733,6 @@ function Row({
         const cell = grid[d.key];
         const slot1 = cell?.slot1 ?? null;
         const slot2 = cell?.slot2 ?? null;
-        const c1 = cell?.color1 ?? 'default';
-        const c2 = cell?.color2 ?? 'default';
         const beforeFallback: CellSlots = [slot1, slot2];
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
