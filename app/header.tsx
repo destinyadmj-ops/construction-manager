@@ -1077,7 +1077,7 @@ export default function AppHeader() {
   const scheduleEditButtonLabel = actions.save ? '編集終了' : actions.add ? '編集開始' : '編集準備中';
   const scheduleEditButtonDisabled = actions.save ? Boolean(actions.save.disabled) : actions.add ? Boolean(actions.add.disabled) : true;
   const scheduleEditHelpText = actions.save
-    ? actions.save.title ?? '編集モード中です。終了すると通常表示に戻ります。'
+    ? actions.save.title ?? '編集モード中です。右クリックメニューとセル操作を使えます。'
     : actions.add?.title ?? '予定編集の準備中です。';
 
   return (
@@ -1319,11 +1319,9 @@ export default function AppHeader() {
                             type="button"
                             onClick={() => {
                               if (actions.save) {
-                                exitColorEditMode();
                                 void actions.save.onClick();
                                 return;
                               }
-                              enterColorEditMode();
                               void actions.add?.onClick();
                             }}
                             disabled={scheduleEditButtonDisabled}
@@ -1334,8 +1332,8 @@ export default function AppHeader() {
                           </button>
                           <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                             {actions.save
-                              ? '右クリックで各ボタンや枠の色を編集できます。終了すると通常表示へ戻ります。'
-                              : scheduleEditHelpText}
+                              ? '右クリックで予定セルの従来メニューを開けます。色変更はセル操作の「色」を使います。終了すると通常表示へ戻ります。'
+                              : '編集を開始すると、右クリックメニューとセル操作が使えます。色変更はセル操作の「色」を使います。'}
                           </div>
                         </div>
                       </>
@@ -1707,7 +1705,6 @@ export default function AppHeader() {
               data-color-edit-id="header-action-add"
               data-testid="header-action-save"
               onClick={() => {
-                exitColorEditMode();
                 void actions.save?.onClick();
               }}
               disabled={!actions.save || actions.save.disabled}
@@ -1742,7 +1739,6 @@ export default function AppHeader() {
               data-color-edit-id="header-action-add"
               data-testid="header-action-add"
               onClick={() => {
-                enterColorEditMode();
                 void actions.add?.onClick();
               }}
               disabled={!actions.add || actions.add.disabled}
