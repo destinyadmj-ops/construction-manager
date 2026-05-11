@@ -258,7 +258,7 @@ export default function SiteLedgerDetailPage() {
   const canSave = useMemo(() => !isMobile && hasEditPermission && name.trim().length > 0 && !!siteId, [hasEditPermission, isMobile, name, siteId]);
   const canUploadPhotos = isMobile || hasEditPermission;
   const canManageFolders = !isMobile && hasEditPermission;
-  const showAmountField = isMobile || hasEditPermission;
+  const showAmountField = !isMobile && hasEditPermission;
 
   const updatePace = useCallback((nextValue: string) => {
     setPace(nextValue);
