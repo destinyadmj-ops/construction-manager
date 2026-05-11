@@ -6722,7 +6722,7 @@ function Row({
                       : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                   }`}
                 >
-                  黒（デフォルト）
+                  黒
                 </button>
               </div>
               {slotContextMenu.entryKind === 'site' ? (
