@@ -5459,19 +5459,29 @@ function Row({
 
     for (const targetUser of allUsers) {
       const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
+      const beforeGroups = apiCellToGroups(beforeCell);
       const action = selected.has(targetUser.id) ? 'add' : 'remove';
-      const exactGroupIndex = apiCellToGroups(beforeCell).findIndex((group) =>
+      const exactGroupIndex = beforeGroups.findIndex((group) =>
         group.items.some((entry) => entry.label === current.siteName),
       );
+      const legacyFamilyGroupIndex = inheritedSyncSource
+        ? beforeGroups.findIndex((group) => {
+            const hasFamilyMember = group.items.some(
+              (entry) => siteFamilyKeyForName(entry.label) === inheritedSyncSource.familyKey,
+            );
+            const hasExistingSyncSource = group.items.some((entry) => Boolean(entry.syncSource));
+            return hasFamilyMember && !hasExistingSyncSource;
+          })
+        : -1;
       const linkedGroupIndex = inheritedSyncSource
-        ? apiCellToGroups(beforeCell).findIndex((group) =>
+        ? beforeGroups.findIndex((group) =>
             group.items.some((entry) => scheduleSyncSourceEquals(entry.syncSource, inheritedSyncSource)),
           )
         : -1;
 
       if (action === 'add' && inheritedSyncSource && exactGroupIndex >= 0) {
         const nextCell = groupsToApiCell(
-          apiCellToGroups(beforeCell).map((group, groupIndex) =>
+          beforeGroups.map((group, groupIndex) =>
             groupIndex !== exactGroupIndex
               ? group
               : {
@@ -5497,9 +5507,37 @@ function Row({
         continue;
       }
 
+      if (action === 'add' && inheritedSyncSource && targetUser.id !== user.id && exactGroupIndex < 0 && linkedGroupIndex < 0 && legacyFamilyGroupIndex >= 0) {
+        const nextCell = groupsToApiCell(
+          beforeGroups.map((group, groupIndex) =>
+            groupIndex !== legacyFamilyGroupIndex
+              ? group
+              : {
+                  items: group.items.map((entry) =>
+                    createCellEntry(entry.label, entry.color, inheritedSyncSource),
+                  ),
+                },
+          ),
+        );
+        const result = await persistCellSet({
+          targetUser,
+          day: current.day,
+          beforeCell,
+          nextCell,
+        });
+        if (result.failed) {
+          failedCount += 1;
+          continue;
+        }
+        if (result.changed) {
+          linkedCount += 1;
+        }
+        continue;
+      }
+
       if (action === 'remove' && linkedGroupIndex >= 0) {
         const nextCell = groupsToApiCell(
-          apiCellToGroups(beforeCell).filter((_, groupIndex) => groupIndex !== linkedGroupIndex),
+          beforeGroups.filter((_, groupIndex) => groupIndex !== linkedGroupIndex),
         );
         const result = await persistCellSet({
           targetUser,
@@ -5911,88 +5949,345 @@ function Row({
     [allGrid, allUsers, apiKind, assignedUserIdsForSite, persistCellSet, siteFamilyKeyForName],
   );
 
-  const runCellAction = async (input: {
-    day: string;
-    action: CellClickAction;
-    color: CellTextColor;
-    siteId?: string | null;
-    siteName?: string | null;
-    beforeCell: ApiCell;
-    allowSiblingMerge?: boolean;
-  }) => {
-    let resolvedSite =
-      input.action === 'swap'
-        ? selectedSite
-        : resolveSiteReference?.({ siteId: input.siteId ?? null, siteName: input.siteName ?? null }) ??
-          (!input.siteId && !input.siteName ? selectedSite : null);
+  const runCellAction = useCallback(
+    async (input: {
+      day: string;
+      action: CellClickAction;
+      color: CellTextColor;
+      siteId?: string | null;
+      siteName?: string | null;
+      beforeCell: ApiCell;
+      allowSiblingMerge?: boolean;
+    }) => {
+      let resolvedSite =
+        input.action === 'swap'
+          ? selectedSite
+          : resolveSiteReference?.({ siteId: input.siteId ?? null, siteName: input.siteName ?? null }) ??
+            (!input.siteId && !input.siteName ? selectedSite : null);
 
-    if (input.action !== 'swap' && !input.siteId && !input.siteName && !resolvedSite) {
-      resolvedSite = (await onEnsureSite?.()) ?? null;
-      if (!resolvedSite) {
-        onNotify?.('現場名を入力してください');
-        return;
+      if (input.action !== 'swap' && !input.siteId && !input.siteName && !resolvedSite) {
+        resolvedSite = (await onEnsureSite?.()) ?? null;
+        if (!resolvedSite) {
+          onNotify?.('現場名を入力してください');
+          return;
+        }
       }
-    }
 
-    const beforeCell = cloneApiCell(input.beforeCell);
-    const resolvedSiteName =
-      siteStoredName(resolvedSite) || splitSiteLabel(input.siteName).name.trim() || input.siteName?.trim() || null;
-    const requestedColor = input.action === 'recolor' ? input.color : resolveSiteLabelColor(resolvedSite, input.color);
-    const preview = previewCellAction({
-      cell: beforeCell,
-      action: input.action,
-      siteName: resolvedSiteName,
-      color: requestedColor,
-      familyKeyForSiteName: siteFamilyKeyForName,
-      allowSiblingMerge: input.allowSiblingMerge,
-    });
-
-    if (!preview.changed) {
-      onNotify?.(formatCellActionReason(preview.reason, input.action) ?? '反映されませんでした');
-      return;
-    }
-
-    const result = await persistCellSet({
-      targetUser: user,
-      day: input.day,
-      beforeCell,
-      nextCell: preview.cell,
-    });
-    if (result.failed) {
-      onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
-      return;
-    }
-    if (!result.changed) {
-      onNotify?.('変更はありません');
-      return;
-    }
-
-    let syncedCount = 0;
-    let failedCount = 0;
-    if (input.action === 'recolor' && resolvedSiteName) {
-      const syncResult = await syncSiteColorAcrossUsers({
-        day: input.day,
+      const beforeCell = cloneApiCell(input.beforeCell);
+      const resolvedSiteName =
+        siteStoredName(resolvedSite) || splitSiteLabel(input.siteName).name.trim() || input.siteName?.trim() || null;
+      const requestedColor = input.action === 'recolor' ? input.color : resolveSiteLabelColor(resolvedSite, input.color);
+      const preview = previewCellAction({
+        cell: beforeCell,
+        action: input.action,
         siteName: resolvedSiteName,
         color: requestedColor,
-        sourceUserId: user.id,
+        familyKeyForSiteName: siteFamilyKeyForName,
+        allowSiblingMerge: input.allowSiblingMerge,
       });
-      syncedCount = syncResult.syncedCount;
-      failedCount = syncResult.failedCount;
-    }
 
-    const successMessage = formatCellActionSuccess({
-      action: input.action,
-      toggled: preview.toggled,
-      replaced: preview.replaced,
-    });
+      if (!preview.changed) {
+        onNotify?.(formatCellActionReason(preview.reason, input.action) ?? '反映されませんでした');
+        return;
+      }
 
-    const messages = [successMessage];
-    if (syncedCount > 0) messages.push(`他${syncedCount}名に色同期`);
-    if (failedCount > 0) messages.push(`${failedCount}名失敗`);
-    onNotify?.(messages.join(' / '));
+      const result = await persistCellSet({
+        targetUser: user,
+        day: input.day,
+        beforeCell,
+        nextCell: preview.cell,
+      });
+      if (result.failed) {
+        onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+        return;
+      }
+      if (!result.changed) {
+        onNotify?.('変更はありません');
+        return;
+      }
 
-    void Promise.resolve(onAssigned()).catch(() => undefined);
-  };
+      let syncedCount = 0;
+      let failedCount = 0;
+      if (input.action === 'recolor' && resolvedSiteName) {
+        const syncResult = await syncSiteColorAcrossUsers({
+          day: input.day,
+          siteName: resolvedSiteName,
+          color: requestedColor,
+          sourceUserId: user.id,
+        });
+        syncedCount = syncResult.syncedCount;
+        failedCount = syncResult.failedCount;
+      }
+
+      const successMessage = formatCellActionSuccess({
+        action: input.action,
+        toggled: preview.toggled,
+        replaced: preview.replaced,
+      });
+
+      const messages = [successMessage];
+      if (syncedCount > 0) messages.push(`他${syncedCount}名に色同期`);
+      if (failedCount > 0) messages.push(`${failedCount}名失敗`);
+      onNotify?.(messages.join(' / '));
+
+      void Promise.resolve(onAssigned()).catch(() => undefined);
+    },
+    [
+      onAssigned,
+      onEnsureSite,
+      onNotify,
+      persistCellSet,
+      resolveSiteReference,
+      selectedSite,
+      siteFamilyKeyForName,
+      syncSiteColorAcrossUsers,
+      user,
+    ],
+  );
+
+  const renderedDayCells = useMemo(
+    () =>
+      dayLabels.map((d) => {
+        const cell = grid[d.key];
+        const slot1 = cell?.slot1 ?? null;
+        const slot2 = cell?.slot2 ?? null;
+        const beforeCell = cloneApiCell(cell);
+        const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
+        const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
+
+        return (
+          <div
+            key={d.key}
+            role="button"
+            tabIndex={0}
+            data-testid={`cell-${user.id}-${d.key}`}
+            data-cell-day={d.key}
+            draggable={isEditable && Boolean(slot1 || slot2)}
+            onDragStart={(e) => {
+              if (!isEditable || (!slot1 && !slot2)) return;
+              onSetDraggedCell?.({ userId: user.id, day: d.key, cell: beforeCell });
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+            onDragEnd={() => onSetDraggedCell?.(null)}
+            onDragOver={(e) => {
+              if (!isEditable || (!draggedSite && !draggedCell)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={(e) => {
+              if (!isEditable) return;
+              e.preventDefault();
+
+              if (draggedSite) {
+                void runCellAction({
+                  day: d.key,
+                  action: 'add',
+                  color: cellTextColor,
+                  siteId: draggedSite.id,
+                  siteName: siteStoredName(draggedSite) || draggedSite.label,
+                  beforeCell,
+                  allowSiblingMerge: false,
+                });
+              } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
+                const siteName = apiCellToEntries(draggedCell.cell)[0]?.label;
+                if (siteName) {
+                  void runCellAction({
+                    day: d.key,
+                    action: 'add',
+                    color: cellTextColor,
+                    siteName,
+                    beforeCell,
+                    allowSiblingMerge: false,
+                  });
+                }
+              }
+            }}
+            onClick={(e) => {
+              if (!isEditable) {
+                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
+                return;
+              }
+
+              e.preventDefault();
+
+              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
+                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+                setEditingInput?.(slot1 ?? '');
+                setSiteSuggestions?.([]);
+                onSetSelectedCell?.(null);
+              } else if (selectedSite || cellClickAction === 'swap') {
+                void runCellAction({
+                  day: d.key,
+                  action: cellClickAction,
+                  color: cellTextColor,
+                  beforeCell,
+                });
+              } else {
+                onSetSelectedCell?.({ userId: user.id, day: d.key });
+              }
+            }}
+            onDoubleClick={(e) => {
+              if (!isEditable) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+              setEditingInput?.(slot1 ?? '');
+              setSiteSuggestions?.([]);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              if (!isEditable) {
+                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
+                return;
+              }
+              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
+                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
+                setEditingInput?.(slot1 ?? '');
+                setSiteSuggestions?.([]);
+                onSetSelectedCell?.(null);
+              } else if (selectedSite || cellClickAction === 'swap') {
+                void runCellAction({
+                  day: d.key,
+                  action: cellClickAction,
+                  color: cellTextColor,
+                  beforeCell,
+                });
+              } else {
+                onSetSelectedCell?.({ userId: user.id, day: d.key });
+              }
+            }}
+            title={isPaceTarget ? 'ペース対象日' : undefined}
+            className={`relative border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
+              isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
+            } ${selectedCell?.userId === user.id && selectedCell?.day === d.key ? 'ring-2 ring-blue-500 ring-inset' : ''} ${
+              rowCellClassName ?? ''
+            } ${isPaceTarget ? 'shadow-[inset_0_0_0_1px_rgba(245,158,11,0.6)]' : ''} ${
+              isPaceTarget && !slot1 && !slot2 ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
+            } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
+          >
+            {isPaceTarget ? (
+              <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
+            ) : null}
+            <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
+              {editingCell?.userId === user.id && editingCell?.day === d.key ? (
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={editingInput ?? ''}
+                    onChange={(e) => setEditingInput?.(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setEditingCell?.(null);
+                        setEditingInput?.('');
+                        setSiteSuggestions?.([]);
+                      } else if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (siteSuggestions && siteSuggestions.length > 0) {
+                          const site = siteSuggestions[0];
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
+                          void runCellAction({
+                            day: d.key,
+                            action: 'toggle',
+                            color: cellTextColor,
+                            siteId: site.id,
+                            siteName: siteStoredName(site) || site.label,
+                            beforeCell,
+                          });
+                        } else if (editingInput?.trim()) {
+                          const siteName = editingInput.trim();
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
+                          void runCellAction({
+                            day: d.key,
+                            action: 'toggle',
+                            color: cellTextColor,
+                            siteName,
+                            beforeCell,
+                          });
+                        }
+                      }
+                    }}
+                    autoFocus
+                    className="w-full rounded border border-blue-500 bg-white px-1 py-0.5 text-xs dark:bg-black"
+                    placeholder="現場名を入力..."
+                  />
+                  {siteSuggestions && siteSuggestions.length > 0 ? (
+                    <div
+                      data-suggestion-list
+                      className="absolute left-0 top-full z-50 mt-1 max-h-48 w-full min-w-[200px] overflow-auto rounded border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      {siteSuggestions.map((site: SiteItem) => (
+                        <button
+                          key={site.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditingCell?.(null);
+                            setEditingInput?.('');
+                            setSiteSuggestions?.([]);
+                            void runCellAction({
+                              day: d.key,
+                              action: 'toggle',
+                              color: cellTextColor,
+                              siteId: site.id,
+                              siteName: siteStoredName(site) || site.label,
+                              beforeCell,
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        >
+                          {site.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : suggestionLoading ? (
+                    <div className="absolute left-0 top-full z-50 mt-1 w-full rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-500 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                      検索中...
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>{renderCellLabels(cell, d.key, beforeCell)}</>
+              )}
+            </div>
+          </div>
+        );
+      }),
+    [
+      cellClickAction,
+      cellMinH,
+      cellTextColor,
+      dayLabels,
+      draggedCell,
+      draggedSite,
+      editingCell,
+      editingInput,
+      grid,
+      historyHover,
+      isEditable,
+      onNotify,
+      onSetDraggedCell,
+      onSetSelectedCell,
+      paceTargetDays,
+      paceTargetUserId,
+      renderCellLabels,
+      rowCellClassName,
+      runCellAction,
+      selectedCell,
+      selectedSite,
+      setEditingCell,
+      setEditingInput,
+      setSiteSuggestions,
+      siteSuggestions,
+      suggestionLoading,
+      user.id,
+    ],
+  );
 
   return (
     <>
@@ -6071,424 +6366,197 @@ function Row({
         </div>
         {onStartNameColResize ? <ColumnResizeHandle onPointerDown={onStartNameColResize} /> : null}
       </div>
-      {dayLabels.map((d) => {
-        const cell = grid[d.key];
-        const slot1 = cell?.slot1 ?? null;
-        const slot2 = cell?.slot2 ?? null;
-        const beforeCell = cloneApiCell(cell);
-        const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
-        const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
-
-        return (
-          <div
-            key={d.key}
-            role="button"
-            tabIndex={0}
-            data-testid={`cell-${user.id}-${d.key}`}
-            data-cell-day={d.key}
-            draggable={isEditable && Boolean(slot1 || slot2)}
-            onDragStart={(e) => {
-              if (!isEditable || (!slot1 && !slot2)) return;
-              onSetDraggedCell?.({ userId: user.id, day: d.key, cell: beforeCell });
-              e.dataTransfer.effectAllowed = 'copy';
-            }}
-            onDragEnd={() => onSetDraggedCell?.(null)}
-            onDragOver={(e) => {
-              if (!isEditable || (!draggedSite && !draggedCell)) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'copy';
-            }}
-            onDrop={(e) => {
-              if (!isEditable) return;
-              e.preventDefault();
-              
-              if (draggedSite) {
-                // 現場リストからドラッグされた現場をセルに入力
-                void runCellAction({
-                  day: d.key,
-                  action: 'add',
-                  color: cellTextColor,
-                  siteId: draggedSite.id,
-                  siteName: siteStoredName(draggedSite) || draggedSite.label,
-                  beforeCell,
-                  allowSiblingMerge: false,
-                });
-              } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
-                // 別のセルからドラッグされた現場をコピー
-                const siteName = apiCellToEntries(draggedCell.cell)[0]?.label;
-                if (siteName) {
-                  void runCellAction({
-                    day: d.key,
-                    action: 'add',
-                    color: cellTextColor,
-                    siteName,
-                    beforeCell,
-                    allowSiblingMerge: false,
-                  });
-                }
-              }
-            }}
-            onClick={(e) => {
-              if (!isEditable) {
-                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
-                return;
-              }
-
-              e.preventDefault();
-              
-              // セルが選択されている場合は入力モードを開始、そうでなければセルを選択
-              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
-                // 同じセルを再度クリック -> 入力モードを開始
-                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(slot1 ?? '');
-                setSiteSuggestions?.([]);
-                onSetSelectedCell?.(null);
-              } else if (selectedSite || cellClickAction === 'swap') {
-                // 現場が選択されている場合は通常のアクション
-                void runCellAction({
-                  day: d.key,
-                  action: cellClickAction,
-                  color: cellTextColor,
-                  beforeCell,
-                });
-              } else {
-                // セルを選択状態にする（もう一度クリックすると入力モードになる）
-                onSetSelectedCell?.({ userId: user.id, day: d.key });
-              }
-            }}
-            onDoubleClick={(e) => {
-              if (!isEditable) return;
-              e.preventDefault();
-              e.stopPropagation();
-              // ダブルクリックで入力モードを開始
-              setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-              setEditingInput?.(slot1 ?? '');
-              setSiteSuggestions?.([]);
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              e.preventDefault();
-              if (!isEditable) {
-                onNotify?.('編集するには、ヘッダーの「編集」から開始してください');
-                return;
-              }
-              if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
-                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(slot1 ?? '');
-                setSiteSuggestions?.([]);
-                onSetSelectedCell?.(null);
-              } else if (selectedSite || cellClickAction === 'swap') {
-                void runCellAction({
-                  day: d.key,
-                  action: cellClickAction,
-                  color: cellTextColor,
-                  beforeCell,
-                });
-              } else {
-                onSetSelectedCell?.({ userId: user.id, day: d.key });
-              }
-            }}
-            title={isPaceTarget ? 'ペース対象日' : undefined}
-            className={`relative border-b border-l border-zinc-400 px-2 py-2 text-left text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-900 ${
-              isHighlight ? 'ring-2 ring-red-500 ring-inset' : ''
-            } ${selectedCell?.userId === user.id && selectedCell?.day === d.key ? 'ring-2 ring-blue-500 ring-inset' : ''} ${
-              rowCellClassName ?? ''
-            } ${isPaceTarget ? 'shadow-[inset_0_0_0_1px_rgba(245,158,11,0.6)]' : ''} ${
-              isPaceTarget && !slot1 && !slot2 ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
-            } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
-          >
-            {isPaceTarget ? (
-              <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
-            ) : null}
-            <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
-              {editingCell?.userId === user.id && editingCell?.day === d.key ? (
-                // 入力モード
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="text"
-                    value={editingInput ?? ''}
-                    onChange={(e) => setEditingInput?.(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setEditingCell?.(null);
-                        setEditingInput?.('');
-                        setSiteSuggestions?.([]);
-                      } else if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        if (siteSuggestions && siteSuggestions.length > 0) {
-                          // 最初の候補を選択
-                          const site = siteSuggestions[0];
-                          setEditingCell?.(null);
-                          setEditingInput?.('');
-                          setSiteSuggestions?.([]);
-                          void runCellAction({
-                            day: d.key,
-                            action: 'toggle',
-                            color: cellTextColor,
-                            siteId: site.id,
-                            siteName: siteStoredName(site) || site.label,
-                            beforeCell,
-                          });
-                        } else if (editingInput?.trim()) {
-                          // 直接入力
-                          const siteName = editingInput.trim();
-                          setEditingCell?.(null);
-                          setEditingInput?.('');
-                          setSiteSuggestions?.([]);
-                          void runCellAction({
-                            day: d.key,
-                            action: 'toggle',
-                            color: cellTextColor,
-                            siteName,
-                            beforeCell,
-                          });
-                        }
-                      }
-                    }}
-                    autoFocus
-                    className="w-full rounded border border-blue-500 bg-white px-1 py-0.5 text-xs dark:bg-black"
-                    placeholder="現場名を入力..."
-                  />
-                  {siteSuggestions && siteSuggestions.length > 0 ? (
-                    <div 
-                      data-suggestion-list
-                      className="absolute left-0 top-full z-50 mt-1 max-h-48 w-full min-w-[200px] overflow-auto rounded border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
-                    >
-                      {siteSuggestions.map((site: SiteItem) => (
-                        <button
-                          key={site.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setEditingCell?.(null);
-                            setEditingInput?.('');
-                            setSiteSuggestions?.([]);
-                            void runCellAction({
-                              day: d.key,
-                              action: 'toggle',
-                              color: cellTextColor,
-                              siteId: site.id,
-                              siteName: siteStoredName(site) || site.label,
-                              beforeCell,
-                            });
-                          }}
-                          className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        >
-                          {site.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : suggestionLoading ? (
-                    <div className="absolute left-0 top-full z-50 mt-1 w-full rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-500 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-                      検索中...
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                // 通常表示
-                <>{renderCellLabels(cell, d.key, beforeCell)}</>
-              )}
-            </div>
-            {slotContextMenu?.day === d.key ? (
-              <div
-                ref={contextMenuRef}
-                className="fixed z-[90] min-w-[260px] max-w-[min(92vw,320px)] rounded-lg border border-zinc-200 bg-white p-2 text-xs shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
-                style={{ left: `${slotContextMenu.x}px`, top: `${slotContextMenu.y}px` }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                <div className="border-b border-zinc-200 px-1 pb-2 dark:border-zinc-800">
-                  <div className="truncate font-medium text-zinc-900 dark:text-zinc-100">{slotContextMenu.siteName}</div>
-                  <div className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{slotContextMenu.day}</div>
-                </div>
-
-                {slotContextMenu.mode === 'actions' ? (
-                  <div className="mt-2 space-y-1">
-                    <button
-                      type="button"
-                      disabled={slotContextMenu.color === 'red'}
-                      onClick={() => {
-                        const current = slotContextMenu;
-                        if (!current) return;
-                        closeSlotContextMenu();
-                        void runCellAction({
-                          day: current.day,
-                          action: 'recolor',
-                          color: 'red',
-                          siteName: current.siteName,
-                          beforeCell: current.beforeCell,
-                        });
-                      }}
-                      className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                    >
-                      当該現場を赤文字表示
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSlotContextMenu((current) => {
-                          if (!current) return current;
-                          return {
-                            ...current,
-                            mode: 'assign-users',
-                            selectedUserIds: assignedUserIdsForSite(current.day, current.siteName),
-                          };
-                        });
-                      }}
-                      className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                    >
-                      同日・同現場の従業員を選択
-                    </button>
-                    {slotContextRelatedSiteOptions.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSlotContextMenu((current) => {
-                            if (!current) return current;
-                            return {
-                              ...current,
-                              mode: 'related-sites',
-                              selectedSiblingNames: siblingEntryNamesForSite(current.day, current.siteName),
-                            };
-                          });
-                        }}
-                        className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                      >
-                        同名別店舗を選択
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const current = slotContextMenu;
-                        if (!current) return;
-                        closeSlotContextMenu();
-                        void runCellAction({
-                          day: current.day,
-                          action: 'remove',
-                          color: current.color,
-                          siteName: current.siteName,
-                          beforeCell: current.beforeCell,
-                        });
-                      }}
-                      className="w-full rounded-md border border-red-200 px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
-                    >
-                      当該現場をセルから削除
-                    </button>
-                  </div>
-                ) : slotContextMenu.mode === 'assign-users' ? (
-                  <div className="mt-2">
-                    <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
-                      同日・同現場に入れる従業員を複数選択
-                    </div>
-                    <div className="max-h-56 space-y-1 overflow-auto pr-1">
-                      {slotContextUserOptions.map((option) => (
-                        <label
-                          key={option.userId}
-                          className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
-                            option.disabled
-                              ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
-                              : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={slotContextSelectedUserIds.has(option.userId)}
-                            disabled={option.disabled}
-                            onChange={() => toggleSlotContextUser(option.userId)}
-                          />
-                          <span className="min-w-0 flex-1 truncate">{option.userLabel}</span>
-                          {option.disabled ? (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
-                          ) : option.hasSite ? (
-                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
-                          ) : null}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
-                        }}
-                        className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                      >
-                        戻る
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void applySelectedUsersToSite();
-                        }}
-                        className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
-                      >
-                        決定
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2">
-                    <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
-                      同名別店舗をチェック選択
-                    </div>
-                    <div className="max-h-56 space-y-1 overflow-auto pr-1">
-                      {slotContextRelatedSiteOptions.map((option) => (
-                        <label
-                          key={option.storedName}
-                          className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
-                            option.disabled
-                              ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
-                              : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={option.checked}
-                            disabled={option.disabled}
-                            onChange={() => toggleSlotContextSibling(option.storedName)}
-                          />
-                          <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
-                          {option.disabled ? (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
-                          ) : null}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
-                        }}
-                        className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                      >
-                        戻る
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void applySelectedSiblingSites();
-                        }}
-                        className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
-                      >
-                        決定
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
+      {renderedDayCells}
+      {slotContextMenu ? (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-[90] min-w-[260px] max-w-[min(92vw,320px)] rounded-lg border border-zinc-200 bg-white p-2 text-xs shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
+          style={{ left: `${slotContextMenu.x}px`, top: `${slotContextMenu.y}px` }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="border-b border-zinc-200 px-1 pb-2 dark:border-zinc-800">
+            <div className="truncate font-medium text-zinc-900 dark:text-zinc-100">{slotContextMenu.siteName}</div>
+            <div className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{slotContextMenu.day}</div>
           </div>
-        );
-      })}
+
+          {slotContextMenu.mode === 'actions' ? (
+            <div className="mt-2 space-y-1">
+              <button
+                type="button"
+                disabled={slotContextMenu.color === 'red'}
+                onClick={() => {
+                  const current = slotContextMenu;
+                  if (!current) return;
+                  closeSlotContextMenu();
+                  void runCellAction({
+                    day: current.day,
+                    action: 'recolor',
+                    color: 'red',
+                    siteName: current.siteName,
+                    beforeCell: current.beforeCell,
+                  });
+                }}
+                className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              >
+                当該現場を赤文字表示
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSlotContextMenu((current) => {
+                    if (!current) return current;
+                    return {
+                      ...current,
+                      mode: 'assign-users',
+                      selectedUserIds: assignedUserIdsForSite(current.day, current.siteName),
+                    };
+                  });
+                }}
+                className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              >
+                同日・同現場の従業員を選択
+              </button>
+              {slotContextRelatedSiteOptions.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => {
+                      if (!current) return current;
+                      return {
+                        ...current,
+                        mode: 'related-sites',
+                        selectedSiblingNames: siblingEntryNamesForSite(current.day, current.siteName),
+                      };
+                    });
+                  }}
+                  className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                >
+                  同名別店舗を選択
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  const current = slotContextMenu;
+                  if (!current) return;
+                  closeSlotContextMenu();
+                  void runCellAction({
+                    day: current.day,
+                    action: 'remove',
+                    color: current.color,
+                    siteName: current.siteName,
+                    beforeCell: current.beforeCell,
+                  });
+                }}
+                className="w-full rounded-md border border-red-200 px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+              >
+                当該現場をセルから削除
+              </button>
+            </div>
+          ) : slotContextMenu.mode === 'assign-users' ? (
+            <div className="mt-2">
+              <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同日・同現場に入れる従業員を複数選択</div>
+              <div className="max-h-56 space-y-1 overflow-auto pr-1">
+                {slotContextUserOptions.map((option) => (
+                  <label
+                    key={option.userId}
+                    className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                      option.disabled
+                        ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
+                        : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={slotContextSelectedUserIds.has(option.userId)}
+                      disabled={option.disabled}
+                      onChange={() => toggleSlotContextUser(option.userId)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{option.userLabel}</span>
+                    {option.disabled ? (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
+                    ) : option.hasSite ? (
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
+                    ) : null}
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                  }}
+                  className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                >
+                  戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void applySelectedUsersToSite();
+                  }}
+                  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                >
+                  決定
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2">
+              <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同名別店舗をチェック選択</div>
+              <div className="max-h-56 space-y-1 overflow-auto pr-1">
+                {slotContextRelatedSiteOptions.map((option) => (
+                  <label
+                    key={option.storedName}
+                    className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                      option.disabled
+                        ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
+                        : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={option.checked}
+                      disabled={option.disabled}
+                      onChange={() => toggleSlotContextSibling(option.storedName)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
+                    {option.disabled ? <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span> : null}
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                  }}
+                  className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                >
+                  戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void applySelectedSiblingSites();
+                  }}
+                  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                >
+                  決定
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
     </>
   );
 }
