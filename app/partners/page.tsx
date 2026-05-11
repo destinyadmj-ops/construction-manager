@@ -46,6 +46,7 @@ export default function PartnersPage() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [partners, setPartners] = useState<string[]>([]);
   const [draftName, setDraftName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [source, setSource] = useState<'server' | 'local'>('local');
   const [serverPartners, setServerPartners] = useState<ApiPartner[]>([]);
@@ -154,17 +155,32 @@ export default function PartnersPage() {
     savePartners(partners);
   }, [partners]);
 
+  const allPartnerNames = useMemo(() => {
+    return source === 'server' ? serverPartners.map((p) => p.name) : partners;
+  }, [partners, serverPartners, source]);
+
   const canAdd = useMemo(() => {
     const v = draftName.trim();
     if (!v) return false;
-    const existing = source === 'server' ? serverPartners.map((p) => p.name) : partners;
-    return !existing.some((p) => p === v);
-  }, [draftName, partners, serverPartners, source]);
+    return !allPartnerNames.some((p) => p === v);
+  }, [allPartnerNames, draftName]);
+
+  const normalizedSearchQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+
+  const visibleServerPartners = useMemo(() => {
+    if (!normalizedSearchQuery) return serverPartners;
+    return serverPartners.filter((partner) => partner.name.toLowerCase().includes(normalizedSearchQuery));
+  }, [normalizedSearchQuery, serverPartners]);
+
+  const visibleLocalPartners = useMemo(() => {
+    if (!normalizedSearchQuery) return partners;
+    return partners.filter((partner) => partner.toLowerCase().includes(normalizedSearchQuery));
+  }, [normalizedSearchQuery, partners]);
 
   const visiblePartners = useMemo(() => {
-    if (source === 'server') return serverPartners.map((p) => p.name);
-    return partners;
-  }, [partners, serverPartners, source]);
+    if (source === 'server') return visibleServerPartners.map((p) => p.name);
+    return visibleLocalPartners;
+  }, [source, visibleLocalPartners, visibleServerPartners]);
 
   const editingPartner = useMemo(() => {
     if (source !== 'server' || !editingId) return null;
@@ -174,7 +190,7 @@ export default function PartnersPage() {
   const addPartner = useCallback(async () => {
     const v = draftName.trim();
     if (!v) return;
-    if (visiblePartners.some((p) => p === v)) return;
+    if (allPartnerNames.some((p) => p === v)) return;
 
     if (source === 'server') {
       setStatusMsg(null);
@@ -199,7 +215,7 @@ export default function PartnersPage() {
       setPartners((cur) => [v, ...cur]);
       setDraftName('');
     }
-  }, [draftName, loadFromServer, source, visiblePartners]);
+  }, [allPartnerNames, draftName, loadFromServer, source]);
 
   const saveNotes = useCallback(async () => {
     if (!editingPartner) return;
@@ -523,12 +539,32 @@ export default function PartnersPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="関係会社名で検索"
+            className="w-full max-w-md rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+          />
+          {searchQuery.trim() ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+            >
+              クリア
+            </button>
+          ) : null}
+        </div>
+
         {visiblePartners.length === 0 ? (
-          <div className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">（まだ登録がありません）</div>
+          <div className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+            {searchQuery.trim() ? '（検索条件に一致する会社がありません）' : '（まだ登録がありません）'}
+          </div>
         ) : (
           <div className="mt-4 space-y-2">
             {source === 'server'
-              ? serverPartners.map((p) => {
+              ? visibleServerPartners.map((p) => {
                   const isEditing = editingId === p.id;
                   const toggleDetail = () => {
                     if (isEditing) {
@@ -862,7 +898,7 @@ export default function PartnersPage() {
                     </div>
                   );
                 })
-              : visiblePartners.map((p) => (
+              : visibleLocalPartners.map((p) => (
                   <div
                     key={p}
                     data-color-edit-slot="border"

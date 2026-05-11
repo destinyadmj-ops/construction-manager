@@ -22,6 +22,7 @@ export const UI_THEME_COLORS = [
   'rose',
 ] as const;
 export type UiThemeColor = (typeof UI_THEME_COLORS)[number];
+export type UiThemeEditableSlot = 'surface' | 'panel' | 'button' | 'cellBg' | 'cellText' | 'border' | 'grid';
 
 export function uiThemeColorLabel(c: UiThemeColor): string {
   switch (c) {
@@ -360,6 +361,74 @@ function resolveAccentTone(color: UiThemeColor, mode: ThemeMode, tokens: Record<
   return themeScaleValue(color, tokens[mode]);
 }
 
+function appendCssVar(target: Record<string, string>, name: string, value: string | null): void {
+  if (value) target[name] = value;
+}
+
+export function readUiThemeSlot(theme: UiTheme, slot: UiThemeEditableSlot): UiThemeSlotValue {
+  const normalized = normalizeUiTheme(theme);
+  switch (slot) {
+    case 'surface':
+      return { color: normalized.surfaceColor, shade: normalized.surfaceShade };
+    case 'panel':
+      return { color: normalized.panelColor, shade: normalized.panelShade };
+    case 'button':
+      return { color: normalized.buttonColor, shade: normalized.buttonShade };
+    case 'cellBg':
+      return { color: normalized.cellBgColor, shade: normalized.cellBgShade };
+    case 'cellText':
+      return { color: normalized.cellTextColor, shade: normalized.cellTextShade };
+    case 'border':
+      return { color: normalized.borderColor, shade: normalized.borderShade };
+    case 'grid':
+      return { color: normalized.gridColor, shade: normalized.gridShade };
+  }
+}
+
+export function buildUiThemeSlotCssVars(
+  slot: UiThemeEditableSlot,
+  color: UiThemeColor,
+  shade: number,
+): Record<string, string> {
+  const vars: Record<string, string> = {};
+  const stop = shadeToStop(shade);
+
+  switch (slot) {
+    case 'surface':
+      appendCssVar(vars, '--mh-surface-bg-light', resolveStoppedTone(color, stop, 'light', BACKGROUND_TOKENS));
+      appendCssVar(vars, '--mh-surface-bg-dark', resolveStoppedTone(color, stop, 'dark', BACKGROUND_TOKENS));
+      return vars;
+    case 'panel':
+      appendCssVar(vars, '--mh-panel-bg-light', resolveStoppedTone(color, stop, 'light', BACKGROUND_TOKENS));
+      appendCssVar(vars, '--mh-panel-bg-dark', resolveStoppedTone(color, stop, 'dark', BACKGROUND_TOKENS));
+      return vars;
+    case 'button':
+      appendCssVar(vars, '--mh-button-bg-light', resolveStoppedTone(color, stop, 'light', BACKGROUND_TOKENS));
+      appendCssVar(vars, '--mh-button-bg-dark', resolveStoppedTone(color, stop, 'dark', BACKGROUND_TOKENS));
+      appendCssVar(vars, '--mh-button-border-light', resolveStoppedTone(color, stop, 'light', BORDER_TOKENS));
+      appendCssVar(vars, '--mh-button-border-dark', resolveStoppedTone(color, stop, 'dark', BORDER_TOKENS));
+      appendCssVar(vars, '--mh-button-text-light', resolveDefaultTone(stop, 'light', BUTTON_TEXT_TOKENS));
+      appendCssVar(vars, '--mh-button-text-dark', resolveDefaultTone(stop, 'dark', BUTTON_TEXT_TOKENS));
+      return vars;
+    case 'cellBg':
+      appendCssVar(vars, '--mh-cell-bg-light', resolveStoppedTone(color, stop, 'light', BACKGROUND_TOKENS));
+      appendCssVar(vars, '--mh-cell-bg-dark', resolveStoppedTone(color, stop, 'dark', BACKGROUND_TOKENS));
+      return vars;
+    case 'cellText':
+      appendCssVar(vars, '--mh-cell-text-light', resolveStoppedTone(color, stop, 'light', CELL_TEXT_TOKENS));
+      appendCssVar(vars, '--mh-cell-text-dark', resolveStoppedTone(color, stop, 'dark', CELL_TEXT_TOKENS));
+      return vars;
+    case 'border':
+      appendCssVar(vars, '--mh-border-line-light', resolveStoppedTone(color, stop, 'light', BORDER_TOKENS));
+      appendCssVar(vars, '--mh-border-line-dark', resolveStoppedTone(color, stop, 'dark', BORDER_TOKENS));
+      return vars;
+    case 'grid':
+      appendCssVar(vars, '--mh-grid-line-light', resolveStoppedTone(color, stop, 'light', BORDER_TOKENS));
+      appendCssVar(vars, '--mh-grid-line-dark', resolveStoppedTone(color, stop, 'dark', BORDER_TOKENS));
+      return vars;
+  }
+}
+
 export type UiThemeV1 = {
   schemaVersion: 1;
   gridStrongLines: boolean;
@@ -408,6 +477,10 @@ export type UiThemeV2 = {
 };
 
 export type UiTheme = UiThemeV2;
+export type UiThemeSlotValue = {
+  color: UiThemeColor;
+  shade: number;
+};
 
 export function defaultUiTheme(): UiTheme {
   return {
