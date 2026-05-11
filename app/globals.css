@@ -3141,4 +3141,111 @@ body {
   .dark .mh-button-pink-100 button.dark\:border-zinc-800\/60 {
     @apply border-pink-300/60;
   }
+
+  /* Variable-based overrides for the expanded palette.
+     These declarations stay dormant until applyUiTheme() sets a CSS variable,
+     so the legacy class-based colors continue to work unchanged. */
+  body[data-color-edit-slot='surface'] {
+    background-color: var(--mh-surface-bg-light) !important;
+  }
+  .dark body[data-color-edit-slot='surface'] {
+    background-color: var(--mh-surface-bg-dark) !important;
+  }
+
+  [data-color-edit-slot='panel'] {
+    background-color: var(--mh-panel-bg-light) !important;
+  }
+  .dark [data-color-edit-slot='panel'] {
+    background-color: var(--mh-panel-bg-dark) !important;
+  }
+
+  button,
+  [data-color-edit-slot='button'] {
+    background-color: var(--mh-button-bg-light) !important;
+    border-color: var(--mh-button-border-light) !important;
+    color: var(--mh-button-text-light) !important;
+  }
+  .dark button,
+  .dark [data-color-edit-slot='button'] {
+    background-color: var(--mh-button-bg-dark) !important;
+    border-color: var(--mh-button-border-dark) !important;
+    color: var(--mh-button-text-dark) !important;
+  }
+
+  [data-color-edit-slot='cellBg'] {
+    background-color: var(--mh-cell-bg-light) !important;
+  }
+  .dark [data-color-edit-slot='cellBg'] {
+    background-color: var(--mh-cell-bg-dark) !important;
+  }
+
+  [data-color-edit-slot='cellText'] {
+    color: var(--mh-cell-text-light) !important;
+  }
+  .dark [data-color-edit-slot='cellText'] {
+    color: var(--mh-cell-text-dark) !important;
+  }
+
+  [data-color-edit-slot='border'] {
+    border-color: var(--mh-border-line-light) !important;
+  }
+  .dark [data-color-edit-slot='border'] {
+    border-color: var(--mh-border-line-dark) !important;
+  }
+
+  .mh-grid .border-zinc-200,
+  .mh-grid .border-zinc-300,
+  .mh-grid .border-zinc-200\/60 {
+    border-color: var(--mh-grid-line-light) !important;
+  }
+  .dark .mh-grid .dark\:border-zinc-800,
+  .dark .mh-grid .dark\:border-zinc-700,
+  .dark .mh-grid .dark\:border-zinc-800\/60 {
+    border-color: var(--mh-grid-line-dark) !important;
+  }
+
+  .mh-btn-primary {
+    border-color: var(--mh-btn-primary-border-light) !important;
+    color: var(--mh-btn-primary-text-light) !important;
+  }
+  .dark .mh-btn-primary {
+    border-color: var(--mh-btn-primary-border-dark) !important;
+    color: var(--mh-btn-primary-text-dark) !important;
+  }
+
+  .mh-btn-danger {
+    border-color: var(--mh-btn-danger-border-light) !important;
+    color: var(--mh-btn-danger-text-light) !important;
+  }
+  .dark .mh-btn-danger {
+    border-color: var(--mh-btn-danger-border-dark) !important;
+    color: var(--mh-btn-danger-text-dark) !important;
+  }
+
+  .mh-alert-dot-invoice.mh-alert-dot-active {
+    border-color: var(--mh-alert-invoice-light) !important;
+    background-color: var(--mh-alert-invoice-light) !important;
+  }
+  .dark .mh-alert-dot-invoice.mh-alert-dot-active {
+    border-color: var(--mh-alert-invoice-dark) !important;
+    background-color: var(--mh-alert-invoice-dark) !important;
+  }
+
+  .mh-alert-dot-report.mh-alert-dot-active {
+    border-color: var(--mh-alert-report-light) !important;
+    background-color: var(--mh-alert-report-light) !important;
+  }
+  .dark .mh-alert-dot-report.mh-alert-dot-active {
+    border-color: var(--mh-alert-report-dark) !important;
+    background-color: var(--mh-alert-report-dark) !important;
+  }
+
+  .mh-alert-dot-unassigned.mh-alert-dot-active {
+    border-color: var(--mh-alert-unassigned-light) !important;
+    background-color: var(--mh-alert-unassigned-light) !important;
+  }
+  .dark .mh-alert-dot-unassigned.mh-alert-dot-active {
+    border-color: var(--mh-alert-unassigned-dark) !important;
+    background-color: var(--mh-alert-unassigned-dark) !important;
+  }
 }

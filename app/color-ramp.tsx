@@ -33,16 +33,34 @@ function swatchClass(c: UiThemeColor): string {
       return 'bg-red-500';
     case 'orange':
       return 'bg-orange-500';
+    case 'amber':
+      return 'bg-amber-400';
     case 'yellow':
       return 'bg-yellow-400';
+    case 'lime':
+      return 'bg-lime-400';
     case 'green':
       return 'bg-green-500';
+    case 'emerald':
+      return 'bg-emerald-500';
+    case 'teal':
+      return 'bg-teal-500';
+    case 'cyan':
+      return 'bg-cyan-500';
+    case 'sky':
+      return 'bg-sky-500';
     case 'blue':
       return 'bg-blue-500';
+    case 'indigo':
+      return 'bg-indigo-500';
+    case 'violet':
+      return 'bg-violet-500';
     case 'purple':
       return 'bg-purple-500';
     case 'pink':
       return 'bg-pink-500';
+    case 'rose':
+      return 'bg-rose-500';
   }
 }
 

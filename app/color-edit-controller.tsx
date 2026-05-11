@@ -80,6 +80,13 @@ export default function ColorEditController() {
   const saveTimerRef = useRef<number | null>(null);
   const pendingOverrideRef = useRef<PageThemeOverridesV1 | null>(null);
 
+  const openEditorAt = useCallback((slot: EditSlot, x: number, y: number) => {
+    const margin = 8;
+    const left = Math.min(Math.max(margin, Math.round(x)), Math.max(margin, window.innerWidth - 296));
+    const top = Math.min(Math.max(margin, Math.round(y)), Math.max(margin, window.innerHeight - 196));
+    setOpen({ left, top, slot });
+  }, []);
+
   const applyMerged = useCallback(
     (override: PageThemeOverridesV1) => {
       const base = readLocalUiTheme(userIdRef.current);
@@ -182,17 +189,33 @@ export default function ColorEditController() {
       // Settings / editor UI should remain clickable
       if (t.closest('[data-color-edit-ui]')) return;
 
-      // Allow selecting edit target while keeping the mode.
+      if (e.button !== 0) return;
+
+      // While edit mode is enabled, regular left-clicks should not trigger the underlying UI.
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onContextMenu = (e: MouseEvent) => {
+      const t = e.target instanceof Element ? e.target : null;
+      if (!t) return;
+
+      if (t.closest('[data-color-edit-ui]')) return;
+
       e.preventDefault();
       e.stopPropagation();
 
       const slot = inferSlotFromTarget(t);
-      setOpen({ left: Math.max(8, Math.round(e.clientX)), top: Math.max(8, Math.round(e.clientY)), slot });
+      openEditorAt(slot, e.clientX, e.clientY);
     };
 
     document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
-  }, [enabled]);
+    document.addEventListener('contextmenu', onContextMenu, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('contextmenu', onContextMenu, true);
+    };
+  }, [enabled, openEditorAt]);
 
   const current = useMemo(() => {
     const base = readLocalUiTheme(userId);
