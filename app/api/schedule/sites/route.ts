@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { excludeScheduleCellNoteEntries } from '@/server/schedule/work-entry-filters';
 
 export const runtime = 'nodejs';
 
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
   const rows = await prisma.workEntry.findMany({
     orderBy: { startAt: 'desc' },
     take: limit,
-    where: { kind },
+    where: excludeScheduleCellNoteEntries({ kind }),
     select: { accountingMeta: true, summary: true, note: true },
   });
 

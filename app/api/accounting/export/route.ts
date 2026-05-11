@@ -1,6 +1,7 @@
 import { getAccountingProvider } from '@/server/accounting';
 import { prisma } from '@/server/db/prisma';
 import { buildJdlCsv } from '@/server/accounting/jdlCsv';
+import { excludeScheduleCellNoteEntries } from '@/server/schedule/work-entry-filters';
 import { Prisma } from '@/generated/prisma';
 import { z } from 'zod';
 
@@ -85,14 +86,14 @@ export async function POST(request: Request) {
     metaEquals,
   } = parsed.data;
 
-  const where: Prisma.WorkEntryWhereInput = {
+  const where: Prisma.WorkEntryWhereInput = excludeScheduleCellNoteEntries({
     ...(since ? { startAt: { gte: new Date(since) } } : {}),
     ...(until ? { startAt: { lt: new Date(until) } } : {}),
     ...(userId ? { userId } : {}),
     ...(department ? { department } : {}),
     ...(taxCategory ? { taxCategory } : {}),
     ...(accountingType ? { accountingType } : {}),
-  };
+  });
 
   if (typeof minAmount === 'number' || typeof maxAmount === 'number') {
     const amountFilter: Prisma.DecimalNullableFilter<'WorkEntry'> = {};
