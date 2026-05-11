@@ -162,6 +162,9 @@ export default function AppHeader() {
     return k === 'daily' ? 'daily' : 'normal';
   }, [isWeekHubPage, searchParams]);
 
+  const isDailyWeek = isWeek && weekScheduleKindKey === 'daily';
+  const isNormalWeek = isWeek && weekScheduleKindKey !== 'daily';
+
   const weekGridPrefsKey = useMemo(() => {
     if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
     return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
@@ -2046,9 +2049,9 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isWeek)}
+            className={navLinkClass(isNormalWeek)}
             title="週予定へ（週モードに戻す）"
-            aria-current={isWeek ? 'page' : undefined}
+            aria-current={isNormalWeek ? 'page' : undefined}
           >
             週予定
           </Link>
@@ -2119,6 +2122,18 @@ export default function AppHeader() {
             aria-current={isPartners ? 'page' : undefined}
           >
             関係会社
+          </Link>
+
+          <Link
+            href="/?mode=week&kind=daily"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={navLinkClass(isDailyWeek, 'hidden lg:inline-flex')}
+            title="日常予定へ"
+            aria-current={isDailyWeek ? 'page' : undefined}
+          >
+            日常
           </Link>
 
           <div ref={multiMenuRef} className="relative">
