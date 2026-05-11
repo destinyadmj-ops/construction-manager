@@ -693,6 +693,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           }}
         >
           <div
+            data-color-edit-id="user-gate:modal"
             data-color-edit-slot="border"
             className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-black"
           >
@@ -706,6 +707,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
               {me ? (
                 <button
                   type="button"
+                  data-color-edit-id="user-gate:close"
                   onClick={closeIfPossible}
                   className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
                 >
@@ -716,6 +718,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
             {me ? (
               <div
+                data-color-edit-id="user-gate:current-user"
                 data-color-edit-slot="border"
                 className="mt-3 rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200"
               >

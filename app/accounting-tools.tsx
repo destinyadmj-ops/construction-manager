@@ -900,11 +900,12 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
 
       <div
         className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-id="accounting:exports-panel"
         data-color-edit-slot="border"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">出力一覧</div>
-          <button type="button" className={smallBtn} onClick={loadExports} disabled={exportsLoading}>
+          <button type="button" data-color-edit-id="accounting:exports-refresh" className={smallBtn} onClick={loadExports} disabled={exportsLoading}>
             {exportsLoading ? '更新中…' : '一覧更新'}
           </button>
         </div>
@@ -919,6 +920,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
               <div
                 key={f.fileName}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-2 dark:border-zinc-800"
+                data-color-edit-id={`accounting:export-file:${f.fileName}`}
                 data-color-edit-slot="border"
               >
                 <div className="min-w-0 flex-1 truncate text-[11px] text-zinc-700 dark:text-zinc-300" title={f.fileName}>
@@ -930,12 +932,14 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
                   <a
                     className={smallBtn}
                     href={`/api/accounting/exports/${encodeURIComponent(f.fileName)}`}
+                    data-color-edit-id={`accounting:export-file:${f.fileName}:download`}
                     data-color-edit-slot="button"
                   >
                     DL
                   </a>
                   <button
                     type="button"
+                    data-color-edit-id={`accounting:export-file:${f.fileName}:delete`}
                     className="mh-btn-danger"
                     onClick={() => deleteExport(f.fileName)}
                     disabled={exportDeletingFile === f.fileName}
@@ -951,11 +955,12 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
 
       <div
         className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+        data-color-edit-id="accounting:presets-panel"
         data-color-edit-slot="border"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">テンプレ（条件プリセット）</div>
-          <button type="button" className={smallBtn} onClick={loadPresetList} disabled={presetsLoading}>
+          <button type="button" data-color-edit-id="accounting:presets-refresh" className={smallBtn} onClick={loadPresetList} disabled={presetsLoading}>
             {presetsLoading ? '更新中…' : '一覧更新'}
           </button>
         </div>
@@ -963,7 +968,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
 
         <div className="mt-2 flex flex-wrap gap-1">
           {presets.length === 0 ? (
-            <button type="button" className={smallBtn} onClick={() => loadPreset('default')}>
+            <button type="button" data-color-edit-id="accounting:preset:default:open" className={smallBtn} onClick={() => loadPreset('default')}>
               default を開く
             </button>
           ) : (
@@ -971,6 +976,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
               <button
                 key={p.key}
                 type="button"
+                data-color-edit-id={`accounting:preset:${p.key}:open`}
                 className={smallBtn}
                 onClick={() => loadPreset(p.key)}
                 aria-pressed={activePresetKey === p.key}
@@ -1007,7 +1013,7 @@ export default function AccountingTools(props: { selectedSiteLabel?: string | nu
         </div>
 
         <div className="mt-2 flex items-center gap-2">
-          <button type="button" className={smallBtn} onClick={savePreset} disabled={presetSaving || !presetJsonValid} title={!presetJsonValid ? 'JSONが不正です（保存不可）' : undefined}>
+          <button type="button" data-color-edit-id="accounting:preset:save" className={smallBtn} onClick={savePreset} disabled={presetSaving || !presetJsonValid} title={!presetJsonValid ? 'JSONが不正です（保存不可）' : undefined}>
             {presetSaving ? '保存中…' : '保存'}
           </button>
           {presetSaveMsg ? <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{presetSaveMsg}</div> : null}

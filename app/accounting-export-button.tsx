@@ -116,6 +116,7 @@ export default function AccountingExportButton({
         type="button"
         onClick={onClick}
         disabled={isLoading}
+        data-color-edit-id={`accounting:export-button:${presetKey ?? 'custom'}`}
         data-color-edit-slot="button"
         className="inline-flex items-center justify-center rounded-lg border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
       >

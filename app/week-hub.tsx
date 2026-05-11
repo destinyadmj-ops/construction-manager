@@ -35,6 +35,7 @@ type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 type LabelColor = (typeof LABEL_COLORS)[number];
+type ApiCellEntry = { label: string; color: LabelColor };
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
@@ -53,6 +54,7 @@ type ApiCell = {
   // Optional hint color for each slot.
   color1: LabelColor;
   color2: LabelColor;
+  entries?: ApiCellEntry[];
 };
 
 type ApiResponse = {
@@ -81,6 +83,8 @@ type YearSummaryApiResponse = {
 type SiteItem = {
   id: string | null;
   label: string;
+  name?: string | null;
+  companyName?: string | null;
   scheduleLabelColor?: LabelColor | null;
   badgeMonthVisible?: boolean;
   invoiceIssuedThisMonth?: boolean;
@@ -228,12 +232,28 @@ function cloneApiCell(cell: ApiCell | null | undefined): ApiCell {
     slot2: cell?.slot2 ?? null,
     color1: cell?.color1 ?? 'default',
     color2: cell?.color2 ?? 'default',
+    entries: Array.isArray(cell?.entries)
+      ? cell.entries
+          .map((entry) => ({
+            label: typeof entry?.label === 'string' ? entry.label : '',
+            color: isLabelColor(entry?.color) ? entry.color : 'default',
+          }))
+          .filter((entry) => entry.label.trim().length > 0)
+      : undefined,
   };
 }
 
-type CellEntry = { label: string; color: ApiCell['color1'] };
+type CellEntry = ApiCellEntry;
 
 function apiCellToEntries(cell: ApiCell | null | undefined): CellEntry[] {
+  if (Array.isArray(cell?.entries) && cell.entries.length > 0) {
+    return cell.entries
+      .map((entry) => ({
+        label: typeof entry?.label === 'string' ? entry.label : '',
+        color: isLabelColor(entry?.color) ? entry.color : 'default',
+      }))
+      .filter((entry) => entry.label.trim().length > 0);
+  }
   const entries: CellEntry[] = [];
   if (cell?.slot1) entries.push({ label: cell.slot1, color: cell.color1 ?? 'default' });
   if (cell?.slot2) entries.push({ label: cell.slot2, color: cell.color2 ?? 'default' });
@@ -241,11 +261,18 @@ function apiCellToEntries(cell: ApiCell | null | undefined): CellEntry[] {
 }
 
 function entriesToApiCell(entries: CellEntry[]): ApiCell {
+  const normalizedEntries = entries
+    .map((entry) => ({
+      label: entry.label?.trim() ?? '',
+      color: isLabelColor(entry.color) ? entry.color : 'default',
+    }))
+    .filter((entry) => entry.label.length > 0);
   return {
-    slot1: entries[0]?.label ?? null,
-    slot2: entries[1]?.label ?? null,
-    color1: entries[0]?.color ?? 'default',
-    color2: entries[1]?.color ?? 'default',
+    slot1: normalizedEntries[0]?.label ?? null,
+    slot2: normalizedEntries[1]?.label ?? null,
+    color1: normalizedEntries[0]?.color ?? 'default',
+    color2: normalizedEntries[1]?.color ?? 'default',
+    entries: normalizedEntries,
   };
 }
 
@@ -387,13 +414,73 @@ function depreciationBadgeClass(alert: boolean) {
   }`;
 }
 
-function mergeSiteItems(current: SiteItem[], incoming: Array<Pick<SiteItem, 'id' | 'label'>>): SiteItem[] {
+function normalizeSiteMatchKey(input: string | null | undefined) {
+  return (input ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .toLocaleLowerCase('ja-JP');
+}
+
+function splitSiteLabel(label: string | null | undefined) {
+  const value = (label ?? '').trim();
+  if (!value) return { companyName: null, name: '' };
+  const parts = value.split(' / ');
+  if (parts.length >= 2) {
+    return {
+      companyName: parts.slice(0, -1).join(' / ').trim() || null,
+      name: parts[parts.length - 1]?.trim() ?? '',
+    };
+  }
+  return { companyName: null, name: value };
+}
+
+function siteStoredName(site: Pick<SiteItem, 'name' | 'label'> | null | undefined) {
+  const name = site?.name?.trim();
+  if (name) return name;
+  return splitSiteLabel(site?.label).name;
+}
+
+function siteCompanyName(site: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
+  const companyName = site?.companyName?.trim();
+  if (companyName) return companyName;
+  return splitSiteLabel(site?.label).companyName;
+}
+
+function siteCompanyKey(site: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
+  return normalizeSiteMatchKey(siteCompanyName(site));
+}
+
+function sameCompanySite(a: Pick<SiteItem, 'companyName' | 'label'> | null | undefined, b: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
+  const aKey = siteCompanyKey(a);
+  const bKey = siteCompanyKey(b);
+  return aKey.length > 0 && aKey === bKey;
+}
+
+function mergeSiteItems(
+  current: SiteItem[],
+  incoming: Array<Pick<SiteItem, 'id' | 'label' | 'name' | 'companyName' | 'scheduleLabelColor'>>,
+): SiteItem[] {
   const byId = new Map(current.filter((item) => item.id).map((item) => [item.id as string, item] as const));
   const byLabel = new Map(current.map((item) => [item.label.trim(), item] as const));
 
   return incoming.map((item) => {
     const hit = (item.id ? byId.get(item.id) : undefined) ?? byLabel.get(item.label.trim());
-    return hit ? { ...hit, id: item.id, label: item.label } : { id: item.id, label: item.label };
+    return hit
+      ? {
+          ...hit,
+          id: item.id,
+          label: item.label,
+          name: item.name ?? hit.name ?? null,
+          companyName: item.companyName ?? hit.companyName ?? null,
+          scheduleLabelColor: item.scheduleLabelColor ?? hit.scheduleLabelColor ?? 'default',
+        }
+      : {
+          id: item.id,
+          label: item.label,
+          name: item.name ?? null,
+          companyName: item.companyName ?? null,
+          scheduleLabelColor: item.scheduleLabelColor ?? 'default',
+        };
   });
 }
 
@@ -911,7 +998,7 @@ function WeekHubInner() {
       const byName = sites.find((x) => x.label.trim() === name || x.label.trim().endsWith(` / ${name}`));
       if (byName) return byName;
 
-      return { id: null, label: name };
+      return { id: null, label: name, name, companyName: null };
     },
     [normalizeSiteInputToName, sites],
   );
@@ -1538,6 +1625,8 @@ function WeekHubInner() {
           return {
             id: s.id,
             label,
+            name: s.name,
+            companyName: s.companyName ?? null,
             scheduleLabelColor: isLabelColor(s.scheduleLabelColor) ? s.scheduleLabelColor : 'default',
             badgeMonthVisible:
               !hasConfiguredPace(s.repeatRule, s.pace) || (typeof s.paceExpectedThisMonth === 'number' && s.paceExpectedThisMonth > 0),
@@ -1731,10 +1820,13 @@ function WeekHubInner() {
           const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : null;
           const id = typeof o?.id === 'string' ? o.id : null;
           const name = typeof o?.name === 'string' ? o.name : null;
+            const companyName = typeof o?.companyName === 'string' ? o.companyName : null;
           if (!id || !name) return null;
           return {
             id,
-            label: name,
+              label: companyName ? `${companyName} / ${name}` : name,
+              name,
+              companyName,
             scheduleLabelColor: isLabelColor(o?.scheduleLabelColor) ? o.scheduleLabelColor : 'default',
           } as SiteItem;
         })
@@ -2639,7 +2731,13 @@ function WeekHubInner() {
                             setSiteCreateMsg(msg || `HTTP ${r.status}`);
                             return;
                           }
-                          const created: SiteItem = { id: json.site.id, label: name, scheduleLabelColor: 'default' };
+                          const created: SiteItem = {
+                            id: json.site.id,
+                            label: name,
+                            name,
+                            companyName: null,
+                            scheduleLabelColor: 'default',
+                          };
                           setSites((cur) => [created, ...cur]);
                           setSelectedSite(created);
                           setNewSiteName('');
@@ -3013,6 +3111,7 @@ function WeekHubInner() {
                   onPrevMonth={goPrevMonth}
                   onNextMonth={goNextMonth}
                   onToday={() => setCursorDate(new Date())}
+                  allSites={sites}
                   selectedSite={selectedSite}
                   resolveSiteReference={resolveSiteReference}
                   paceTargetDays={weekVisiblePaceTargets}
@@ -3282,6 +3381,7 @@ function WeekHubInner() {
                   cellMinHComfortable={cellMinHComfortable}
                   cellBg={cellBg}
                   onStartNameColResize={startNameColResize}
+                  allSites={sites}
                   selectedSite={selectedSite}
                   resolveSiteReference={resolveSiteReference}
                   paceTargetDays={monthVisiblePaceTargets}
@@ -3791,6 +3891,7 @@ function WeekGrid({
   onPrevMonth,
   onNextMonth,
   onToday,
+  allSites,
   selectedSite,
   resolveSiteReference,
   paceTargetDays,
@@ -3843,6 +3944,7 @@ function WeekGrid({
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onToday: () => void;
+  allSites: SiteItem[];
   selectedSite: SiteItem | null;
   resolveSiteReference: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   paceTargetDays: ReadonlySet<string>;
@@ -4088,6 +4190,7 @@ function WeekGrid({
                   key={u.id}
                   user={u}
                   allUsers={users}
+                  allSites={allSites}
                   dayLabels={dayLabels}
                   allGrid={grid}
                   grid={grid[u.id] ?? {}}
@@ -4159,6 +4262,7 @@ function MonthGrid({
   cellMinHComfortable,
   cellBg,
   onStartNameColResize,
+  allSites,
   selectedSite,
   resolveSiteReference,
   paceTargetDays,
@@ -4197,6 +4301,7 @@ function MonthGrid({
   cellMinHComfortable: number;
   cellBg: CellBg;
   onStartNameColResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  allSites: SiteItem[];
   selectedSite: SiteItem | null;
   resolveSiteReference: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   paceTargetDays: ReadonlySet<string>;
@@ -4405,6 +4510,7 @@ function MonthGrid({
                   key={u.id}
                   user={u}
                   allUsers={users}
+                  allSites={allSites}
                   dayLabels={dayLabels}
                   allGrid={grid}
                   grid={grid[u.id] ?? {}}
@@ -4794,6 +4900,7 @@ function YearGrid({
 function Row({
   user,
   allUsers,
+  allSites,
   dayLabels,
   allGrid,
   grid,
@@ -4841,6 +4948,7 @@ function Row({
 }: {
   user: ApiUser;
   allUsers: ApiUser[];
+  allSites: SiteItem[];
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   allGrid: Record<string, Record<string, ApiCell>>;
   grid: Record<string, ApiCell>;
