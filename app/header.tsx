@@ -1707,7 +1707,6 @@ export default function AppHeader() {
               data-color-edit-id="header-action-save"
               data-testid="header-action-save"
               onClick={() => {
-                exitColorEditMode();
                 void actions.save?.onClick();
               }}
               disabled={!actions.save || actions.save.disabled}
