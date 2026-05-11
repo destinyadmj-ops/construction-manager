@@ -6475,8 +6475,16 @@ function Row({
               <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同日・同現場に入れる従業員を複数選択</div>
               <div className="max-h-56 space-y-1 overflow-auto pr-1">
                 {slotContextUserOptions.map((option) => (
-                  <label
+                  <button
                     key={option.userId}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={slotContextSelectedUserIds.has(option.userId)}
+                    disabled={option.disabled}
+                    onClick={() => {
+                      if (option.disabled) return;
+                      toggleSlotContextUser(option.userId);
+                    }}
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
                       option.disabled
                         ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
@@ -6485,13 +6493,6 @@ function Row({
                           : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={slotContextSelectedUserIds.has(option.userId)}
-                      disabled={option.disabled}
-                      onChange={() => toggleSlotContextUser(option.userId)}
-                    />
                     <span
                       aria-hidden="true"
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold leading-none transition ${
@@ -6512,7 +6513,7 @@ function Row({
                     ) : option.hasSite ? (
                       <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
                     ) : null}
-                  </label>
+                  </button>
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2">
@@ -6541,8 +6542,16 @@ function Row({
               <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同名別店舗をチェック選択</div>
               <div className="max-h-56 space-y-1 overflow-auto pr-1">
                 {slotContextRelatedSiteOptions.map((option) => (
-                  <label
+                  <button
                     key={option.storedName}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={slotContextSelectedSiblingNames.has(option.storedName)}
+                    disabled={option.disabled}
+                    onClick={() => {
+                      if (option.disabled) return;
+                      toggleSlotContextSibling(option.storedName);
+                    }}
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
                       option.disabled
                         ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
@@ -6551,13 +6560,6 @@ function Row({
                         : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={slotContextSelectedSiblingNames.has(option.storedName)}
-                      disabled={option.disabled}
-                      onChange={() => toggleSlotContextSibling(option.storedName)}
-                    />
                     <span
                       aria-hidden="true"
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold leading-none transition ${
@@ -6576,7 +6578,7 @@ function Row({
                     ) : slotContextSelectedSiblingNames.has(option.storedName) ? (
                       <span className="text-[10px] text-blue-700 dark:text-blue-300">選択中</span>
                     ) : null}
-                  </label>
+                  </button>
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2">
