@@ -1,4 +1,4 @@
-import { normalizeSiteFamilyKey, findSiteFamily } from '@/shared/site-family';
+import { hasSiteFamilyDisplayPrefix, normalizeSiteFamilyKey, findSiteFamily } from '@/shared/site-family';
 import { prisma } from '@/server/db/prisma';
 
 export const runtime = 'nodejs';
@@ -99,12 +99,40 @@ function formatGroupValue(group: { items: Array<{ label: string }> } | null | un
   return labels.length > 0 ? labels.join(' / ') : null;
 }
 
-function buildCellGroups(items: Array<{ label: string; color: LabelColor }>) {
+function buildCellGroups(items: Array<{ label: string; color: LabelColor; groupIndex?: number | null; itemIndex?: number | null }>) {
+  if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
+    const grouped = new Map<number, Array<{ label: string; color: LabelColor; order: number }>>();
+    items.forEach((item, itemOrder) => {
+      const groupIndex = item.groupIndex as number;
+      if (groupIndex < 0 || groupIndex > 1) return;
+      const hit = grouped.get(groupIndex) ?? [];
+      hit.push({
+        label: item.label,
+        color: item.color,
+        order: typeof item.itemIndex === 'number' ? item.itemIndex : itemOrder,
+      });
+      grouped.set(groupIndex, hit);
+    });
+
+    return Array.from(grouped.entries())
+      .sort((left, right) => left[0] - right[0])
+      .map(([, groupItems]) => ({
+        items: [...groupItems]
+          .sort((left, right) => left.order - right.order)
+          .slice(0, 4)
+          .map(({ label, color }) => ({ label, color })),
+      }))
+      .slice(0, 2);
+  }
+
   const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor }> }> = [];
   const peerNames = items.map((item) => item.label);
   for (const item of items) {
     const family = findSiteFamily(item.label, peerNames);
-    const key = family.key ? `family:${family.key}` : `single:${normalizeSiteFamilyKey(item.label)}`;
+    const explicitPrefix = hasSiteFamilyDisplayPrefix(item.label);
+    const key = family.key
+      ? `${explicitPrefix ? 'prefixed-family' : 'family'}:${family.key}`
+      : `${explicitPrefix ? 'prefixed-single' : 'single'}:${normalizeSiteFamilyKey(item.label)}`;
     const hit = groups.find((group) => group.key === key);
     if (hit) {
       hit.items.push({ label: item.label, color: item.color });
@@ -171,7 +199,7 @@ export async function GET(request: Request) {
 
   for (const u of users) grid[u.id] = {};
 
-  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor }>>> = {};
+  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; groupIndex?: number | null; itemIndex?: number | null }>>> = {};
 
   for (const e of entries) {
     const day = toYmd(e.startAt);
@@ -183,7 +211,12 @@ export async function GET(request: Request) {
     const color: LabelColor = colorForEntry({ label, site: e.site, accountingMeta: e.accountingMeta });
     if (!cellItems[e.userId]) cellItems[e.userId] = {};
     if (!cellItems[e.userId]![day]) cellItems[e.userId]![day] = [];
-    cellItems[e.userId]![day]!.push({ label, color });
+    const meta = e.accountingMeta && typeof e.accountingMeta === 'object' && !Array.isArray(e.accountingMeta)
+      ? (e.accountingMeta as Record<string, unknown>)
+      : null;
+    const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
+    const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
+    cellItems[e.userId]![day]!.push({ label, color, groupIndex, itemIndex });
   }
 
   for (const uid of Object.keys(cellItems)) {

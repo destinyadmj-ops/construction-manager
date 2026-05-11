@@ -4,12 +4,16 @@ export type SiteFamilyInfo = {
   memberCount: number;
 };
 
-export function siteFamilyDisplayName(input: string | null | undefined) {
-  let value = (input ?? '')
+function normalizeSiteFamilySourceText(input: string | null | undefined) {
+  return (input ?? '')
     .normalize('NFKC')
     .replace(/\u3000/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+export function siteFamilyDisplayName(input: string | null | undefined) {
+  let value = normalizeSiteFamilySourceText(input);
 
   if (!value) return '';
 
@@ -22,6 +26,12 @@ export function siteFamilyDisplayName(input: string | null | undefined) {
     .replace(/^(?:株式会社|有限会社|合同会社|合名会社|合資会社|医療法人|社会福祉法人|学校法人|宗教法人)\s*/u, '')
     .replace(/^[（(](?:株|有|同|名|資|医|社福|学|宗)[)）]\s*/u, '')
     .trim();
+}
+
+export function hasSiteFamilyDisplayPrefix(input: string | null | undefined) {
+  const source = normalizeSiteFamilySourceText(input);
+  if (!source) return false;
+  return siteFamilyDisplayName(source) !== source;
 }
 
 export function normalizeSiteFamilyText(input: string | null | undefined) {

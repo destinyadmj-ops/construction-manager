@@ -5285,30 +5285,46 @@ function Row({
     [assignedUserIdsForSite, isEditable, onNotify, siblingEntryNamesForSite, siteFamilyLabelForName],
   );
 
+  const slotContextAssignUsersDay = slotContextMenu?.mode === 'assign-users' ? slotContextMenu.day : null;
+  const slotContextAssignUsersSiteName = slotContextMenu?.mode === 'assign-users' ? slotContextMenu.siteName : null;
+  const slotContextAssignUsersColor = slotContextMenu?.mode === 'assign-users' ? slotContextMenu.color : null;
+
   const slotContextUserOptions = useMemo(() => {
-    if (!slotContextMenu || slotContextMenu.mode !== 'assign-users') return [];
-    const selected = new Set(slotContextMenu.selectedUserIds);
+    if (!slotContextAssignUsersDay || !slotContextAssignUsersSiteName || !slotContextAssignUsersColor) return [];
+
     return allUsers.map((candidate) => {
-      const beforeCell = cloneApiCell(allGrid[candidate.id]?.[slotContextMenu.day]);
+      const beforeCell = cloneApiCell(allGrid[candidate.id]?.[slotContextAssignUsersDay]);
       const entries = apiCellToEntries(beforeCell);
-      const hasSite = entries.some((entry) => entry.label === slotContextMenu.siteName);
+      const hasSite = entries.some((entry) => entry.label === slotContextAssignUsersSiteName);
       const preview = previewCellAction({
         cell: beforeCell,
         action: 'add',
-        siteName: slotContextMenu.siteName,
-        color: slotContextMenu.color,
+        siteName: slotContextAssignUsersSiteName,
+        color: slotContextAssignUsersColor,
         familyKeyForSiteName: siteFamilyKeyForName,
       });
       return {
         userId: candidate.id,
         userLabel: (candidate.name ?? candidate.email ?? candidate.id).trim(),
-        checked: selected.has(candidate.id),
         hasSite,
         disabled: !hasSite && !preview.changed,
         disabledReason: typeof preview.reason === 'string' ? preview.reason : null,
       };
     });
-  }, [allGrid, allUsers, siteFamilyKeyForName, slotContextMenu]);
+  }, [
+    allGrid,
+    allUsers,
+    siteFamilyKeyForName,
+    slotContextAssignUsersColor,
+    slotContextAssignUsersDay,
+    slotContextAssignUsersSiteName,
+  ]);
+
+  const slotContextSelectedUserIds = useMemo(
+    () =>
+      new Set(slotContextMenu?.mode === 'assign-users' ? slotContextMenu.selectedUserIds : []),
+    [slotContextMenu],
+  );
 
   const toggleSlotContextUser = useCallback((targetUserId: string) => {
     setSlotContextMenu((current) => {
@@ -6286,7 +6302,7 @@ function Row({
                         >
                           <input
                             type="checkbox"
-                            checked={option.checked}
+                            checked={slotContextSelectedUserIds.has(option.userId)}
                             disabled={option.disabled}
                             onChange={() => toggleSlotContextUser(option.userId)}
                           />
