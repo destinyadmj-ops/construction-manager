@@ -140,7 +140,7 @@ type SlotContextMenuState = {
   companyName: string | null;
   entryKind: ScheduleCellEntryKind;
   groupIndex: number;
-  mode: 'actions' | 'assign-users' | 'related-sites' | 'append-note';
+  mode: 'actions' | 'change-color' | 'assign-users' | 'related-sites' | 'append-note';
   selectedUserIds: string[];
   selectedSiblingNames: string[];
   noteDraft: string;
@@ -5782,7 +5782,7 @@ function Row({
     onNotify?.(messages.length > 0 ? `同名別店舗を同期: ${messages.join(' / ')}` : '変更はありません');
   }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
 
-  async function applySlotContextGroupRed() {
+  async function applySlotContextGroupColor(nextColor: LabelColor) {
     const current = slotContextMenu;
     if (!current || current.mode !== 'actions') return;
 
@@ -5805,7 +5805,7 @@ function Row({
             ? group
             : {
                 items: group.items.map((entry) =>
-                  createCellEntry(entry.label, 'red', { kind: entry.kind, syncSource: entry.syncSource }),
+                  createCellEntry(entry.label, nextColor, { kind: entry.kind, syncSource: entry.syncSource }),
                 ),
               },
         ),
@@ -5827,7 +5827,7 @@ function Row({
         const syncResult = await syncSiteColorAcrossUsers({
           day: current.day,
           siteName: entry.label,
-          color: 'red',
+          color: nextColor,
           sourceUserId: user.id,
         });
         syncedCount += syncResult.syncedCount;
@@ -6594,13 +6594,12 @@ function Row({
             <div className="mt-2 space-y-1">
               <button
                 type="button"
-                disabled={slotContextMenu.color === 'red'}
                 onClick={() => {
-                  void applySlotContextGroupRed();
+                  setSlotContextMenu((current) => (current ? { ...current, mode: 'change-color' } : current));
                 }}
-                className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
               >
-                当該枠を赤文字表示
+                {slotContextMenu.entryKind === 'site' ? '当該現場の色変更' : '当該追記の色変更'}
               </button>
               <button
                 type="button"
@@ -6656,6 +6655,51 @@ function Row({
               >
                 当該枠をセルから削除
               </button>
+            </div>
+          ) : slotContextMenu.mode === 'change-color' ? (
+            <div className="mt-2 space-y-2">
+              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">保存後、週予定と月予定の表示に反映します。</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                    void applySlotContextGroupColor('red');
+                  }}
+                  className={`rounded-md border px-3 py-2 text-left ${
+                    slotContextMenu.color === 'red'
+                      ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                      : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                  }`}
+                >
+                  赤
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                    void applySlotContextGroupColor('default');
+                  }}
+                  className={`rounded-md border px-3 py-2 text-left ${
+                    slotContextMenu.color === 'default'
+                      ? 'border-zinc-400 bg-zinc-100 text-zinc-900 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100'
+                      : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                  }`}
+                >
+                  黒（デフォルト）
+                </button>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                  }}
+                  className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                >
+                  戻る
+                </button>
+              </div>
             </div>
           ) : slotContextMenu.mode === 'assign-users' ? (
             <div className="mt-2">
