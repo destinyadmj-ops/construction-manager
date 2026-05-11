@@ -21,6 +21,10 @@ import {
   scheduleSyncSourceEquals,
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
+import {
+  normalizeScheduleCellEntryKind,
+  type ScheduleCellEntryKind,
+} from '@/shared/schedule-cell-entry';
 import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/shared/site-family';
 import {
   DEFAULT_WEEK_GRID_PREFS,
@@ -42,8 +46,15 @@ type ScheduleKind = 'normal' | 'daily';
 type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+const MAX_CELL_GROUPS = 4;
+const MAX_GROUP_ITEMS = 4;
 type LabelColor = (typeof LABEL_COLORS)[number];
-type ApiCellEntry = { label: string; color: LabelColor; syncSource?: ScheduleSyncSource | null };
+type ApiCellEntry = {
+  label: string;
+  color: LabelColor;
+  kind?: ScheduleCellEntryKind | null;
+  syncSource?: ScheduleSyncSource | null;
+};
 type ApiCellGroup = { items: ApiCellEntry[] };
 
 type ApiUser = { id: string; name: string | null; email: string | null };
@@ -119,6 +130,22 @@ type CellHistoryEntry = {
 
 type DraggedCellState = { userId: string; day: string; cell: ApiCell };
 
+type SlotContextMenuState = {
+  day: string;
+  siteName: string;
+  color: LabelColor;
+  beforeCell: ApiCell;
+  x: number;
+  y: number;
+  companyName: string | null;
+  entryKind: ScheduleCellEntryKind;
+  groupIndex: number;
+  mode: 'actions' | 'assign-users' | 'related-sites' | 'append-note';
+  selectedUserIds: string[];
+  selectedSiblingNames: string[];
+  noteDraft: string;
+};
+
 type ScheduleChangeHistoryItem = {
   id: string;
   dayYmd: string;
@@ -143,6 +170,10 @@ function isLabelColor(value: unknown): value is LabelColor {
 
 function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: LabelColor = 'default'): LabelColor {
   return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
+}
+
+function isSiteCellEntry(entry: ApiCellEntry | null | undefined) {
+  return normalizeScheduleCellEntryKind(entry?.kind) === 'site';
 }
 
 function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): string {
@@ -228,14 +259,21 @@ function cloneCellGroupItems(items: ApiCellEntry[] | null | undefined): ApiCellE
     .map((entry) => ({
       label: typeof entry?.label === 'string' ? entry.label.trim() : '',
       color: isLabelColor(entry?.color) ? entry.color : 'default',
-      syncSource: cloneScheduleSyncSource(entry?.syncSource),
+      kind: normalizeScheduleCellEntryKind(entry?.kind),
+      syncSource: isSiteCellEntry(entry) ? cloneScheduleSyncSource(entry?.syncSource) : null,
     }))
     .filter((entry) => entry.label.length > 0);
 }
 
-function createCellEntry(label: string, color: LabelColor, syncSource?: ScheduleSyncSource | null): ApiCellEntry {
-  const nextSyncSource = cloneScheduleSyncSource(syncSource);
-  return nextSyncSource ? { label, color, syncSource: nextSyncSource } : { label, color };
+function createCellEntry(
+  label: string,
+  color: LabelColor,
+  options?: { kind?: ScheduleCellEntryKind | null; syncSource?: ScheduleSyncSource | null },
+): ApiCellEntry {
+  const kind = normalizeScheduleCellEntryKind(options?.kind);
+  const nextSyncSource = kind === 'site' ? cloneScheduleSyncSource(options?.syncSource) : null;
+  if (kind === 'note') return { label, color, kind };
+  return nextSyncSource ? { label, color, kind, syncSource: nextSyncSource } : { label, color, kind };
 }
 
 function cloneCellGroups(groups: ApiCellGroup[] | null | undefined): ApiCellGroup[] {
@@ -249,8 +287,8 @@ function apiCellToGroups(cell: ApiCell | null | undefined): ApiCellGroup[] {
   if (normalizedGroups.length > 0) return normalizedGroups;
 
   const groups: ApiCellGroup[] = [];
-  if (cell?.slot1) groups.push({ items: [{ label: cell.slot1, color: cell.color1 ?? 'default' }] });
-  if (cell?.slot2) groups.push({ items: [{ label: cell.slot2, color: cell.color2 ?? 'default' }] });
+  if (cell?.slot1) groups.push({ items: [createCellEntry(cell.slot1, cell.color1 ?? 'default', { kind: 'site' })] });
+  if (cell?.slot2) groups.push({ items: [createCellEntry(cell.slot2, cell.color2 ?? 'default', { kind: 'site' })] });
   return groups;
 }
 
@@ -270,6 +308,7 @@ function apiCellGroupsEqual(a: ApiCellGroup[] | null | undefined, b: ApiCellGrou
     for (let itemIndex = 0; itemIndex < leftItems.length; itemIndex += 1) {
       if (leftItems[itemIndex]?.label !== rightItems[itemIndex]?.label) return false;
       if (leftItems[itemIndex]?.color !== rightItems[itemIndex]?.color) return false;
+      if (normalizeScheduleCellEntryKind(leftItems[itemIndex]?.kind) !== normalizeScheduleCellEntryKind(rightItems[itemIndex]?.kind)) return false;
       if (!scheduleSyncSourceEquals(leftItems[itemIndex]?.syncSource, rightItems[itemIndex]?.syncSource)) return false;
     }
   }
@@ -306,6 +345,10 @@ function apiCellToEntries(cell: ApiCell | null | undefined): CellEntry[] {
   return apiCellToGroups(cell).flatMap((group) => group.items);
 }
 
+function apiCellToSiteEntries(cell: ApiCell | null | undefined): CellEntry[] {
+  return apiCellToEntries(cell).filter((entry) => isSiteCellEntry(entry));
+}
+
 function groupsToApiCell(groups: ApiCellGroup[]): ApiCell {
   const normalizedGroups = cloneCellGroups(groups);
   const normalizedEntries = normalizedGroups.flatMap((group) => group.items);
@@ -326,24 +369,37 @@ function previewCellAction(input: {
   color: CellTextColor;
   familyKeyForSiteName?: (siteName: string) => string | null;
   allowSiblingMerge?: boolean;
+  newEntryKind?: ScheduleCellEntryKind;
   newEntrySyncSource?: ScheduleSyncSource | null;
 }): {
   cell: ApiCell;
   changed: boolean;
   reason?: string;
   toggled?: 'off' | 'on';
-  replaced?: 'slot2';
+  replaced?: 'last-slot';
 } {
   const currentCell = cloneApiCell(input.cell);
   const groups = apiCellToGroups(currentCell);
   const siteName = input.siteName?.trim() ?? '';
-  const hitGroupIndex = siteName ? groups.findIndex((group) => group.items.some((entry) => entry.label === siteName)) : -1;
-  const hitItemIndex = hitGroupIndex >= 0 ? groups[hitGroupIndex]?.items.findIndex((entry) => entry.label === siteName) ?? -1 : -1;
+  const hitGroupIndex = siteName
+    ? groups.findIndex((group) => group.items.some((entry) => isSiteCellEntry(entry) && entry.label === siteName))
+    : -1;
+  const hitItemIndex = hitGroupIndex >= 0
+    ? groups[hitGroupIndex]?.items.findIndex((entry) => isSiteCellEntry(entry) && entry.label === siteName) ?? -1
+    : -1;
   const targetFamilyKey = siteName ? input.familyKeyForSiteName?.(siteName) ?? null : null;
   const allowSiblingMerge = input.allowSiblingMerge !== false;
   const siblingGroupIndex = targetFamilyKey
-    ? groups.findIndex((group) => group.items.some((entry) => input.familyKeyForSiteName?.(entry.label) === targetFamilyKey))
+    ? groups.findIndex((group) =>
+        group.items.some((entry) => isSiteCellEntry(entry) && input.familyKeyForSiteName?.(entry.label) === targetFamilyKey),
+      )
     : -1;
+
+  const createSiteGroupEntry = () =>
+    createCellEntry(siteName, input.color, {
+      kind: input.newEntryKind ?? 'site',
+      syncSource: input.newEntrySyncSource,
+    });
 
   const updateGroups = (nextGroups: ApiCellGroup[]) => groupsToApiCell(nextGroups);
 
@@ -404,7 +460,7 @@ function previewCellAction(input: {
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
       if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
-        if (siblingGroup.items.length >= 4) {
+        if (siblingGroup.items.length >= MAX_GROUP_ITEMS) {
           return { cell: currentCell, changed: false, reason: 'group-full' };
         }
         return {
@@ -412,22 +468,16 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
+                : { items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
           toggled: 'on',
         };
       }
-      if (groups.length >= 2) {
-        return {
-          cell: updateGroups([groups[0]!, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
-          changed: true,
-          replaced: 'slot2',
-        };
-      }
+      if (groups.length >= MAX_CELL_GROUPS) return { cell: currentCell, changed: false, reason: 'cell-full' };
       return {
-        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
+        cell: updateGroups([...groups, { items: [createSiteGroupEntry()] }]),
         changed: true,
         toggled: 'on',
       };
@@ -436,21 +486,21 @@ function previewCellAction(input: {
       if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
       if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
-        if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
+        if (siblingGroup.items.length >= MAX_GROUP_ITEMS) return { cell: currentCell, changed: false, reason: 'group-full' };
         return {
           cell: updateGroups(
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
+                : { items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
         };
       }
-      if (groups.length >= 2) return { cell: currentCell, changed: false, reason: 'cell-full' };
+      if (groups.length >= MAX_CELL_GROUPS) return { cell: currentCell, changed: false, reason: 'cell-full' };
       return {
-        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
+        cell: updateGroups([...groups, { items: [createSiteGroupEntry()] }]),
         changed: true,
       };
     case 'replace2':
@@ -458,26 +508,27 @@ function previewCellAction(input: {
       if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
       if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
-        if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
+        if (siblingGroup.items.length >= MAX_GROUP_ITEMS) return { cell: currentCell, changed: false, reason: 'group-full' };
         return {
           cell: updateGroups(
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
+                : { items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
         };
       }
-      if (groups.length >= 2) {
+      if (groups.length >= MAX_CELL_GROUPS) {
         return {
-          cell: updateGroups([groups[0]!, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
+          cell: updateGroups([...groups.slice(0, -1), { items: [createSiteGroupEntry()] }]),
           changed: true,
+          replaced: 'last-slot',
         };
       }
       return {
-        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
+        cell: updateGroups([...groups, { items: [createSiteGroupEntry()] }]),
         changed: true,
       };
   }
@@ -1268,10 +1319,10 @@ function WeekHubInner() {
             {
               value: 'toggle' as const,
               label: 'トグル',
-              title: '選択現場があれば削除 / なければ追加（満杯なら2枠目を置換）',
+              title: '選択現場があれば削除 / なければ追加（満杯なら変更なし）',
             },
             { value: 'add' as const, label: '追加', title: '空きがある時だけ追加（満杯なら変更なし）' },
-            { value: 'replace2' as const, label: '置換2', title: '2枠目を置換（空きなら追加）' },
+            { value: 'replace2' as const, label: '末尾置換', title: '末尾枠を置換（空きなら追加）' },
             { value: 'remove' as const, label: '削除', title: '選択現場を削除（無ければ変更なし）' },
             { value: 'recolor' as const, label: '色', title: '選択現場の文字色を変更（追加/削除なし）' },
             { value: 'swap' as const, label: '入替', title: '1枠目と2枠目を入替（現場選択なしでOK）' },
@@ -5150,18 +5201,7 @@ function Row({
   const isSelectedUser = selectedUserId === user.id;
   const isCurrentUser = currentUserId === user.id;
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
-  const [slotContextMenu, setSlotContextMenu] = useState<null | {
-    day: string;
-    siteName: string;
-    color: LabelColor;
-    beforeCell: ApiCell;
-    x: number;
-    y: number;
-    companyName: string | null;
-    mode: 'actions' | 'assign-users' | 'related-sites';
-    selectedUserIds: string[];
-    selectedSiblingNames: string[];
-  }>(null);
+  const [slotContextMenu, setSlotContextMenu] = useState<SlotContextMenuState | null>(null);
 
   const resolveStoredSite = useCallback(
     (siteName: string) => {
@@ -5264,7 +5304,7 @@ function Row({
       if (!targetName) return [];
       return allUsers
         .filter((candidate) =>
-          apiCellToEntries(allGrid[candidate.id]?.[day]).some((entry) => entry.label === targetName),
+          apiCellToSiteEntries(allGrid[candidate.id]?.[day]).some((entry) => entry.label === targetName),
         )
         .map((candidate) => candidate.id);
     },
@@ -5274,7 +5314,14 @@ function Row({
   const openSlotContextMenu = useCallback(
     (
       event: ReactMouseEvent<HTMLElement>,
-      input: { day: string; siteName: string; color: LabelColor; beforeCell: ApiCell },
+      input: {
+        day: string;
+        siteName: string;
+        color: LabelColor;
+        beforeCell: ApiCell;
+        groupIndex: number;
+        entryKind: ScheduleCellEntryKind;
+      },
     ) => {
       event.preventDefault();
       event.stopPropagation();
@@ -5290,10 +5337,13 @@ function Row({
         beforeCell: cloneApiCell(input.beforeCell),
         x: event.clientX,
         y: event.clientY,
-        companyName: siteFamilyLabelForName(input.siteName),
+        companyName: input.entryKind === 'site' ? siteFamilyLabelForName(input.siteName) : null,
+        entryKind: input.entryKind,
+        groupIndex: input.groupIndex,
         mode: 'actions',
-        selectedUserIds: assignedUserIdsForSite(input.day, input.siteName),
-        selectedSiblingNames: siblingEntryNamesForSite(input.day, input.siteName),
+        selectedUserIds: input.entryKind === 'site' ? assignedUserIdsForSite(input.day, input.siteName) : [],
+        selectedSiblingNames: input.entryKind === 'site' ? siblingEntryNamesForSite(input.day, input.siteName) : [],
+        noteDraft: '',
       });
     },
     [assignedUserIdsForSite, isEditable, onNotify, siblingEntryNamesForSite, siteFamilyLabelForName],
@@ -5308,7 +5358,7 @@ function Row({
 
     return allUsers.map((candidate) => {
       const beforeCell = cloneApiCell(allGrid[candidate.id]?.[slotContextAssignUsersDay]);
-      const entries = apiCellToEntries(beforeCell);
+      const entries = apiCellToSiteEntries(beforeCell);
       const hasSite = entries.some((entry) => entry.label === slotContextAssignUsersSiteName);
       const preview = previewCellAction({
         cell: beforeCell,
@@ -5316,6 +5366,7 @@ function Row({
         siteName: slotContextAssignUsersSiteName,
         color: slotContextAssignUsersColor,
         familyKeyForSiteName: siteFamilyKeyForName,
+        newEntryKind: 'site',
       });
       return {
         userId: candidate.id,
@@ -5361,7 +5412,7 @@ function Row({
   }, []);
 
   const slotContextRelatedSiteOptions = useMemo(() => {
-    if (!slotContextMenu) return [];
+    if (!slotContextMenu || slotContextMenu.entryKind !== 'site') return [];
     const anchorFamily = siteFamilyInfoForName(slotContextMenu.siteName);
     if (!anchorFamily.key || !anchorFamily.label) return [];
 
@@ -5375,7 +5426,7 @@ function Row({
         if (!storedName || seen.has(storedName)) return null;
         seen.add(storedName);
         const checked = selected.has(storedName);
-        const disabled = !checked && selected.size >= 4;
+        const disabled = !checked && selected.size >= MAX_GROUP_ITEMS;
         return {
           site,
           storedName,
@@ -5472,12 +5523,12 @@ function Row({
       const beforeGroups = apiCellToGroups(beforeCell);
       const action = selected.has(targetUser.id) ? 'add' : 'remove';
       const exactGroupIndex = beforeGroups.findIndex((group) =>
-        group.items.some((entry) => entry.label === current.siteName),
+        group.items.some((entry) => isSiteCellEntry(entry) && entry.label === current.siteName),
       );
       const legacyFamilyGroupIndex = inheritedSyncSource
         ? beforeGroups.findIndex((group) => {
             const hasFamilyMember = group.items.some(
-              (entry) => siteFamilyKeyForName(entry.label) === inheritedSyncSource.familyKey,
+              (entry) => isSiteCellEntry(entry) && siteFamilyKeyForName(entry.label) === inheritedSyncSource.familyKey,
             );
             const hasExistingSyncSource = group.items.some((entry) => Boolean(entry.syncSource));
             return hasFamilyMember && !hasExistingSyncSource;
@@ -5496,7 +5547,10 @@ function Row({
               ? group
               : {
                   items: group.items.map((entry) =>
-                    createCellEntry(entry.label, entry.color, targetUser.id === user.id ? null : inheritedSyncSource),
+                    createCellEntry(entry.label, entry.color, {
+                      kind: entry.kind,
+                      syncSource: targetUser.id === user.id ? null : inheritedSyncSource,
+                    }),
                   ),
                 },
           ),
@@ -5524,7 +5578,10 @@ function Row({
               ? group
               : {
                   items: group.items.map((entry) =>
-                    createCellEntry(entry.label, entry.color, inheritedSyncSource),
+                    createCellEntry(entry.label, entry.color, {
+                      kind: entry.kind,
+                      syncSource: inheritedSyncSource,
+                    }),
                   ),
                 },
           ),
@@ -5571,6 +5628,7 @@ function Row({
         siteName: current.siteName,
         color: current.color,
         familyKeyForSiteName: siteFamilyKeyForName,
+        newEntryKind: 'site',
         newEntrySyncSource: action === 'add' && targetUser.id !== user.id ? inheritedSyncSource : null,
       });
       if (!preview.changed) {
@@ -5590,7 +5648,7 @@ function Row({
       }
 
       if (action === 'add') {
-        const hadSite = apiCellToEntries(beforeCell).some((entry) => entry.label === current.siteName);
+        const hadSite = apiCellToSiteEntries(beforeCell).some((entry) => entry.label === current.siteName);
         if (hadSite) recoloredCount += 1;
         else addedCount += 1;
       }
@@ -5630,7 +5688,7 @@ function Row({
     }
 
     const selectedSites = slotContextRelatedSiteOptions.filter((option) => selectedNames.has(option.storedName));
-    if (selectedSites.length > 4) {
+    if (selectedSites.length > MAX_GROUP_ITEMS) {
       onNotify?.('同名別店舗は4件までです');
       return;
     }
@@ -5641,10 +5699,10 @@ function Row({
       familyKey: anchorFamilyKey,
     });
     const currentGroup = apiCellToGroups(current.beforeCell).find((group) =>
-      group.items.some((entry) => entry.label === current.siteName),
+      group.items.some((entry) => isSiteCellEntry(entry) && entry.label === current.siteName),
     );
     const currentGroupSyncSource =
-      currentGroup?.items.find((entry) => entry.label === current.siteName)?.syncSource ?? currentGroup?.items[0]?.syncSource ?? null;
+      currentGroup?.items.find((entry) => isSiteCellEntry(entry) && entry.label === current.siteName)?.syncSource ?? currentGroup?.items[0]?.syncSource ?? null;
     const isParentEdit = !currentGroupSyncSource || scheduleSyncSourceEquals(currentGroupSyncSource, ownerSyncSource);
 
     const targetUsers = isParentEdit && ownerSyncSource
@@ -5662,10 +5720,10 @@ function Row({
 
     for (const targetUser of targetUsers) {
       const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
-      const currentEntries = apiCellToEntries(beforeCell);
+      const currentEntries = apiCellToSiteEntries(beforeCell);
       const currentGroups = apiCellToGroups(beforeCell);
       const targetGroupIndex = targetUser.id === user.id
-        ? currentGroups.findIndex((group) => group.items.some((entry) => entry.label === current.siteName))
+        ? currentGroups.findIndex((group) => group.items.some((entry) => isSiteCellEntry(entry) && entry.label === current.siteName))
         : currentGroups.findIndex((group) =>
             group.items.some((entry) => scheduleSyncSourceEquals(entry.syncSource, ownerSyncSource)),
           );
@@ -5683,7 +5741,7 @@ function Row({
           createCellEntry(
             option.storedName,
             currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, anchorColor),
-            nextSyncSource,
+            { kind: 'site', syncSource: nextSyncSource },
           ),
         ),
       };
@@ -5691,7 +5749,7 @@ function Row({
       const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
       nextGroups[targetGroupIndex] = replacementGroup;
 
-      if (nextGroups.length > 2) {
+      if (nextGroups.length > MAX_CELL_GROUPS) {
         skippedCount += 1;
         continue;
       }
@@ -5724,14 +5782,149 @@ function Row({
     onNotify?.(messages.length > 0 ? `同名別店舗を同期: ${messages.join(' / ')}` : '変更はありません');
   }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
 
+  const applySlotContextGroupRed = useCallback(async () => {
+    const current = slotContextMenu;
+    if (!current || current.mode !== 'actions') return;
+
+    const beforeCell = cloneApiCell(current.beforeCell);
+    const beforeGroups = apiCellToGroups(beforeCell);
+    const targetGroup = beforeGroups[current.groupIndex];
+    if (!targetGroup) {
+      closeSlotContextMenu();
+      onNotify?.('対象の枠が見つかりません');
+      return;
+    }
+
+    const result = await persistCellSet({
+      targetUser: user,
+      day: current.day,
+      beforeCell,
+      nextCell: groupsToApiCell(
+        beforeGroups.map((group, groupIndex) =>
+          groupIndex !== current.groupIndex
+            ? group
+            : {
+                items: group.items.map((entry) =>
+                  createCellEntry(entry.label, 'red', { kind: entry.kind, syncSource: entry.syncSource }),
+                ),
+              },
+        ),
+      ),
+    });
+    if (result.failed) {
+      onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+      return;
+    }
+    if (!result.changed) {
+      onNotify?.('変更はありません');
+      return;
+    }
+
+    let syncedCount = 0;
+    let failedCount = 0;
+    if (current.entryKind === 'site') {
+      for (const entry of targetGroup.items.filter((item) => isSiteCellEntry(item))) {
+        const syncResult = await syncSiteColorAcrossUsers({
+          day: current.day,
+          siteName: entry.label,
+          color: 'red',
+          sourceUserId: user.id,
+        });
+        syncedCount += syncResult.syncedCount;
+        failedCount += syncResult.failedCount;
+      }
+    }
+
+    closeSlotContextMenu();
+    const messages = ['色を変更しました'];
+    if (syncedCount > 0) messages.push(`他${syncedCount}名に色同期`);
+    if (failedCount > 0) messages.push(`${failedCount}名失敗`);
+    onNotify?.(messages.join(' / '));
+    void Promise.resolve(onAssigned()).catch(() => undefined);
+  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, syncSiteColorAcrossUsers, user]);
+
+  const removeSlotContextGroup = useCallback(async () => {
+    const current = slotContextMenu;
+    if (!current || current.mode !== 'actions') return;
+
+    const beforeCell = cloneApiCell(current.beforeCell);
+    const beforeGroups = apiCellToGroups(beforeCell);
+    if (!beforeGroups[current.groupIndex]) {
+      closeSlotContextMenu();
+      onNotify?.('対象の枠が見つかりません');
+      return;
+    }
+
+    const result = await persistCellSet({
+      targetUser: user,
+      day: current.day,
+      beforeCell,
+      nextCell: groupsToApiCell(beforeGroups.filter((_, groupIndex) => groupIndex !== current.groupIndex)),
+    });
+    if (result.failed) {
+      onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+      return;
+    }
+    if (!result.changed) {
+      onNotify?.('変更はありません');
+      return;
+    }
+
+    closeSlotContextMenu();
+    onNotify?.('削除しました');
+    void Promise.resolve(onAssigned()).catch(() => undefined);
+  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, user]);
+
+  const applySlotContextNote = useCallback(async () => {
+    const current = slotContextMenu;
+    if (!current || current.mode !== 'append-note') return;
+
+    const noteText = current.noteDraft.trim();
+    if (!noteText) {
+      onNotify?.('追加記入を入力してください');
+      return;
+    }
+
+    const beforeCell = cloneApiCell(current.beforeCell);
+    const beforeGroups = apiCellToGroups(beforeCell);
+    if (beforeGroups.length >= MAX_CELL_GROUPS) {
+      onNotify?.('満杯のため追加記入できません（4枠あり）');
+      return;
+    }
+
+    const result = await persistCellSet({
+      targetUser: user,
+      day: current.day,
+      beforeCell,
+      nextCell: groupsToApiCell([
+        ...beforeGroups,
+        { items: [createCellEntry(noteText, 'default', { kind: 'note' })] },
+      ]),
+    });
+    if (result.failed) {
+      onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+      return;
+    }
+    if (!result.changed) {
+      onNotify?.('変更はありません');
+      return;
+    }
+
+    closeSlotContextMenu();
+    onNotify?.('追加記入を反映しました');
+    void Promise.resolve(onAssigned()).catch(() => undefined);
+  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, user]);
+
   const renderSiteLabel = useCallback(
     (
       input: {
         displayValue: string;
-        siteName: string;
+        tooltipValue: string;
+        siteName: string | null;
+        entryKind: ScheduleCellEntryKind;
         className: string;
         fontSize: string;
-        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor };
+        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number };
       },
     ) => {
       const contextInput = input.contextInput;
@@ -5739,19 +5932,22 @@ function Row({
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
               day: contextInput.day,
-              siteName: input.siteName,
+              siteName: input.siteName ?? input.displayValue,
               color: contextInput.color,
               beforeCell: contextInput.beforeCell,
+              groupIndex: contextInput.groupIndex,
+              entryKind: input.entryKind,
             });
           }
         : undefined;
-      if (!onOpenSiteFromCell) {
+      if (input.entryKind !== 'site' || !input.siteName || !onOpenSiteFromCell) {
         return (
           <div
             data-color-edit-ignore-contextmenu
             className={input.className}
             style={{ fontSize: input.fontSize }}
             onContextMenu={handleContextMenu}
+            title={input.tooltipValue}
           >
             {input.displayValue}
           </div>
@@ -5776,7 +5972,8 @@ function Row({
           onContextMenu={handleContextMenu}
           className={`${input.className} w-full cursor-pointer text-left hover:underline`}
           style={{ fontSize: input.fontSize }}
-          title="現場詳細を開く"
+          title={input.tooltipValue}
+          aria-label={`${input.siteName} の詳細を開く`}
         >
           {input.displayValue}
         </div>
@@ -5791,8 +5988,16 @@ function Row({
       if (groups.length === 0) return null;
 
       return groups.map((group, groupIndex) => {
-        const familyLabel = siteFamilyLabelForName(group.items[0]?.label ?? '');
+        const anchorEntry = group.items.find((entry) => isSiteCellEntry(entry)) ?? group.items[0] ?? null;
+        const familyLabel = anchorEntry && isSiteCellEntry(anchorEntry) ? siteFamilyLabelForName(anchorEntry.label) : null;
         const renderedItems = group.items.map((entry, itemIndex) => {
+          if (!isSiteCellEntry(entry)) {
+            return {
+              entry,
+              storedName: entry.label,
+              displayName: `追記: ${entry.label}`,
+            };
+          }
           const site = resolveStoredSite(entry.label);
           const fullName = siteFamilyDisplayName(siteStoredName(site) || entry.label);
           return {
@@ -5804,39 +6009,23 @@ function Row({
                 : fullName,
           };
         });
-
-        if (renderedItems.length > 1) {
-          return (
-            <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1.5' : ''}>
-              <div className="space-y-0.5">
-                {renderedItems.map((item, itemIndex) => (
-                  <Fragment key={`group-item:${day}:${groupIndex}:${itemIndex}:${item.storedName}`}>
-                    {renderSiteLabel({
-                      displayValue: item.displayName,
-                      siteName: item.storedName,
-                      className: `whitespace-normal break-words ${itemIndex > 0 ? 'pl-2 ' : ''}${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, itemIndex === 0 && groupIndex === 0 ? 'primary' : 'secondary')}`,
-                      fontSize:
-                        itemIndex === 0 && groupIndex === 0
-                          ? 'var(--weekhub-cell-font-size, 12px)'
-                          : 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-                      contextInput: { day, beforeCell, color: item.entry.color },
-                    })}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          );
-        }
-
-        const item = renderedItems[0]!;
+        const tooltipValue = renderedItems.map((item) => item.displayName).join('\n');
+        const displayValue = renderedItems.map((item) => item.displayName).join(' / ');
+        const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         return (
-          <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-0.5' : ''}>
+          <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
             {renderSiteLabel({
-              displayValue: item.displayName,
-              siteName: item.storedName,
-              className: `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, groupIndex === 0 ? 'primary' : 'secondary')}`,
-              fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-              contextInput: { day, beforeCell, color: item.entry.color },
+              displayValue,
+              tooltipValue,
+              siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
+              entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
+              className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(anchorEntry?.color ?? 'default', groupIndex === 0 ? 'primary' : 'secondary')} ${
+                isNoteGroup
+                  ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
+                  : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
+              }`,
+              fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
+              contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex },
             })}
           </div>
         );
@@ -5853,10 +6042,10 @@ function Row({
     if (reason === 'group-full') return '同名別店舗は1枠4件までです';
     if (reason === 'cell-full') {
       return action === 'add'
-        ? '満杯のため追加できません（2枠あり）'
+        ? '満杯のため追加できません（4枠あり）'
         : action === 'toggle'
-          ? '満杯のため2枠目を置換できませんでした'
-          : '満杯のため反映できません（2枠あり）';
+          ? '満杯のため追加できません（4枠あり）'
+          : '満杯のため反映できません（4枠あり）';
     }
     if (reason === 'already-exists') {
       return action === 'remove' ? '削除対象がありません（未登録）' : 'すでに登録済みです';
@@ -5873,10 +6062,10 @@ function Row({
   }): string => {
     if (input.action === 'swap') return '入替しました';
     if (input.action === 'recolor') return '色を変更しました';
-    if (input.replaced === 'slot2') return '2枠目を置換しました';
+    if (input.replaced === 'last-slot') return '末尾枠を置換しました';
     if (input.action === 'remove') return '削除しました';
     if (input.action === 'add') return '追加しました';
-    if (input.action === 'replace2') return '2枠目を置換しました';
+    if (input.action === 'replace2') return '末尾枠を置換しました';
     if (input.action === 'toggle') {
       return input.toggled === 'off' ? '削除しました' : '追加しました';
     }
@@ -6059,9 +6248,9 @@ function Row({
     () =>
       dayLabels.map((d) => {
         const cell = grid[d.key];
-        const slot1 = cell?.slot1 ?? null;
-        const slot2 = cell?.slot2 ?? null;
         const beforeCell = cloneApiCell(cell);
+        const hasAnyEntry = apiCellToGroups(beforeCell).length > 0;
+        const primarySiteEntry = apiCellToSiteEntries(beforeCell)[0] ?? null;
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
@@ -6072,9 +6261,9 @@ function Row({
             tabIndex={0}
             data-testid={`cell-${user.id}-${d.key}`}
             data-cell-day={d.key}
-            draggable={isEditable && Boolean(slot1 || slot2)}
+            draggable={isEditable && Boolean(primarySiteEntry)}
             onDragStart={(e) => {
-              if (!isEditable || (!slot1 && !slot2)) return;
+              if (!isEditable || !primarySiteEntry) return;
               onSetDraggedCell?.({ userId: user.id, day: d.key, cell: beforeCell });
               e.dataTransfer.effectAllowed = 'copy';
             }}
@@ -6099,7 +6288,7 @@ function Row({
                   allowSiblingMerge: false,
                 });
               } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
-                const siteName = apiCellToEntries(draggedCell.cell)[0]?.label;
+                const siteName = apiCellToSiteEntries(draggedCell.cell)[0]?.label;
                 if (siteName) {
                   void runCellAction({
                     day: d.key,
@@ -6122,7 +6311,7 @@ function Row({
 
               if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
                 setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(slot1 ?? '');
+                setEditingInput?.(primarySiteEntry?.label ?? '');
                 setSiteSuggestions?.([]);
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
@@ -6141,7 +6330,7 @@ function Row({
               e.preventDefault();
               e.stopPropagation();
               setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-              setEditingInput?.(slot1 ?? '');
+              setEditingInput?.(primarySiteEntry?.label ?? '');
               setSiteSuggestions?.([]);
             }}
             onKeyDown={(e) => {
@@ -6153,7 +6342,7 @@ function Row({
               }
               if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
                 setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(slot1 ?? '');
+                setEditingInput?.(primarySiteEntry?.label ?? '');
                 setSiteSuggestions?.([]);
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
@@ -6173,8 +6362,8 @@ function Row({
             } ${selectedCell?.userId === user.id && selectedCell?.day === d.key ? 'ring-2 ring-blue-500 ring-inset' : ''} ${
               rowCellClassName ?? ''
             } ${isPaceTarget ? 'shadow-[inset_0_0_0_1px_rgba(245,158,11,0.6)]' : ''} ${
-              isPaceTarget && !slot1 && !slot2 ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
-            } ${isEditable && (slot1 || slot2) ? 'cursor-move' : ''}`}
+              isPaceTarget && !hasAnyEntry ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
+            } ${isEditable && primarySiteEntry ? 'cursor-move' : ''}`}
           >
             {isPaceTarget ? (
               <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
@@ -6392,7 +6581,9 @@ function Row({
           }}
         >
           <div className="border-b border-zinc-200 px-1 pb-2 dark:border-zinc-800">
-            <div className="truncate font-medium text-zinc-900 dark:text-zinc-100">{slotContextMenu.siteName}</div>
+            <div className="truncate font-medium text-zinc-900 dark:text-zinc-100">
+              {slotContextMenu.entryKind === 'note' ? `追記: ${slotContextMenu.siteName}` : slotContextMenu.siteName}
+            </div>
             <div className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{slotContextMenu.day}</div>
           </div>
 
@@ -6402,21 +6593,22 @@ function Row({
                 type="button"
                 disabled={slotContextMenu.color === 'red'}
                 onClick={() => {
-                  const current = slotContextMenu;
-                  if (!current) return;
-                  closeSlotContextMenu();
-                  void runCellAction({
-                    day: current.day,
-                    action: 'recolor',
-                    color: 'red',
-                    siteName: current.siteName,
-                    beforeCell: current.beforeCell,
-                  });
+                  void applySlotContextGroupRed();
                 }}
                 className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
               >
-                当該現場を赤文字表示
+                当該枠を赤文字表示
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSlotContextMenu((current) => (current ? { ...current, mode: 'append-note', noteDraft: '' } : current));
+                }}
+                className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              >
+                追加記入
+              </button>
+              {slotContextMenu.entryKind === 'site' ? (
               <button
                 type="button"
                 onClick={() => {
@@ -6433,7 +6625,8 @@ function Row({
               >
                 同日・同現場の従業員を選択
               </button>
-              {slotContextRelatedSiteOptions.length > 1 ? (
+              ) : null}
+              {slotContextMenu.entryKind === 'site' && slotContextRelatedSiteOptions.length > 1 ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -6454,20 +6647,11 @@ function Row({
               <button
                 type="button"
                 onClick={() => {
-                  const current = slotContextMenu;
-                  if (!current) return;
-                  closeSlotContextMenu();
-                  void runCellAction({
-                    day: current.day,
-                    action: 'remove',
-                    color: current.color,
-                    siteName: current.siteName,
-                    beforeCell: current.beforeCell,
-                  });
+                  void removeSlotContextGroup();
                 }}
                 className="w-full rounded-md border border-red-200 px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
               >
-                当該現場をセルから削除
+                当該枠をセルから削除
               </button>
             </div>
           ) : slotContextMenu.mode === 'assign-users' ? (
@@ -6534,6 +6718,53 @@ function Row({
                   className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                 >
                   決定
+                </button>
+              </div>
+            </div>
+          ) : slotContextMenu.mode === 'append-note' ? (
+            <div className="mt-2 space-y-2">
+              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">このセルだけに表示する追記を追加</div>
+              <input
+                type="text"
+                value={slotContextMenu.noteDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSlotContextMenu((current) => (current && current.mode === 'append-note' ? { ...current, noteDraft: value } : current));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                    return;
+                  }
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void applySlotContextNote();
+                  }
+                }}
+                autoFocus
+                maxLength={200}
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                placeholder="例: 午後は資材待ち"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                  }}
+                  className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                >
+                  戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void applySlotContextNote();
+                  }}
+                  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                >
+                  追加
                 </button>
               </div>
             </div>
