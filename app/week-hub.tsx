@@ -312,6 +312,7 @@ function previewCellAction(input: {
   siteName?: string | null;
   color: CellTextColor;
   familyKeyForSiteName?: (siteName: string) => string | null;
+  allowSiblingMerge?: boolean;
 }): {
   cell: ApiCell;
   changed: boolean;
@@ -325,6 +326,7 @@ function previewCellAction(input: {
   const hitGroupIndex = siteName ? groups.findIndex((group) => group.items.some((entry) => entry.label === siteName)) : -1;
   const hitItemIndex = hitGroupIndex >= 0 ? groups[hitGroupIndex]?.items.findIndex((entry) => entry.label === siteName) ?? -1 : -1;
   const targetFamilyKey = siteName ? input.familyKeyForSiteName?.(siteName) ?? null : null;
+  const allowSiblingMerge = input.allowSiblingMerge !== false;
   const siblingGroupIndex = targetFamilyKey
     ? groups.findIndex((group) => group.items.some((entry) => input.familyKeyForSiteName?.(entry.label) === targetFamilyKey))
     : -1;
@@ -386,7 +388,7 @@ function previewCellAction(input: {
         };
       }
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
-      if (siblingGroupIndex >= 0) {
+      if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
         if (siblingGroup.items.length >= 4) {
           return { cell: currentCell, changed: false, reason: 'group-full' };
@@ -418,7 +420,7 @@ function previewCellAction(input: {
     case 'add':
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
       if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
-      if (siblingGroupIndex >= 0) {
+      if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
         if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
         return {
@@ -440,7 +442,7 @@ function previewCellAction(input: {
     case 'replace2':
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
       if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
-      if (siblingGroupIndex >= 0) {
+      if (allowSiblingMerge && siblingGroupIndex >= 0) {
         const siblingGroup = groups[siblingGroupIndex]!;
         if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
         return {
@@ -5190,24 +5192,16 @@ function Row({
     [siteFamilyInfoForName],
   );
 
-  const sameFamilySiteName = useCallback(
-    (left: string, right: string) => {
-      const leftKey = siteFamilyKeyForName(left);
-      const rightKey = siteFamilyKeyForName(right);
-      return Boolean(leftKey) && leftKey === rightKey;
-    },
-    [siteFamilyKeyForName],
-  );
-
-  const cellEntriesForDay = useCallback((day: string) => apiCellToEntries(grid[day]), [grid]);
+  const cellGroupsForDay = useCallback((day: string) => apiCellToGroups(grid[day]), [grid]);
   const siblingEntryNamesForSite = useCallback(
     (day: string, siteName: string) => {
-      if (!siteFamilyKeyForName(siteName)) return [siteName.trim()].filter(Boolean);
-      return cellEntriesForDay(day)
-        .filter((entry) => sameFamilySiteName(entry.label, siteName))
-        .map((entry) => entry.label);
+      const exactGroup = cellGroupsForDay(day).find((group) =>
+        group.items.some((entry) => entry.label === siteName),
+      );
+      if (exactGroup) return exactGroup.items.map((entry) => entry.label);
+      return [siteName.trim()].filter(Boolean);
     },
-    [cellEntriesForDay, sameFamilySiteName, siteFamilyKeyForName],
+    [cellGroupsForDay],
   );
 
   const closeSlotContextMenu = useCallback(() => {
@@ -5505,7 +5499,7 @@ function Row({
     const replacementGroup: ApiCellGroup = { items: replacementItems };
 
     const targetGroupIndex = currentGroups.findIndex((group) =>
-      group.items.some((entry) => siteFamilyKeyForName(entry.label) === anchorFamilyKey),
+      group.items.some((entry) => entry.label === current.siteName),
     );
     const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
     if (targetGroupIndex >= 0) nextGroups[targetGroupIndex] = replacementGroup;
@@ -5608,33 +5602,37 @@ function Row({
 
       return groups.map((group, groupIndex) => {
         const familyLabel = siteFamilyLabelForName(group.items[0]?.label ?? '');
-        const renderedItems = group.items.map((entry) => {
+        const renderedItems = group.items.map((entry, itemIndex) => {
           const site = resolveStoredSite(entry.label);
+          const fullName = siteStoredName(site) || entry.label;
           return {
             entry,
             storedName: entry.label,
-            displayName: familyLabel
-              ? stripSiteFamilyLabel(siteStoredName(site) || entry.label, familyLabel) || (siteStoredName(site) || entry.label)
-              : siteStoredName(site) || entry.label,
+            displayName:
+              familyLabel && itemIndex > 0
+                ? stripSiteFamilyLabel(fullName, familyLabel) || fullName
+                : fullName,
           };
         });
 
-        if (familyLabel && renderedItems.length > 1) {
+        if (renderedItems.length > 1) {
           return (
             <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1.5' : ''}>
-              <div className="text-[11px] font-semibold leading-tight text-zinc-700 dark:text-zinc-200">
-                {familyLabel}
-              </div>
-              <div className="mt-0.5 space-y-0.5">
-                {renderedItems.map((item) =>
-                  renderSiteLabel({
-                    displayValue: item.displayName,
-                    siteName: item.storedName,
-                    className: `whitespace-normal break-words pl-2 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, 'secondary')}`,
-                    fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-                    contextInput: { day, beforeCell, color: item.entry.color },
-                  }),
-                )}
+              <div className="space-y-0.5">
+                {renderedItems.map((item, itemIndex) => (
+                  <Fragment key={`group-item:${day}:${groupIndex}:${itemIndex}:${item.storedName}`}>
+                    {renderSiteLabel({
+                      displayValue: item.displayName,
+                      siteName: item.storedName,
+                      className: `whitespace-normal break-words ${itemIndex > 0 ? 'pl-2 ' : ''}${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, itemIndex === 0 && groupIndex === 0 ? 'primary' : 'secondary')}`,
+                      fontSize:
+                        itemIndex === 0 && groupIndex === 0
+                          ? 'var(--weekhub-cell-font-size, 12px)'
+                          : 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
+                      contextInput: { day, beforeCell, color: item.entry.color },
+                    })}
+                  </Fragment>
+                ))}
               </div>
             </div>
           );
@@ -5755,6 +5753,7 @@ function Row({
     siteId?: string | null;
     siteName?: string | null;
     beforeCell: ApiCell;
+    allowSiblingMerge?: boolean;
   }) => {
     let resolvedSite =
       input.action === 'swap'
@@ -5771,7 +5770,8 @@ function Row({
     }
 
     const beforeCell = cloneApiCell(input.beforeCell);
-    const resolvedSiteName = input.siteName ?? resolvedSite?.label ?? null;
+    const resolvedSiteName =
+      siteStoredName(resolvedSite) || splitSiteLabel(input.siteName).name.trim() || input.siteName?.trim() || null;
     const requestedColor = input.action === 'recolor' ? input.color : resolveSiteLabelColor(resolvedSite, input.color);
     const preview = previewCellAction({
       cell: beforeCell,
@@ -5779,6 +5779,7 @@ function Row({
       siteName: resolvedSiteName,
       color: requestedColor,
       familyKeyForSiteName: siteFamilyKeyForName,
+      allowSiblingMerge: input.allowSiblingMerge,
     });
 
     if (!preview.changed) {
@@ -5937,17 +5938,15 @@ function Row({
               e.preventDefault();
               
               if (draggedSite) {
-                const shouldAddSibling = cellEntriesForDay(d.key).some((entry) =>
-                  sameFamilySiteName(entry.label, draggedSite.label),
-                );
                 // 現場リストからドラッグされた現場をセルに入力
                 void runCellAction({
                   day: d.key,
-                  action: shouldAddSibling ? 'add' : 'toggle',
+                  action: 'add',
                   color: cellTextColor,
                   siteId: draggedSite.id,
-                  siteName: draggedSite.label,
+                  siteName: siteStoredName(draggedSite) || draggedSite.label,
                   beforeCell,
+                  allowSiblingMerge: false,
                 });
               } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
                 // 別のセルからドラッグされた現場をコピー
@@ -5955,10 +5954,11 @@ function Row({
                 if (siteName) {
                   void runCellAction({
                     day: d.key,
-                    action: 'toggle',
+                    action: 'add',
                     color: cellTextColor,
                     siteName,
                     beforeCell,
+                    allowSiblingMerge: false,
                   });
                 }
               }
@@ -6061,8 +6061,8 @@ function Row({
                             action: 'toggle',
                             color: cellTextColor,
                             siteId: site.id,
-                            siteName: site.label,
-                              beforeCell,
+                            siteName: siteStoredName(site) || site.label,
+                            beforeCell,
                           });
                         } else if (editingInput?.trim()) {
                           // 直接入力
@@ -6104,7 +6104,7 @@ function Row({
                               action: 'toggle',
                               color: cellTextColor,
                               siteId: site.id,
-                              siteName: site.label,
+                              siteName: siteStoredName(site) || site.label,
                               beforeCell,
                             });
                           }}
