@@ -1,8 +1,9 @@
 import { prisma } from '@/server/db/prisma';
 import { canCurrentUserEditSchedule, isMobileRequest } from '@/server/auth/schedule-edit';
+import { ensureSiteDayFolders } from '@/server/site-storage';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export const runtime = 'nodejs';
@@ -12,14 +13,6 @@ const COOKIE_NAME = 'masterHub.uid';
 function safeFileName(name: string) {
   const base = name.trim() || 'photo';
   return base.replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_').slice(0, 140);
-}
-
-function safePathSegment(name: string) {
-  const base = name.trim() || 'untitled';
-  return base
-    .replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_')
-    .replace(/[\s.]+$/g, '')
-    .slice(0, 80);
 }
 
 function ymdInTokyo(d: Date) {
@@ -131,13 +124,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { name: true } });
   if (!site) return Response.json({ ok: false, error: 'Site not found' }, { status: 404 });
 
-  const baseDir = process.env.MASTER_HUB_STORAGE_DIR
-    ? path.resolve(process.env.MASTER_HUB_STORAGE_DIR)
-    : path.join(process.cwd(), '.storage');
-  const siteFolderBase = safePathSegment(site.name) || siteId;
-  const siteFolder = `${siteFolderBase}__${siteId.slice(0, 8)}`;
-  const outDir = path.join(baseDir, 'sites', siteFolder, dateYmd, 'photos');
-  await mkdir(outDir, { recursive: true });
+  const { photosDir: outDir } = await ensureSiteDayFolders({ siteId, siteName: site.name, dayYmd: dateYmd });
 
   const createdIds: string[] = [];
 

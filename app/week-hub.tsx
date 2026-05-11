@@ -5340,6 +5340,16 @@ function Row({
     [slotContextMenu],
   );
 
+  const slotContextSelectedSiblingNames = useMemo(
+    () =>
+      new Set(
+        (slotContextMenu?.mode === 'related-sites' ? slotContextMenu.selectedSiblingNames : [])
+          .map((name) => name.trim())
+          .filter(Boolean),
+      ),
+    [slotContextMenu],
+  );
+
   const toggleSlotContextUser = useCallback((targetUserId: string) => {
     setSlotContextMenu((current) => {
       if (!current || current.mode !== 'assign-users') return current;
@@ -6470,18 +6480,35 @@ function Row({
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
                       option.disabled
                         ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
-                        : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                        : slotContextSelectedUserIds.has(option.userId)
+                          ? 'border-blue-200 bg-blue-50/80 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100'
+                          : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                     }`}
                   >
                     <input
                       type="checkbox"
+                      className="sr-only"
                       checked={slotContextSelectedUserIds.has(option.userId)}
                       disabled={option.disabled}
                       onChange={() => toggleSlotContextUser(option.userId)}
                     />
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold leading-none transition ${
+                        slotContextSelectedUserIds.has(option.userId)
+                          ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950'
+                          : option.disabled
+                            ? 'border-zinc-300 bg-zinc-100 text-transparent dark:border-zinc-700 dark:bg-zinc-800'
+                            : 'border-zinc-400 bg-white text-transparent dark:border-zinc-500 dark:bg-zinc-950'
+                      }`}
+                    >
+                      ✓
+                    </span>
                     <span className="min-w-0 flex-1 truncate">{option.userLabel}</span>
                     {option.disabled ? (
                       <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
+                    ) : slotContextSelectedUserIds.has(option.userId) ? (
+                      <span className="text-[10px] text-blue-700 dark:text-blue-300">選択中</span>
                     ) : option.hasSite ? (
                       <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
                     ) : null}
@@ -6519,17 +6546,36 @@ function Row({
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
                       option.disabled
                         ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
+                        : slotContextSelectedSiblingNames.has(option.storedName)
+                          ? 'border-blue-200 bg-blue-50/80 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100'
                         : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                     }`}
                   >
                     <input
                       type="checkbox"
-                      checked={option.checked}
+                      className="sr-only"
+                      checked={slotContextSelectedSiblingNames.has(option.storedName)}
                       disabled={option.disabled}
                       onChange={() => toggleSlotContextSibling(option.storedName)}
                     />
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold leading-none transition ${
+                        slotContextSelectedSiblingNames.has(option.storedName)
+                          ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950'
+                          : option.disabled
+                            ? 'border-zinc-300 bg-zinc-100 text-transparent dark:border-zinc-700 dark:bg-zinc-800'
+                            : 'border-zinc-400 bg-white text-transparent dark:border-zinc-500 dark:bg-zinc-950'
+                      }`}
+                    >
+                      ✓
+                    </span>
                     <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
-                    {option.disabled ? <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span> : null}
+                    {option.disabled ? (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
+                    ) : slotContextSelectedSiblingNames.has(option.storedName) ? (
+                      <span className="text-[10px] text-blue-700 dark:text-blue-300">選択中</span>
+                    ) : null}
                   </label>
                 ))}
               </div>
