@@ -14,20 +14,26 @@ import {
   type UiThemeEditableSlot,
 } from './ui-theme';
 import {
+  emptyPageThemeOverrides,
+  globalThemeOverrideDbKey,
   mergeUiTheme,
   normalizePageThemeOverrides,
   pageThemeOverrideDbKey,
+  readLocalGlobalThemeOverride,
   readLocalPageThemeOverride,
+  writeLocalGlobalThemeOverride,
   writeLocalPageThemeOverride,
   type PageThemeElementOverride,
   type PageThemeOverrides,
 } from './page-theme';
 
 type EditSlot = UiThemeEditableSlot;
+type EditScope = 'page' | 'global';
 
 type OpenState = {
   left: number;
   top: number;
+  scope: EditScope;
   slot: EditSlot;
   targetKey: string | null;
   targetLabel: string;
@@ -141,6 +147,11 @@ function resolveElementForSlot(source: Element, slot: EditSlot): HTMLElement | n
   }
 }
 
+function inferEditScope(element: HTMLElement, slot: EditSlot): EditScope {
+  if (slot === 'button' && element.closest('header')) return 'global';
+  return 'page';
+}
+
 function clearElementThemeVars(el: HTMLElement): void {
   for (const name of ELEMENT_THEME_VAR_NAMES) {
     el.style.removeProperty(name);
@@ -216,6 +227,7 @@ function inferSlotFromTarget(t: Element): EditSlot {
 }
 
 function resolveEditableTarget(source: Element): {
+  scope: EditScope;
   slot: EditSlot;
   element: HTMLElement;
   targetKey: string | null;
@@ -226,6 +238,7 @@ function resolveEditableTarget(source: Element): {
   if (!element) return null;
 
   return {
+    scope: inferEditScope(element, slot),
     slot,
     element,
     targetKey: slot === 'surface' ? null : buildElementThemeKey(element, slot),
@@ -255,25 +268,31 @@ export default function ColorEditController() {
   const [enabled, setEnabled] = useState(false);
   const [open, setOpen] = useState<OpenState | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [override, setOverride] = useState<PageThemeOverrides>(() => ({ schemaVersion: 2, overrides: {}, elements: {} }));
+  const [pageOverride, setPageOverride] = useState<PageThemeOverrides>(() => emptyPageThemeOverrides());
+  const [globalOverride, setGlobalOverride] = useState<PageThemeOverrides>(() => emptyPageThemeOverrides());
   const userIdRef = useRef<string | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
-  const pendingOverrideRef = useRef<PageThemeOverrides | null>(null);
-  const overrideRef = useRef<PageThemeOverrides>(override);
+  const pageSaveTimerRef = useRef<number | null>(null);
+  const globalSaveTimerRef = useRef<number | null>(null);
+  const pendingPageOverrideRef = useRef<PageThemeOverrides | null>(null);
+  const pendingGlobalOverrideRef = useRef<PageThemeOverrides | null>(null);
+  const pageOverrideRef = useRef<PageThemeOverrides>(pageOverride);
+  const globalOverrideRef = useRef<PageThemeOverrides>(globalOverride);
 
-  const openEditorAt = useCallback((slot: EditSlot, targetKey: string | null, targetLabel: string, x: number, y: number) => {
+  const openEditorAt = useCallback((scope: EditScope, slot: EditSlot, targetKey: string | null, targetLabel: string, x: number, y: number) => {
     const margin = 8;
     const left = Math.min(Math.max(margin, Math.round(x)), Math.max(margin, window.innerWidth - 296));
     const top = Math.min(Math.max(margin, Math.round(y)), Math.max(margin, window.innerHeight - 196));
-    setOpen({ left, top, slot, targetKey, targetLabel });
+    setOpen({ left, top, scope, slot, targetKey, targetLabel });
   }, []);
 
-  const applyElementOverrides = useCallback((pageTheme: UiTheme, nextOverride: PageThemeOverrides) => {
+  const applyElementOverrides = useCallback((pageTheme: UiTheme, nextPageOverride: PageThemeOverrides, nextGlobalOverride: PageThemeOverrides) => {
     for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-color-edit-element-theme]'))) {
       clearElementThemeVars(el);
     }
 
-    for (const [targetKey, elementOverride] of Object.entries(nextOverride.elements)) {
+    const mergedElementOverrides = { ...nextPageOverride.elements, ...nextGlobalOverride.elements };
+
+    for (const [targetKey, elementOverride] of Object.entries(mergedElementOverrides)) {
       const target = findElementByOverrideKey(elementOverride.slot, targetKey);
       if (!target) continue;
 
@@ -292,24 +311,24 @@ export default function ColorEditController() {
   }, []);
 
   const applyThemeOverride = useCallback(
-    (nextOverride: PageThemeOverrides) => {
+    (nextPageOverride: PageThemeOverrides, nextGlobalOverride: PageThemeOverrides) => {
       const base = readLocalUiTheme(userIdRef.current);
-      const merged = mergeUiTheme(base, nextOverride);
+      const merged = mergeUiTheme(mergeUiTheme(base, nextGlobalOverride), nextPageOverride);
       applyUiTheme(merged);
-      applyElementOverrides(merged, nextOverride);
+      applyElementOverrides(merged, nextPageOverride, nextGlobalOverride);
     },
     [applyElementOverrides],
   );
 
-  const queueSave = useCallback(
+  const queuePageSave = useCallback(
     (next: PageThemeOverrides) => {
-      pendingOverrideRef.current = next;
+      pendingPageOverrideRef.current = next;
 
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = window.setTimeout(() => {
+      if (pageSaveTimerRef.current) window.clearTimeout(pageSaveTimerRef.current);
+      pageSaveTimerRef.current = window.setTimeout(() => {
         const userId = userIdRef.current;
-        const pending = pendingOverrideRef.current;
-        saveTimerRef.current = null;
+        const pending = pendingPageOverrideRef.current;
+        pageSaveTimerRef.current = null;
         if (!userId || !pending) return;
         void fetch('/api/ui-settings', {
           method: 'POST',
@@ -321,19 +340,47 @@ export default function ColorEditController() {
     [pathname],
   );
 
-  useEffect(() => {
-    overrideRef.current = override;
-  }, [override]);
+  const queueGlobalSave = useCallback((next: PageThemeOverrides) => {
+    pendingGlobalOverrideRef.current = next;
+
+    if (globalSaveTimerRef.current) window.clearTimeout(globalSaveTimerRef.current);
+    globalSaveTimerRef.current = window.setTimeout(() => {
+      const userId = userIdRef.current;
+      const pending = pendingGlobalOverrideRef.current;
+      globalSaveTimerRef.current = null;
+      if (!userId || !pending) return;
+      void fetch('/api/ui-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId, key: globalThemeOverrideDbKey(), value: pending }),
+      }).catch(() => null);
+    }, 450);
+  }, []);
 
   useEffect(() => {
-    applyThemeOverride(override);
+    pageOverrideRef.current = pageOverride;
+  }, [pageOverride]);
+
+  useEffect(() => {
+    globalOverrideRef.current = globalOverride;
+  }, [globalOverride]);
+
+  useEffect(() => {
+    return () => {
+      if (pageSaveTimerRef.current) window.clearTimeout(pageSaveTimerRef.current);
+      if (globalSaveTimerRef.current) window.clearTimeout(globalSaveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    applyThemeOverride(pageOverride, globalOverride);
 
     let rafId: number | null = null;
     const observer = new MutationObserver(() => {
       if (rafId !== null) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = null;
-        applyThemeOverride(overrideRef.current);
+        applyThemeOverride(pageOverrideRef.current, globalOverrideRef.current);
       });
     });
 
@@ -342,7 +389,7 @@ export default function ColorEditController() {
         subtree: true,
         childList: true,
         attributes: true,
-        attributeFilter: ['id', 'name', 'title', 'href', 'aria-label', 'data-color-edit-slot'],
+        attributeFilter: ['id', 'name', 'title', 'href', 'aria-label', 'data-color-edit-id', 'data-color-edit-slot'],
       });
     }
 
@@ -350,7 +397,7 @@ export default function ColorEditController() {
       observer.disconnect();
       if (rafId !== null) window.cancelAnimationFrame(rafId);
     };
-  }, [applyThemeOverride, override, pathname]);
+  }, [applyThemeOverride, globalOverride, pageOverride, pathname]);
 
   useEffect(() => {
     const apply = () => {
@@ -396,11 +443,12 @@ export default function ColorEditController() {
 
   useEffect(() => {
     // Keep local override in state so UI controls (range input, etc.) behave as controlled components.
-    setOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
+    setPageOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
+    setGlobalOverride(readLocalGlobalThemeOverride(userIdRef.current));
   }, [pathname, userId]);
 
   useEffect(() => {
-    const onUpdated = (e: Event) => {
+    const onPageUpdated = (e: Event) => {
       const ce = e as CustomEvent<unknown>;
       const detail = asObject(ce.detail);
       const detailPath = typeof detail?.pathname === 'string' ? (detail.pathname as string) : null;
@@ -409,12 +457,80 @@ export default function ColorEditController() {
       if (detailPath && detailPath !== pathname) return;
       if (detailUser && detailUser !== (userIdRef.current ?? 'anon')) return;
 
-      setOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
+      setPageOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
     };
 
-    window.addEventListener('masterHub:pageThemeOverrideUpdated', onUpdated as EventListener);
-    return () => window.removeEventListener('masterHub:pageThemeOverrideUpdated', onUpdated as EventListener);
+    const onGlobalUpdated = (e: Event) => {
+      const ce = e as CustomEvent<unknown>;
+      const detail = asObject(ce.detail);
+      const detailUser = typeof detail?.userId === 'string' ? (detail.userId as string) : null;
+
+      if (detailUser && detailUser !== (userIdRef.current ?? 'anon')) return;
+
+      setGlobalOverride(readLocalGlobalThemeOverride(userIdRef.current));
+    };
+
+    window.addEventListener('masterHub:pageThemeOverrideUpdated', onPageUpdated as EventListener);
+    window.addEventListener('masterHub:globalThemeOverrideUpdated', onGlobalUpdated as EventListener);
+    return () => {
+      window.removeEventListener('masterHub:pageThemeOverrideUpdated', onPageUpdated as EventListener);
+      window.removeEventListener('masterHub:globalThemeOverrideUpdated', onGlobalUpdated as EventListener);
+    };
   }, [pathname]);
+
+  useEffect(() => {
+    const currentPageOverride = readLocalPageThemeOverride(userIdRef.current, pathname);
+    const currentGlobalOverride = readLocalGlobalThemeOverride(userIdRef.current);
+    const nextPageElements = { ...currentPageOverride.elements };
+    const nextGlobalElements = { ...currentGlobalOverride.elements };
+    let pageChanged = false;
+    let globalChanged = false;
+
+    for (const [targetKey, elementOverride] of Object.entries(currentPageOverride.elements)) {
+      if (elementOverride.slot !== 'button') continue;
+      const target = findElementByOverrideKey(elementOverride.slot, targetKey);
+      if (!target || inferEditScope(target, elementOverride.slot) !== 'global') continue;
+
+      if (!nextGlobalElements[targetKey]) {
+        nextGlobalElements[targetKey] = elementOverride;
+        globalChanged = true;
+      }
+
+      delete nextPageElements[targetKey];
+      pageChanged = true;
+    }
+
+    if (!pageChanged && !globalChanged) return;
+
+    const nextPageOverride = pageChanged
+      ? normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentPageOverride.overrides,
+          elements: nextPageElements,
+        })
+      : currentPageOverride;
+    const nextGlobalOverride = globalChanged
+      ? normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentGlobalOverride.overrides,
+          elements: nextGlobalElements,
+        })
+      : currentGlobalOverride;
+
+    if (pageChanged) {
+      pageOverrideRef.current = nextPageOverride;
+      writeLocalPageThemeOverride(userIdRef.current, pathname, nextPageOverride);
+      queuePageSave(nextPageOverride);
+    }
+
+    if (globalChanged) {
+      globalOverrideRef.current = nextGlobalOverride;
+      writeLocalGlobalThemeOverride(userIdRef.current, nextGlobalOverride);
+      queueGlobalSave(nextGlobalOverride);
+    }
+
+    applyThemeOverride(nextPageOverride, nextGlobalOverride);
+  }, [applyThemeOverride, pathname, queueGlobalSave, queuePageSave, userId]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -444,7 +560,7 @@ export default function ColorEditController() {
 
       const target = resolveEditableTarget(t);
       if (!target) return;
-      openEditorAt(target.slot, target.targetKey, target.targetLabel, e.clientX, e.clientY);
+      openEditorAt(target.scope, target.slot, target.targetKey, target.targetLabel, e.clientX, e.clientY);
     };
 
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -457,140 +573,255 @@ export default function ColorEditController() {
 
   const current = useMemo(() => {
     const base = readLocalUiTheme(userId);
-    return mergeUiTheme(base, override);
-  }, [override, userId]);
+    return mergeUiTheme(mergeUiTheme(base, globalOverride), pageOverride);
+  }, [globalOverride, pageOverride, userId]);
+
+  const commitPageOverride = useCallback(
+    (next: PageThemeOverrides) => {
+      pageOverrideRef.current = next;
+      setPageOverride(next);
+      writeLocalPageThemeOverride(userIdRef.current, pathname, next);
+      applyThemeOverride(next, globalOverrideRef.current);
+      queuePageSave(next);
+    },
+    [applyThemeOverride, pathname, queuePageSave],
+  );
+
+  const commitGlobalOverride = useCallback(
+    (next: PageThemeOverrides) => {
+      globalOverrideRef.current = next;
+      setGlobalOverride(next);
+      writeLocalGlobalThemeOverride(userIdRef.current, next);
+      applyThemeOverride(pageOverrideRef.current, next);
+      queueGlobalSave(next);
+    },
+    [applyThemeOverride, queueGlobalSave],
+  );
 
   const setSlotColor = useCallback(
-    (slot: EditSlot, targetKey: string | null, targetLabel: string, nextColor: UiThemeColor) => {
-      setOverride((cur) => {
-        let next: PageThemeOverrides;
+    (scope: EditScope, slot: EditSlot, targetKey: string | null, targetLabel: string, nextColor: UiThemeColor) => {
+      if (targetKey && scope === 'global') {
+        const currentGlobal = globalOverrideRef.current;
+        const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), currentGlobal);
+        const baseSlot = readUiThemeSlot(merged, slot);
+        const prevElement = currentGlobal.elements[targetKey] ?? { slot, label: targetLabel };
+        const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
+          ...prevElement,
+          slot,
+          label: targetLabel,
+          color: nextColor,
+        });
 
-        if (targetKey) {
-          const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), cur);
-          const baseSlot = readUiThemeSlot(merged, slot);
-          const prevElement = cur.elements[targetKey] ?? { slot, label: targetLabel };
-          const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
-            ...prevElement,
-            slot,
-            label: targetLabel,
-            color: nextColor,
-          });
+        const nextGlobal = normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentGlobal.overrides,
+          elements: {
+            ...currentGlobal.elements,
+            ...(nextElement ? { [targetKey]: nextElement } : null),
+          },
+        });
 
-          const elements = { ...cur.elements };
-          if (nextElement) elements[targetKey] = nextElement;
-          else delete elements[targetKey];
+        if (!nextElement) delete nextGlobal.elements[targetKey];
 
-          next = normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: cur.overrides,
-            elements,
-          });
-        } else {
-          next = normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: {
-              ...cur.overrides,
-              ...(slot === 'surface' ? { surfaceColor: nextColor } : null),
-              ...(slot === 'panel' ? { panelColor: nextColor } : null),
-              ...(slot === 'button' ? { buttonColor: nextColor } : null),
-              ...(slot === 'cellBg' ? { cellBgColor: nextColor } : null),
-              ...(slot === 'cellText' ? { cellTextColor: nextColor } : null),
-              ...(slot === 'border' ? { borderColor: nextColor } : null),
-              ...(slot === 'grid' ? { gridColor: nextColor } : null),
-            },
-            elements: cur.elements,
-          });
+        const currentPage = pageOverrideRef.current;
+        if (currentPage.elements[targetKey]) {
+          const nextPageElements = { ...currentPage.elements };
+          delete nextPageElements[targetKey];
+          commitPageOverride(
+            normalizePageThemeOverrides({
+              schemaVersion: 2,
+              overrides: currentPage.overrides,
+              elements: nextPageElements,
+            }),
+          );
         }
 
-        writeLocalPageThemeOverride(userIdRef.current, pathname, next);
-        applyThemeOverride(next);
-        queueSave(next);
-        return next;
-      });
+        commitGlobalOverride(nextGlobal);
+        return;
+      }
+
+      const currentPage = pageOverrideRef.current;
+
+      if (targetKey) {
+        const merged = mergeUiTheme(mergeUiTheme(readLocalUiTheme(userIdRef.current), globalOverrideRef.current), currentPage);
+        const baseSlot = readUiThemeSlot(merged, slot);
+        const prevElement = currentPage.elements[targetKey] ?? { slot, label: targetLabel };
+        const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
+          ...prevElement,
+          slot,
+          label: targetLabel,
+          color: nextColor,
+        });
+
+        const nextPage = normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentPage.overrides,
+          elements: {
+            ...currentPage.elements,
+            ...(nextElement ? { [targetKey]: nextElement } : null),
+          },
+        });
+
+        if (!nextElement) delete nextPage.elements[targetKey];
+        commitPageOverride(nextPage);
+        return;
+      }
+
+      commitPageOverride(
+        normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: {
+            ...currentPage.overrides,
+            ...(slot === 'surface' ? { surfaceColor: nextColor } : null),
+            ...(slot === 'panel' ? { panelColor: nextColor } : null),
+            ...(slot === 'button' ? { buttonColor: nextColor } : null),
+            ...(slot === 'cellBg' ? { cellBgColor: nextColor } : null),
+            ...(slot === 'cellText' ? { cellTextColor: nextColor } : null),
+            ...(slot === 'border' ? { borderColor: nextColor } : null),
+            ...(slot === 'grid' ? { gridColor: nextColor } : null),
+          },
+          elements: currentPage.elements,
+        }),
+      );
     },
-    [applyThemeOverride, pathname, queueSave],
+    [commitGlobalOverride, commitPageOverride],
   );
 
   const setSlotShade = useCallback(
-    (slot: EditSlot, targetKey: string | null, targetLabel: string, nextShade: number) => {
+    (scope: EditScope, slot: EditSlot, targetKey: string | null, targetLabel: string, nextShade: number) => {
       const shade = normalizeThemeShade(nextShade, 0);
-      setOverride((cur) => {
-        let next: PageThemeOverrides;
+      if (targetKey && scope === 'global') {
+        const currentGlobal = globalOverrideRef.current;
+        const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), currentGlobal);
+        const baseSlot = readUiThemeSlot(merged, slot);
+        const prevElement = currentGlobal.elements[targetKey] ?? { slot, label: targetLabel };
+        const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
+          ...prevElement,
+          slot,
+          label: targetLabel,
+          shade,
+        });
 
-        if (targetKey) {
-          const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), cur);
-          const baseSlot = readUiThemeSlot(merged, slot);
-          const prevElement = cur.elements[targetKey] ?? { slot, label: targetLabel };
-          const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
-            ...prevElement,
-            slot,
-            label: targetLabel,
-            shade,
-          });
+        const nextGlobal = normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentGlobal.overrides,
+          elements: {
+            ...currentGlobal.elements,
+            ...(nextElement ? { [targetKey]: nextElement } : null),
+          },
+        });
 
-          const elements = { ...cur.elements };
-          if (nextElement) elements[targetKey] = nextElement;
-          else delete elements[targetKey];
+        if (!nextElement) delete nextGlobal.elements[targetKey];
 
-          next = normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: cur.overrides,
-            elements,
-          });
-        } else {
-          next = normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: {
-              ...cur.overrides,
-              ...(slot === 'surface' ? { surfaceShade: shade } : null),
-              ...(slot === 'panel' ? { panelShade: shade } : null),
-              ...(slot === 'button' ? { buttonShade: shade } : null),
-              ...(slot === 'cellBg' ? { cellBgShade: shade } : null),
-              ...(slot === 'cellText' ? { cellTextShade: shade } : null),
-              ...(slot === 'border' ? { borderShade: shade } : null),
-              ...(slot === 'grid' ? { gridShade: shade } : null),
-            },
-            elements: cur.elements,
-          });
+        const currentPage = pageOverrideRef.current;
+        if (currentPage.elements[targetKey]) {
+          const nextPageElements = { ...currentPage.elements };
+          delete nextPageElements[targetKey];
+          commitPageOverride(
+            normalizePageThemeOverrides({
+              schemaVersion: 2,
+              overrides: currentPage.overrides,
+              elements: nextPageElements,
+            }),
+          );
         }
 
-        writeLocalPageThemeOverride(userIdRef.current, pathname, next);
-        applyThemeOverride(next);
-        queueSave(next);
-        return next;
-      });
+        commitGlobalOverride(nextGlobal);
+        return;
+      }
+
+      const currentPage = pageOverrideRef.current;
+
+      if (targetKey) {
+        const merged = mergeUiTheme(mergeUiTheme(readLocalUiTheme(userIdRef.current), globalOverrideRef.current), currentPage);
+        const baseSlot = readUiThemeSlot(merged, slot);
+        const prevElement = currentPage.elements[targetKey] ?? { slot, label: targetLabel };
+        const nextElement = normalizeElementOverrideAgainstBase(baseSlot, {
+          ...prevElement,
+          slot,
+          label: targetLabel,
+          shade,
+        });
+
+        const nextPage = normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentPage.overrides,
+          elements: {
+            ...currentPage.elements,
+            ...(nextElement ? { [targetKey]: nextElement } : null),
+          },
+        });
+
+        if (!nextElement) delete nextPage.elements[targetKey];
+        commitPageOverride(nextPage);
+        return;
+      }
+
+      commitPageOverride(
+        normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: {
+            ...currentPage.overrides,
+            ...(slot === 'surface' ? { surfaceShade: shade } : null),
+            ...(slot === 'panel' ? { panelShade: shade } : null),
+            ...(slot === 'button' ? { buttonShade: shade } : null),
+            ...(slot === 'cellBg' ? { cellBgShade: shade } : null),
+            ...(slot === 'cellText' ? { cellTextShade: shade } : null),
+            ...(slot === 'border' ? { borderShade: shade } : null),
+            ...(slot === 'grid' ? { gridShade: shade } : null),
+          },
+          elements: currentPage.elements,
+        }),
+      );
     },
-    [applyThemeOverride, pathname, queueSave],
+    [commitGlobalOverride, commitPageOverride],
   );
 
   const resetElementOverride = useCallback(() => {
     const targetKey = open?.targetKey;
     if (!targetKey) return;
 
-    setOverride((cur) => {
-      if (!cur.elements[targetKey]) return cur;
+    if (open?.scope === 'global') {
+      const currentGlobal = globalOverrideRef.current;
+      if (!currentGlobal.elements[targetKey]) return;
 
-      const elements = { ...cur.elements };
+      const elements = { ...currentGlobal.elements };
       delete elements[targetKey];
 
-      const next = normalizePageThemeOverrides({
-        schemaVersion: 2,
-        overrides: cur.overrides,
-        elements,
-      });
+      commitGlobalOverride(
+        normalizePageThemeOverrides({
+          schemaVersion: 2,
+          overrides: currentGlobal.overrides,
+          elements,
+        }),
+      );
+      return;
+    }
 
-      writeLocalPageThemeOverride(userIdRef.current, pathname, next);
-      applyThemeOverride(next);
-      queueSave(next);
-      return next;
-    });
-  }, [applyThemeOverride, open, pathname, queueSave]);
+    const currentPage = pageOverrideRef.current;
+    if (!currentPage.elements[targetKey]) return;
+
+    const elements = { ...currentPage.elements };
+    delete elements[targetKey];
+
+    commitPageOverride(
+      normalizePageThemeOverrides({
+        schemaVersion: 2,
+        overrides: currentPage.overrides,
+        elements,
+      }),
+    );
+  }, [commitGlobalOverride, commitPageOverride, open]);
 
   if (!enabled || !open) return null;
 
   const slot = open.slot;
   const baseSlot = readUiThemeSlot(current, slot);
-  const elementOverride = open.targetKey ? override.elements[open.targetKey] : null;
+  const elementOverride = open.targetKey
+    ? open.scope === 'global'
+      ? globalOverride.elements[open.targetKey] ?? pageOverride.elements[open.targetKey]
+      : pageOverride.elements[open.targetKey] ?? globalOverride.elements[open.targetKey]
+    : null;
   const colorValue: UiThemeColor = elementOverride?.color ?? baseSlot.color;
   const shadeValue: number = typeof elementOverride?.shade === 'number' ? elementOverride.shade : baseSlot.shade;
 
@@ -635,14 +866,16 @@ export default function ColorEditController() {
             label={slotLabel(slot)}
             value={colorValue}
             shade={shadeValue}
-            onChangeColor={(c) => setSlotColor(slot, open.targetKey, open.targetLabel, c)}
-            onChangeShade={(s) => setSlotShade(slot, open.targetKey, open.targetLabel, s)}
+            onChangeColor={(c) => setSlotColor(open.scope, slot, open.targetKey, open.targetLabel, c)}
+            onChangeShade={(s) => setSlotShade(open.scope, slot, open.targetKey, open.targetLabel, s)}
           />
         </div>
 
         <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
           {open.targetKey
-            ? `※ この要素だけ保存（ページ: ${pathname} / アカウント別）`
+            ? open.scope === 'global'
+              ? '※ このヘッダーボタンだけ全ページで保存（アカウント別）'
+              : `※ この要素だけ保存（ページ: ${pathname} / アカウント別）`
             : `※ このページ（${pathname}）にだけ保存（アカウント別）`}
         </div>
       </div>

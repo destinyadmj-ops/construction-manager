@@ -4,6 +4,7 @@ import { normalizeUiTheme, type UiTheme, type UiThemeColor, type UiThemeEditable
 import { normalizeThemeShade } from './color-ramp';
 
 export const PAGE_THEME_OVERRIDE_DB_KEY_PREFIX = 'ui.page-theme.v1:';
+export const GLOBAL_THEME_OVERRIDE_DB_KEY = 'ui.page-theme.global.v1';
 
 export type PageThemeElementOverride = {
   slot: UiThemeEditableSlot;
@@ -17,6 +18,10 @@ export type PageThemeOverrides = {
   overrides: Partial<Omit<UiTheme, 'schemaVersion'>>;
   elements: Record<string, PageThemeElementOverride>;
 };
+
+export function emptyPageThemeOverrides(): PageThemeOverrides {
+  return { schemaVersion: 2, overrides: {}, elements: {} };
+}
 
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -49,6 +54,10 @@ function pickShade(v: unknown): number | undefined {
   if (typeof v !== 'number') return undefined;
   if (!Number.isFinite(v)) return undefined;
   return normalizeThemeShade(v, 0);
+}
+
+function canonicalizePageThemeElementKey(key: string): string {
+  return key.trim().replace(/header-action-save/g, 'header-action-add');
 }
 
 function normalizePageThemeElementOverride(value: unknown): PageThemeElementOverride | null {
@@ -121,7 +130,7 @@ export function normalizePageThemeOverrides(value: unknown): PageThemeOverrides 
   for (const [key, rawElement] of Object.entries(rawElements)) {
     const normalized = normalizePageThemeElementOverride(rawElement);
     if (!normalized) continue;
-    const trimmedKey = key.trim();
+    const trimmedKey = canonicalizePageThemeElementKey(key);
     if (!trimmedKey) continue;
     elements[trimmedKey] = normalized;
   }
@@ -129,9 +138,17 @@ export function normalizePageThemeOverrides(value: unknown): PageThemeOverrides 
   return { schemaVersion: 2, overrides, elements };
 }
 
+export function globalThemeOverrideDbKey(): string {
+  return GLOBAL_THEME_OVERRIDE_DB_KEY;
+}
+
 export function pageThemeOverrideDbKey(pathname: string): string {
   const p = (pathname || '/').trim() || '/';
   return `${PAGE_THEME_OVERRIDE_DB_KEY_PREFIX}${p}`;
+}
+
+export function globalThemeOverrideLocalKey(userId: string | null): string {
+  return `masterHub.ui:globalThemeOverride:${userId ?? 'anon'}`;
 }
 
 export function pageThemeOverrideLocalKey(userId: string | null, pathname: string): string {
@@ -139,13 +156,36 @@ export function pageThemeOverrideLocalKey(userId: string | null, pathname: strin
   return `masterHub.ui:pageThemeOverride:${userId ?? 'anon'}:${p}`;
 }
 
+export function readLocalGlobalThemeOverride(userId: string | null): PageThemeOverrides {
+  try {
+    const raw = window.localStorage.getItem(globalThemeOverrideLocalKey(userId));
+    if (!raw) return emptyPageThemeOverrides();
+    return normalizePageThemeOverrides(JSON.parse(raw) as unknown);
+  } catch {
+    return emptyPageThemeOverrides();
+  }
+}
+
 export function readLocalPageThemeOverride(userId: string | null, pathname: string): PageThemeOverrides {
   try {
     const raw = window.localStorage.getItem(pageThemeOverrideLocalKey(userId, pathname));
-    if (!raw) return { schemaVersion: 2, overrides: {}, elements: {} };
+    if (!raw) return emptyPageThemeOverrides();
     return normalizePageThemeOverrides(JSON.parse(raw) as unknown);
   } catch {
-    return { schemaVersion: 2, overrides: {}, elements: {} };
+    return emptyPageThemeOverrides();
+  }
+}
+
+export function writeLocalGlobalThemeOverride(userId: string | null, next: PageThemeOverrides): void {
+  try {
+    window.localStorage.setItem(globalThemeOverrideLocalKey(userId), JSON.stringify(next));
+    window.dispatchEvent(
+      new CustomEvent('masterHub:globalThemeOverrideUpdated', {
+        detail: { userId: userId ?? 'anon' },
+      }),
+    );
+  } catch {
+    // ignore
   }
 }
 
