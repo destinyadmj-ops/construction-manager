@@ -620,25 +620,6 @@ export default function SiteLedgerDetailPage() {
     }
   }, [address, alertsEnabled, amount, caution, companyName, detail, detailImportedBody, load, name, pace, peopleCount, repeatRule, scheduleLabelColor, siteId, threshold]);
 
-  const remove = useCallback(async () => {
-    if (!siteId || !site) return;
-    const ok = window.confirm(`削除しますか？\n${(site.companyName ? `${site.companyName} / ` : '') + site.name}`);
-    if (!ok) return;
-
-    setStatusMsg(null);
-    try {
-      const r = await fetch(`/api/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      if (!r.ok || obj?.ok !== true) {
-        throw new Error((obj?.error as string) || `HTTP ${r.status}`);
-      }
-      router.push('/site-ledger');
-    } catch (e) {
-      setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
-    }
-  }, [router, site, siteId]);
-
   const saveRepeatRule = useCallback(async () => {
     if (!siteId) return;
     const normalizedPace = formatPaceText(pace);
@@ -977,17 +958,6 @@ export default function SiteLedgerDetailPage() {
             />
             アラートを有効にする（OFFで意図しないアラートを抑制）
           </label>
-
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => void remove()}
-              disabled={!site || !hasEditPermission || isMobile}
-              className="mh-btn-danger"
-            >
-              削除
-            </button>
-          </div>
         </div>
       </div>
 
