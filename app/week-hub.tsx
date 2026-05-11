@@ -5782,7 +5782,7 @@ function Row({
     onNotify?.(messages.length > 0 ? `同名別店舗を同期: ${messages.join(' / ')}` : '変更はありません');
   }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
 
-  const applySlotContextGroupRed = useCallback(async () => {
+  async function applySlotContextGroupRed() {
     const current = slotContextMenu;
     if (!current || current.mode !== 'actions') return;
 
@@ -5841,9 +5841,9 @@ function Row({
     if (failedCount > 0) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.join(' / '));
     void Promise.resolve(onAssigned()).catch(() => undefined);
-  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, syncSiteColorAcrossUsers, user]);
+  }
 
-  const removeSlotContextGroup = useCallback(async () => {
+  async function removeSlotContextGroup() {
     const current = slotContextMenu;
     if (!current || current.mode !== 'actions') return;
 
@@ -5873,9 +5873,9 @@ function Row({
     closeSlotContextMenu();
     onNotify?.('削除しました');
     void Promise.resolve(onAssigned()).catch(() => undefined);
-  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, user]);
+  }
 
-  const applySlotContextNote = useCallback(async () => {
+  async function applySlotContextNote() {
     const current = slotContextMenu;
     if (!current || current.mode !== 'append-note') return;
 
@@ -5913,7 +5913,7 @@ function Row({
     closeSlotContextMenu();
     onNotify?.('追加記入を反映しました');
     void Promise.resolve(onAssigned()).catch(() => undefined);
-  }, [closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu, user]);
+  }
 
   const renderSiteLabel = useCallback(
     (
@@ -5953,6 +5953,7 @@ function Row({
           </div>
         );
       }
+      const siteName = input.siteName;
       return (
         <div
           role="button"
@@ -5961,19 +5962,19 @@ function Row({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onOpenSiteFromCell(input.siteName);
+            onOpenSiteFromCell(siteName);
           }}
           onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
             event.stopPropagation();
-            onOpenSiteFromCell(input.siteName);
+            onOpenSiteFromCell(siteName);
           }}
           onContextMenu={handleContextMenu}
           className={`${input.className} w-full cursor-pointer text-left hover:underline`}
           style={{ fontSize: input.fontSize }}
           title={input.tooltipValue}
-          aria-label={`${input.siteName} の詳細を開く`}
+          aria-label={`${siteName} の詳細を開く`}
         >
           {input.displayValue}
         </div>
@@ -6034,7 +6035,7 @@ function Row({
     [gridLayout, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName],
   );
 
-  const formatCellActionReason = (
+  const formatCellActionReason = useCallback((
     reason: unknown,
     action: CellClickAction,
   ): string | null => {
@@ -6053,9 +6054,9 @@ function Row({
     if (reason === 'not-found') return '削除対象がありません（未登録）';
     if (reason === 'not-enough-entries') return '入替できません（2枠揃っていません）';
     return `反映できません（reason=${reason}）`;
-  };
+  }, []);
 
-  const formatCellActionSuccess = (input: {
+  const formatCellActionSuccess = useCallback((input: {
     action: CellClickAction;
     toggled?: unknown;
     replaced?: unknown;
@@ -6070,7 +6071,7 @@ function Row({
       return input.toggled === 'off' ? '削除しました' : '追加しました';
     }
     return '反映しました';
-  };
+  }, []);
 
   const syncSiteColorAcrossUsers = useCallback(
     async (input: { day: string; siteName: string; color: LabelColor; sourceUserId: string }) => {
@@ -6232,6 +6233,8 @@ function Row({
       void Promise.resolve(onAssigned()).catch(() => undefined);
     },
     [
+      formatCellActionReason,
+      formatCellActionSuccess,
       onAssigned,
       onEnsureSite,
       onNotify,
