@@ -5723,31 +5723,54 @@ function Row({
 
   const syncSiteColorAcrossUsers = useCallback(
     async (input: { day: string; siteName: string; color: LabelColor; sourceUserId: string }) => {
-      const targets = allUsers
-        .filter((targetUser) => targetUser.id !== input.sourceUserId)
-        .map((targetUser) => {
-          const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[input.day]);
-          const preview = previewCellAction({
-            cell: beforeCell,
-            action: 'recolor',
-            siteName: input.siteName,
-            color: input.color,
-            familyKeyForSiteName: siteFamilyKeyForName,
-          });
+      const buildTargets = (gridSnapshot: Record<string, Record<string, ApiCell>> | null | undefined) =>
+        allUsers
+          .filter((targetUser) => targetUser.id !== input.sourceUserId)
+          .map((targetUser) => {
+            const beforeCell = cloneApiCell(gridSnapshot?.[targetUser.id]?.[input.day]);
+            const preview = previewCellAction({
+              cell: beforeCell,
+              action: 'recolor',
+              siteName: input.siteName,
+              color: input.color,
+              familyKeyForSiteName: siteFamilyKeyForName,
+            });
 
-          if (!preview.changed) return null;
+            if (!preview.changed) return null;
 
-          return {
-            targetUser,
-            beforeCell,
-            nextCell: preview.cell,
-          };
-        })
-        .filter(
-          (
-            target,
-          ): target is { targetUser: ApiUser; beforeCell: ApiCell; nextCell: ApiCell } => target !== null,
-        );
+            return {
+              targetUser,
+              beforeCell,
+              nextCell: preview.cell,
+            };
+          })
+          .filter(
+            (
+              target,
+            ): target is { targetUser: ApiUser; beforeCell: ApiCell; nextCell: ApiCell } => target !== null,
+          );
+
+      let targets = buildTargets(allGrid);
+      const localCandidateIds = assignedUserIdsForSite(input.day, input.siteName).filter(
+        (userId) => userId !== input.sourceUserId,
+      );
+
+      if (targets.length === 0 && localCandidateIds.length > 0) {
+        try {
+          const weekStart = toYmd(startOfWeekMonday(new Date(`${input.day}T00:00:00`)));
+          const kind = apiKind === 'DAILY' ? 'daily' : 'normal';
+          const response = await fetch(
+            `/api/schedule/week?weekStart=${encodeURIComponent(weekStart)}&kind=${encodeURIComponent(kind)}`,
+            { cache: 'no-store' },
+          );
+          const latest = (await response.json().catch(() => null)) as ApiResponse | null;
+          if (response.ok && latest?.grid) {
+            targets = buildTargets(latest.grid);
+          }
+        } catch {
+          // Keep the optimistic local result when the fallback refresh is unavailable.
+        }
+      }
 
       if (targets.length === 0) return { syncedCount: 0, failedCount: 0 };
 
@@ -5771,7 +5794,7 @@ function Row({
 
       return { syncedCount, failedCount };
     },
-    [allGrid, allUsers, persistCellSet, siteFamilyKeyForName],
+    [allGrid, allUsers, apiKind, assignedUserIdsForSite, persistCellSet, siteFamilyKeyForName],
   );
 
   const runCellAction = async (input: {
