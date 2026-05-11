@@ -553,7 +553,7 @@ export default function ColorEditController() {
       const t = e.target instanceof Element ? e.target : null;
       if (!t) return;
 
-      if (t.closest('[data-color-edit-ui]')) return;
+      if (t.closest('[data-color-edit-ui], [data-color-edit-ignore-contextmenu]')) return;
 
       e.preventDefault();
       e.stopPropagation();

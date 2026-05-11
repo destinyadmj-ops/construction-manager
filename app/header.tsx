@@ -195,10 +195,6 @@ export default function AppHeader() {
     [],
   );
 
-  const enterColorEditMode = useCallback(() => {
-    writeWeekColorPickMode(true);
-  }, [writeWeekColorPickMode]);
-
   const exitColorEditMode = useCallback(() => {
     writeWeekColorPickMode(false);
   }, [writeWeekColorPickMode]);

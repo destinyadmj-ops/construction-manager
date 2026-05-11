@@ -25,6 +25,7 @@ import {
   type WeekGridCellBg as CellBg,
   type WeekGridTextColor as CellTextColor,
 } from '@/shared/week-grid-prefs';
+import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
@@ -626,9 +627,11 @@ function WeekHubInner() {
   const [cellMinHComfortable, setCellMinHComfortable] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinHComfortable);
   const [cellBg, setCellBg] = useState<CellBg>(DEFAULT_WEEK_GRID_PREFS.cellBg);
   const [cellClickAction, setCellClickAction] = useState<CellClickAction>('toggle');
+  const [isColorEditMode, setIsColorEditMode] = useState(false);
   const [cellTextColor, setCellTextColor] = useState<CellTextColor>(DEFAULT_WEEK_GRID_PREFS.cellTextColor);
   const [cellActionMsg, setCellActionMsg] = useState<string | null>(null);
   const cellActionMsgTimer = useRef<number | null>(null);
+  const lastNonColorCellActionRef = useRef<CellClickAction>('toggle');
   const [isNameColResizing, setIsNameColResizing] = useState(false);
   const nameColResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -1200,6 +1203,32 @@ function WeekHubInner() {
     return null;
   }, [pickSiteFromInput, selectedSite, showCellActionMsg]);
 
+  const setColorEditMode = useCallback((next: boolean) => {
+    writeColorEditMode(next);
+    setIsColorEditMode(next);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const apply = () => {
+      setIsColorEditMode(readColorEditMode());
+    };
+
+    apply();
+    window.addEventListener('masterHub:colorEditModeUpdated', apply as EventListener);
+    window.addEventListener('storage', apply);
+    return () => {
+      window.removeEventListener('masterHub:colorEditModeUpdated', apply as EventListener);
+      window.removeEventListener('storage', apply);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cellClickAction === 'recolor') return;
+    lastNonColorCellActionRef.current = cellClickAction;
+  }, [cellClickAction]);
+
   const openSiteDetailFromCell = useCallback(
     (siteName: string) => {
       const site = resolveSiteFromText(siteName);
@@ -1232,14 +1261,39 @@ function WeekHubInner() {
             { value: 'swap' as const, label: '入替', title: '1枠目と2枠目を入替（現場選択なしでOK）' },
           ] satisfies Array<{ value: CellClickAction; label: string; title: string }>
         ).map((a) => {
-          const active = cellClickAction === a.value;
+          const isColorAction = a.value === 'recolor';
+          const active = isColorAction ? isColorEditMode : cellClickAction === a.value;
+          const buttonTitle = isColorAction
+            ? isColorEditMode
+              ? '色編集を終了'
+              : '右クリックで各ボタンや枠の色を編集'
+            : a.title;
           return (
             <button
               key={a.value}
               type="button"
-              onClick={() => setCellClickAction(a.value)}
+              onClick={() => {
+                if (isColorAction) {
+                  if (!editActive) {
+                    showCellActionMsg('編集するには、ヘッダーの「編集」から開始してください');
+                    return;
+                  }
+                  if (isColorEditMode) {
+                    setColorEditMode(false);
+                    setCellClickAction(lastNonColorCellActionRef.current);
+                    return;
+                  }
+                  setCellClickAction('recolor');
+                  setColorEditMode(true);
+                  return;
+                }
+                if (isColorEditMode) {
+                  setColorEditMode(false);
+                }
+                setCellClickAction(a.value);
+              }}
               aria-pressed={active}
-              title={a.title}
+              title={buttonTitle}
               data-testid={`cell-action-${a.value}`}
               className={`shrink-0 rounded-md border px-2 py-1 text-[11px] tabular-nums ${
                 active
@@ -2363,11 +2417,17 @@ function WeekHubInner() {
 
   useEffect(() => {
     if (!hasScheduleEditPermission) {
+      if (isColorEditMode) {
+        setColorEditMode(false);
+      }
+      if (cellClickAction === 'recolor') {
+        setCellClickAction(lastNonColorCellActionRef.current);
+      }
       setEditActive(false);
       setReorderMode(false);
       setShowEditPassword(false);
     }
-  }, [hasScheduleEditPermission]);
+  }, [cellClickAction, hasScheduleEditPermission, isColorEditMode, setColorEditMode]);
 
   const beginEdit = useCallback(() => {
     setEditPasswordMsg(null);
@@ -2422,7 +2482,13 @@ function WeekHubInner() {
     setSaveAction(
       editActive
         ? {
-            onClick: () => setEditActive(false),
+            onClick: () => {
+              if (cellClickAction === 'recolor') {
+                setCellClickAction(lastNonColorCellActionRef.current);
+              }
+              setColorEditMode(false);
+              setEditActive(false);
+            },
             disabled: false,
             title: '編集を終了',
           }
@@ -2455,12 +2521,14 @@ function WeekHubInner() {
     };
   }, [
     beginEdit,
+    cellClickAction,
     editActive,
     editConfigured,
     editEnabled,
     hasScheduleEditPermission,
     setAddAction,
     setHistoryMenu,
+    setColorEditMode,
     setSaveAction,
     undoStack,
     userLabelById,
@@ -5495,26 +5563,39 @@ function Row({
         : undefined;
       if (!onOpenSiteFromCell) {
         return (
-          <div className={input.className} style={{ fontSize: input.fontSize }} onContextMenu={handleContextMenu}>
+          <div
+            data-color-edit-ignore-contextmenu
+            className={input.className}
+            style={{ fontSize: input.fontSize }}
+            onContextMenu={handleContextMenu}
+          >
             {input.displayValue}
           </div>
         );
       }
       return (
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
+          data-color-edit-ignore-contextmenu
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             onOpenSiteFromCell(input.siteName);
           }}
+          onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenSiteFromCell(input.siteName);
+          }}
           onContextMenu={handleContextMenu}
-          className={`${input.className} w-full text-left hover:underline`}
+          className={`${input.className} w-full cursor-pointer text-left hover:underline`}
           style={{ fontSize: input.fontSize }}
           title="現場詳細を開く"
         >
           {input.displayValue}
-        </button>
+        </div>
       );
     },
     [onOpenSiteFromCell, openSlotContextMenu],
