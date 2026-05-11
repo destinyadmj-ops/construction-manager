@@ -1091,13 +1091,19 @@ export default function AppHeader() {
 
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:-ml-2">
             {/* Left small banner area (future: settings/alerts/notifications) */}
-            <Link href="/" className="text-sm font-medium tracking-tight">
+            <Link
+              href="/"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:home-title"
+              className="text-sm font-medium tracking-tight"
+            >
               Master Hub
             </Link>
 
             {/* 現場リスト三角ボタン */}
             <button
               type="button"
+              data-color-edit-slot="button"
               data-color-edit-id="header:site-list-toggle"
               aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
               className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
@@ -1112,6 +1118,7 @@ export default function AppHeader() {
               <div ref={notificationsRef} className="relative">
                 <button
                   type="button"
+                  data-color-edit-slot="button"
                   data-color-edit-id="header:notifications-toggle"
                   onClick={() => {
                     setIsSettingsOpen(false);
@@ -1194,6 +1201,7 @@ export default function AppHeader() {
             <div ref={settingsRef} className="relative" data-color-edit-keep>
               <button
                 type="button"
+                data-color-edit-slot="button"
                 data-color-edit-id="header:settings-toggle"
                 onClick={() => setIsSettingsOpen((v) => !v)}
                 aria-expanded={isSettingsOpen}
@@ -1669,6 +1677,7 @@ export default function AppHeader() {
           <div className={`${isElectronShell ? 'flex' : 'hidden'} min-w-0 flex-wrap items-center gap-1`}>
             <button
               type="button"
+              data-color-edit-id="header-action-back"
               data-testid="header-action-back"
               onClick={() => {
                 if (actions.undo && !actions.undo.disabled) {
@@ -1695,6 +1704,7 @@ export default function AppHeader() {
 
             <button
               type="button"
+              data-color-edit-id="header-action-save"
               data-testid="header-action-save"
               onClick={() => {
                 exitColorEditMode();
@@ -1709,6 +1719,7 @@ export default function AppHeader() {
 
             <button
               type="button"
+              data-color-edit-id="header-action-forward"
               data-testid="header-action-forward"
               onClick={() => {
                 if (actions.redo && !actions.redo.disabled) {
@@ -1728,6 +1739,7 @@ export default function AppHeader() {
 
             <button
               type="button"
+              data-color-edit-id="header-action-add"
               data-testid="header-action-add"
               onClick={() => {
                 enterColorEditMode();
@@ -1744,6 +1756,7 @@ export default function AppHeader() {
               <button
                 type="button"
                 ref={historyButtonRef}
+                data-color-edit-id="header-action-history"
                 data-testid="header-action-history"
                 onClick={() => {
                   const nextOpen = !isHistoryOpen;
@@ -1863,21 +1876,33 @@ export default function AppHeader() {
 
             {pathname === '/' ? (
               <div className="ml-0 hidden min-w-0 flex-wrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:invoice"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
                     aria-hidden="true"
                   />
                   <span>請求未</span>
                 </div>
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:report"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
                     aria-hidden="true"
                   />
                   <span>報告未</span>
                 </div>
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:unassigned"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
                     aria-hidden="true"
@@ -1894,6 +1919,8 @@ export default function AppHeader() {
           <div ref={overflowMenuRef} className="relative lg:hidden">
             <button
               type="button"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:overflow-menu-toggle"
               onClick={() => {
                 setIsMultiMenuOpen(false);
                 setIsOverflowMenuOpen((v) => !v);
@@ -2048,6 +2075,8 @@ export default function AppHeader() {
 
           <Link
             href="/alerts"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:alerts"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2068,6 +2097,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/?mode=week"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:week"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2079,6 +2110,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/accounting"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:accounting"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2091,6 +2124,8 @@ export default function AppHeader() {
 
           <Link
             href="/reports"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:reports"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2103,6 +2138,8 @@ export default function AppHeader() {
 
           <Link
             href="/invoices"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:invoices"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2114,6 +2151,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/management"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:management"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2125,6 +2164,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/site-ledger"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:site-ledger"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2136,6 +2177,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/partners"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:partners"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2148,6 +2191,8 @@ export default function AppHeader() {
 
           <Link
             href="/?mode=week&kind=daily"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:daily"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2161,6 +2206,8 @@ export default function AppHeader() {
           <div ref={multiMenuRef} className="relative">
             <button
               type="button"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:nav:multi"
               onClick={() => {
                 setIsOverflowMenuOpen(false);
                 setIsMultiMenuOpen((v) => !v);
