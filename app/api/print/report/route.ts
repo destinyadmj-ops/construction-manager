@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { getSiteDayFolderPaths } from '@/server/site-storage';
 import { generateSimplePdf } from '@/server/templates/simplePdf';
 import { z } from 'zod';
 import fs from 'node:fs/promises';
@@ -33,14 +34,6 @@ function safeFilePart(input: string) {
     .replace(/[\\/]/g, '-')
     .replace(/[:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
-    .slice(0, 80);
-}
-
-function safePathSegment(name: string) {
-  const base = name.trim() || 'untitled';
-  return base
-    .replace(/[\\/\r\n\t\0<>:"|?*]+/g, '_')
-    .replace(/[\s.]+$/g, '')
     .slice(0, 80);
 }
 
@@ -128,14 +121,8 @@ export async function POST(request: Request) {
     );
 
     try {
-      const baseDir = process.env.MASTER_HUB_STORAGE_DIR
-        ? path.resolve(process.env.MASTER_HUB_STORAGE_DIR)
-        : path.join(process.cwd(), '.storage');
-
       const dateYmd = parsed.data.date ?? ymdInTokyo(new Date());
-      const siteFolderBase = safePathSegment(site.name) || site.id;
-      const siteFolder = `${siteFolderBase}__${site.id.slice(0, 8)}`;
-      const reportsDir = path.join(baseDir, 'sites', siteFolder, dateYmd, 'reports');
+      const { reportsDir } = await getSiteDayFolderPaths(site.id, site.name, dateYmd);
       await fs.mkdir(reportsDir, { recursive: true });
 
       const storedPdfPath = path.join(reportsDir, `${baseName}.pdf`);
