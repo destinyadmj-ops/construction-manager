@@ -1412,7 +1412,7 @@ export default function AppHeader() {
                         </div>
                       </div>
                       <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        ONの間、各ボタンや枠、背景を右クリックして色（＋濃淡）を編集します（このページごと・アカウント別に保存）。
+                        ONの間、各ボタンや枠、背景を右クリックして色（＋濃淡）を編集します。右クリックした要素ごとに保存でき、必要なら共通設定へ戻せます。
                       </div>
                     </div>
 

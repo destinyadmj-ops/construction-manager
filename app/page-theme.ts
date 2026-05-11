@@ -1,13 +1,21 @@
 'use client';
 
-import { normalizeUiTheme, type UiTheme, type UiThemeColor, UI_THEME_COLORS } from './ui-theme';
+import { normalizeUiTheme, type UiTheme, type UiThemeColor, type UiThemeEditableSlot, UI_THEME_COLORS } from './ui-theme';
 import { normalizeThemeShade } from './color-ramp';
 
 export const PAGE_THEME_OVERRIDE_DB_KEY_PREFIX = 'ui.page-theme.v1:';
 
-export type PageThemeOverridesV1 = {
-  schemaVersion: 1;
+export type PageThemeElementOverride = {
+  slot: UiThemeEditableSlot;
+  color?: UiThemeColor;
+  shade?: number;
+  label?: string;
+};
+
+export type PageThemeOverrides = {
+  schemaVersion: 2;
   overrides: Partial<Omit<UiTheme, 'schemaVersion'>>;
+  elements: Record<string, PageThemeElementOverride>;
 };
 
 function asObject(v: unknown): Record<string, unknown> | null {
@@ -16,6 +24,21 @@ function asObject(v: unknown): Record<string, unknown> | null {
 
 function pickColor(v: unknown): UiThemeColor | undefined {
   return UI_THEME_COLORS.includes(v as UiThemeColor) ? (v as UiThemeColor) : undefined;
+}
+
+function pickSlot(v: unknown): UiThemeEditableSlot | undefined {
+  switch (v) {
+    case 'surface':
+    case 'panel':
+    case 'button':
+    case 'cellBg':
+    case 'cellText':
+    case 'border':
+    case 'grid':
+      return v;
+    default:
+      return undefined;
+  }
 }
 
 function pickBool(v: unknown): boolean | undefined {
@@ -28,14 +51,35 @@ function pickShade(v: unknown): number | undefined {
   return normalizeThemeShade(v, 0);
 }
 
-export function normalizePageThemeOverrides(value: unknown): PageThemeOverridesV1 {
+function normalizePageThemeElementOverride(value: unknown): PageThemeElementOverride | null {
+  const raw = asObject(value);
+  if (!raw) return null;
+
+  const slot = pickSlot(raw.slot);
+  if (!slot) return null;
+
+  const color = pickColor(raw.color);
+  const shade = pickShade(raw.shade);
+  const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim().slice(0, 80) : undefined;
+
+  if (!color && typeof shade !== 'number') return null;
+
+  return {
+    slot,
+    ...(color ? { color } : null),
+    ...(typeof shade === 'number' ? { shade } : null),
+    ...(label ? { label } : null),
+  };
+}
+
+export function normalizePageThemeOverrides(value: unknown): PageThemeOverrides {
   const o = asObject(value);
-  const rawSchema = o?.schemaVersion;
-  const schemaVersion = rawSchema === 1 ? 1 : 1;
 
   const rawOverrides = asObject(o?.overrides) ?? {};
+  const rawElements = asObject(o?.elements) ?? {};
 
-  const overrides: PageThemeOverridesV1['overrides'] = {};
+  const overrides: PageThemeOverrides['overrides'] = {};
+  const elements: PageThemeOverrides['elements'] = {};
 
   const gridStrongLines = pickBool(rawOverrides.gridStrongLines);
   const borderStrong = pickBool(rawOverrides.borderStrong);
@@ -74,7 +118,15 @@ export function normalizePageThemeOverrides(value: unknown): PageThemeOverridesV
   if (typeof gridShade === 'number') overrides.gridShade = gridShade;
   if (typeof borderShade === 'number') overrides.borderShade = borderShade;
 
-  return { schemaVersion, overrides };
+  for (const [key, rawElement] of Object.entries(rawElements)) {
+    const normalized = normalizePageThemeElementOverride(rawElement);
+    if (!normalized) continue;
+    const trimmedKey = key.trim();
+    if (!trimmedKey) continue;
+    elements[trimmedKey] = normalized;
+  }
+
+  return { schemaVersion: 2, overrides, elements };
 }
 
 export function pageThemeOverrideDbKey(pathname: string): string {
@@ -87,17 +139,17 @@ export function pageThemeOverrideLocalKey(userId: string | null, pathname: strin
   return `masterHub.ui:pageThemeOverride:${userId ?? 'anon'}:${p}`;
 }
 
-export function readLocalPageThemeOverride(userId: string | null, pathname: string): PageThemeOverridesV1 {
+export function readLocalPageThemeOverride(userId: string | null, pathname: string): PageThemeOverrides {
   try {
     const raw = window.localStorage.getItem(pageThemeOverrideLocalKey(userId, pathname));
-    if (!raw) return { schemaVersion: 1, overrides: {} };
+    if (!raw) return { schemaVersion: 2, overrides: {}, elements: {} };
     return normalizePageThemeOverrides(JSON.parse(raw) as unknown);
   } catch {
-    return { schemaVersion: 1, overrides: {} };
+    return { schemaVersion: 2, overrides: {}, elements: {} };
   }
 }
 
-export function writeLocalPageThemeOverride(userId: string | null, pathname: string, next: PageThemeOverridesV1): void {
+export function writeLocalPageThemeOverride(userId: string | null, pathname: string, next: PageThemeOverrides): void {
   try {
     window.localStorage.setItem(pageThemeOverrideLocalKey(userId, pathname), JSON.stringify(next));
     window.dispatchEvent(
@@ -110,7 +162,7 @@ export function writeLocalPageThemeOverride(userId: string | null, pathname: str
   }
 }
 
-export function mergeUiTheme(base: UiTheme, overrides: PageThemeOverridesV1): UiTheme {
+export function mergeUiTheme(base: UiTheme, overrides: PageThemeOverrides): UiTheme {
   const b = normalizeUiTheme(base);
   const o = normalizePageThemeOverrides(overrides);
   return normalizeUiTheme({
