@@ -15,6 +15,12 @@ import {
   type WheelEvent,
 } from 'react';
 import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
+import {
+  cloneScheduleSyncSource,
+  createScheduleSyncSource,
+  scheduleSyncSourceEquals,
+  type ScheduleSyncSource,
+} from '@/shared/schedule-sync-source';
 import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/shared/site-family';
 import {
   DEFAULT_WEEK_GRID_PREFS,
@@ -37,7 +43,7 @@ type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 type LabelColor = (typeof LABEL_COLORS)[number];
-type ApiCellEntry = { label: string; color: LabelColor };
+type ApiCellEntry = { label: string; color: LabelColor; syncSource?: ScheduleSyncSource | null };
 type ApiCellGroup = { items: ApiCellEntry[] };
 
 type ApiUser = { id: string; name: string | null; email: string | null };
@@ -222,8 +228,14 @@ function cloneCellGroupItems(items: ApiCellEntry[] | null | undefined): ApiCellE
     .map((entry) => ({
       label: typeof entry?.label === 'string' ? entry.label.trim() : '',
       color: isLabelColor(entry?.color) ? entry.color : 'default',
+      syncSource: cloneScheduleSyncSource(entry?.syncSource),
     }))
     .filter((entry) => entry.label.length > 0);
+}
+
+function createCellEntry(label: string, color: LabelColor, syncSource?: ScheduleSyncSource | null): ApiCellEntry {
+  const nextSyncSource = cloneScheduleSyncSource(syncSource);
+  return nextSyncSource ? { label, color, syncSource: nextSyncSource } : { label, color };
 }
 
 function cloneCellGroups(groups: ApiCellGroup[] | null | undefined): ApiCellGroup[] {
@@ -258,6 +270,7 @@ function apiCellGroupsEqual(a: ApiCellGroup[] | null | undefined, b: ApiCellGrou
     for (let itemIndex = 0; itemIndex < leftItems.length; itemIndex += 1) {
       if (leftItems[itemIndex]?.label !== rightItems[itemIndex]?.label) return false;
       if (leftItems[itemIndex]?.color !== rightItems[itemIndex]?.color) return false;
+      if (!scheduleSyncSourceEquals(leftItems[itemIndex]?.syncSource, rightItems[itemIndex]?.syncSource)) return false;
     }
   }
   return true;
@@ -313,6 +326,7 @@ function previewCellAction(input: {
   color: CellTextColor;
   familyKeyForSiteName?: (siteName: string) => string | null;
   allowSiblingMerge?: boolean;
+  newEntrySyncSource?: ScheduleSyncSource | null;
 }): {
   cell: ApiCell;
   changed: boolean;
@@ -398,7 +412,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, { label: siteName, color: input.color }] },
+                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
             ),
           ),
           changed: true,
@@ -407,13 +421,13 @@ function previewCellAction(input: {
       }
       if (groups.length >= 2) {
         return {
-          cell: updateGroups([groups[0]!, { items: [{ label: siteName, color: input.color }] }]),
+          cell: updateGroups([groups[0]!, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
           changed: true,
           replaced: 'slot2',
         };
       }
       return {
-        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
+        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
         changed: true,
         toggled: 'on',
       };
@@ -428,7 +442,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, { label: siteName, color: input.color }] },
+                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
             ),
           ),
           changed: true,
@@ -436,7 +450,7 @@ function previewCellAction(input: {
       }
       if (groups.length >= 2) return { cell: currentCell, changed: false, reason: 'cell-full' };
       return {
-        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
+        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
         changed: true,
       };
     case 'replace2':
@@ -450,7 +464,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, { label: siteName, color: input.color }] },
+                : { items: [...group.items, createCellEntry(siteName, input.color, input.newEntrySyncSource)] },
             ),
           ),
           changed: true,
@@ -458,12 +472,12 @@ function previewCellAction(input: {
       }
       if (groups.length >= 2) {
         return {
-          cell: updateGroups([groups[0]!, { items: [{ label: siteName, color: input.color }] }]),
+          cell: updateGroups([groups[0]!, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
           changed: true,
         };
       }
       return {
-        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
+        cell: updateGroups([...groups, { items: [createCellEntry(siteName, input.color, input.newEntrySyncSource)] }]),
         changed: true,
       };
   }
@@ -5431,8 +5445,14 @@ function Row({
     if (!current || current.mode !== 'assign-users') return;
 
     const selected = new Set(current.selectedUserIds);
+    const inheritedSyncSource = createScheduleSyncSource({
+      parentUserId: user.id,
+      parentDayYmd: current.day,
+      familyKey: siteFamilyKeyForName(current.siteName),
+    });
     let addedCount = 0;
     let removedCount = 0;
+    let linkedCount = 0;
     let recoloredCount = 0;
     let skippedCapacityCount = 0;
     let failedCount = 0;
@@ -5440,12 +5460,70 @@ function Row({
     for (const targetUser of allUsers) {
       const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
       const action = selected.has(targetUser.id) ? 'add' : 'remove';
+      const exactGroupIndex = apiCellToGroups(beforeCell).findIndex((group) =>
+        group.items.some((entry) => entry.label === current.siteName),
+      );
+      const linkedGroupIndex = inheritedSyncSource
+        ? apiCellToGroups(beforeCell).findIndex((group) =>
+            group.items.some((entry) => scheduleSyncSourceEquals(entry.syncSource, inheritedSyncSource)),
+          )
+        : -1;
+
+      if (action === 'add' && inheritedSyncSource && exactGroupIndex >= 0) {
+        const nextCell = groupsToApiCell(
+          apiCellToGroups(beforeCell).map((group, groupIndex) =>
+            groupIndex !== exactGroupIndex
+              ? group
+              : {
+                  items: group.items.map((entry) =>
+                    createCellEntry(entry.label, entry.color, targetUser.id === user.id ? null : inheritedSyncSource),
+                  ),
+                },
+          ),
+        );
+        const result = await persistCellSet({
+          targetUser,
+          day: current.day,
+          beforeCell,
+          nextCell,
+        });
+        if (result.failed) {
+          failedCount += 1;
+          continue;
+        }
+        if (result.changed) {
+          linkedCount += 1;
+        }
+        continue;
+      }
+
+      if (action === 'remove' && linkedGroupIndex >= 0) {
+        const nextCell = groupsToApiCell(
+          apiCellToGroups(beforeCell).filter((_, groupIndex) => groupIndex !== linkedGroupIndex),
+        );
+        const result = await persistCellSet({
+          targetUser,
+          day: current.day,
+          beforeCell,
+          nextCell,
+        });
+        if (result.failed) {
+          failedCount += 1;
+          continue;
+        }
+        if (result.changed) {
+          removedCount += 1;
+        }
+        continue;
+      }
+
       const preview = previewCellAction({
         cell: beforeCell,
         action,
         siteName: current.siteName,
         color: current.color,
         familyKeyForSiteName: siteFamilyKeyForName,
+        newEntrySyncSource: action === 'add' && targetUser.id !== user.id ? inheritedSyncSource : null,
       });
       if (!preview.changed) {
         if (preview.reason === 'cell-full' || preview.reason === 'group-full') skippedCapacityCount += 1;
@@ -5480,11 +5558,12 @@ function Row({
     const messages: string[] = [];
     if (addedCount) messages.push(`${addedCount}名追加`);
     if (removedCount) messages.push(`${removedCount}名削除`);
+    if (linkedCount) messages.push(`${linkedCount}名リンク`);
     if (recoloredCount) messages.push(`${recoloredCount}名色同期`);
     if (skippedCapacityCount) messages.push(`${skippedCapacityCount}名は枠上限`);
     if (failedCount) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.length > 0 ? `同日・同現場を更新: ${messages.join(' / ')}` : '変更はありません');
-  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu]);
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, user.id]);
 
   const applySelectedSiblingSites = useCallback(async () => {
     const current = slotContextMenu;
@@ -5508,11 +5587,26 @@ function Row({
       return;
     }
 
-    const targetUsers = allUsers.filter((candidate) =>
-      apiCellToGroups(allGrid[candidate.id]?.[current.day]).some((group) =>
-        group.items.some((entry) => siteFamilyKeyForName(entry.label) === anchorFamilyKey),
-      ),
+    const ownerSyncSource = createScheduleSyncSource({
+      parentUserId: user.id,
+      parentDayYmd: current.day,
+      familyKey: anchorFamilyKey,
+    });
+    const currentGroup = apiCellToGroups(current.beforeCell).find((group) =>
+      group.items.some((entry) => entry.label === current.siteName),
     );
+    const currentGroupSyncSource =
+      currentGroup?.items.find((entry) => entry.label === current.siteName)?.syncSource ?? currentGroup?.items[0]?.syncSource ?? null;
+    const isParentEdit = !currentGroupSyncSource || scheduleSyncSourceEquals(currentGroupSyncSource, ownerSyncSource);
+
+    const targetUsers = isParentEdit && ownerSyncSource
+      ? allUsers.filter((candidate) =>
+          candidate.id === user.id ||
+          apiCellToGroups(allGrid[candidate.id]?.[current.day]).some((group) =>
+            group.items.some((entry) => scheduleSyncSourceEquals(entry.syncSource, ownerSyncSource)),
+          ),
+        )
+      : [user];
 
     let updatedCount = 0;
     let skippedCount = 0;
@@ -5522,11 +5616,11 @@ function Row({
       const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
       const currentEntries = apiCellToEntries(beforeCell);
       const currentGroups = apiCellToGroups(beforeCell);
-      const targetGroupIndex = currentGroups.findIndex((group) =>
-        group.items.some(
-          (entry) => entry.label === current.siteName || siteFamilyKeyForName(entry.label) === anchorFamilyKey,
-        ),
-      );
+      const targetGroupIndex = targetUser.id === user.id
+        ? currentGroups.findIndex((group) => group.items.some((entry) => entry.label === current.siteName))
+        : currentGroups.findIndex((group) =>
+            group.items.some((entry) => scheduleSyncSourceEquals(entry.syncSource, ownerSyncSource)),
+          );
 
       if (targetGroupIndex < 0) {
         skippedCount += 1;
@@ -5535,11 +5629,15 @@ function Row({
 
       const currentColorByName = new Map(currentEntries.map((entry) => [entry.label, entry.color] as const));
       const anchorColor = currentColorByName.get(current.siteName) ?? current.color;
+      const nextSyncSource = targetUser.id === user.id || !isParentEdit ? null : ownerSyncSource;
       const replacementGroup: ApiCellGroup = {
-        items: selectedSites.map((option) => ({
-          label: option.storedName,
-          color: currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, anchorColor),
-        })),
+        items: selectedSites.map((option) =>
+          createCellEntry(
+            option.storedName,
+            currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, anchorColor),
+            nextSyncSource,
+          ),
+        ),
       };
 
       const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
@@ -5576,7 +5674,7 @@ function Row({
     if (skippedCount) messages.push(`${skippedCount}名スキップ`);
     if (failedCount) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.length > 0 ? `同名別店舗を同期: ${messages.join(' / ')}` : '変更はありません');
-  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions]);
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
 
   const renderSiteLabel = useCallback(
     (

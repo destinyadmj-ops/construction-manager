@@ -6,16 +6,25 @@ import {
 } from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { ensureSiteDayFolders } from '@/server/site-storage';
+import {
+  cloneScheduleSyncSource,
+  isScheduleSyncSource,
+  type ScheduleSyncSource,
+} from '@/shared/schedule-sync-source';
 import { findSiteFamily, hasSiteFamilyDisplayPrefix, normalizeSiteFamilyKey } from '@/shared/site-family';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
 const LabelColorSchema = z.enum(['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']);
+const ScheduleSyncSourceSchema = z.custom<ScheduleSyncSource>((value) => isScheduleSyncSource(value), {
+  message: 'Invalid sync source',
+});
 const CellGroupItemSchema = z
   .object({
     label: z.string().trim().min(1).max(200),
     color: LabelColorSchema.optional().nullable(),
+    syncSource: ScheduleSyncSourceSchema.optional().nullable(),
   })
   .strict();
 
@@ -39,7 +48,7 @@ const BodySchema = z
   .strict();
 
   type LabelColor = z.infer<typeof LabelColorSchema>;
-  type NormalizedGroupItem = { label: string; color: LabelColor };
+  type NormalizedGroupItem = { label: string; color: LabelColor; syncSource: ScheduleSyncSource | null };
   type NormalizedGroup = { items: NormalizedGroupItem[] };
 
 function startOfDayLocal(ymd: string) {
@@ -92,14 +101,17 @@ function buildGroupsFromEntries(
       const color = LabelColorSchema.safeParse(meta?.labelColor).success
         ? (meta?.labelColor as LabelColor)
         : 'default';
+      const syncSource = isScheduleSyncSource(meta?.scheduleSyncSource)
+        ? cloneScheduleSyncSource(meta.scheduleSyncSource)
+        : null;
       const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
       const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
-      return { label, color, groupIndex, itemIndex, entryOrder };
+      return { label, color, syncSource, groupIndex, itemIndex, entryOrder };
     })
     .filter((item): item is NormalizedGroupItem & { groupIndex: number | null; itemIndex: number | null; entryOrder: number } => !!item);
 
   if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
-    const grouped = new Map<number, Array<{ label: string; color: LabelColor; order: number }>>();
+    const grouped = new Map<number, Array<{ label: string; color: LabelColor; syncSource: ScheduleSyncSource | null; order: number }>>();
     for (const item of items) {
       const groupIndex = item.groupIndex as number;
       if (groupIndex < 0 || groupIndex > 1) continue;
@@ -107,6 +119,7 @@ function buildGroupsFromEntries(
       hit.push({
         label: item.label,
         color: item.color,
+        syncSource: item.syncSource,
         order: typeof item.itemIndex === 'number' ? item.itemIndex : item.entryOrder,
       });
       grouped.set(groupIndex, hit);
@@ -118,7 +131,7 @@ function buildGroupsFromEntries(
         items: [...groupItems]
           .sort((left, right) => left.order - right.order)
           .slice(0, 4)
-          .map(({ label, color }) => ({ label, color })),
+          .map(({ label, color, syncSource }) => ({ label, color, syncSource })),
       }))
       .slice(0, 2);
   }
@@ -148,8 +161,8 @@ function groupsFromLegacySlots(input: {
   slot2Color: LabelColor;
 }): NormalizedGroup[] {
   const groups: NormalizedGroup[] = [];
-  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color }] });
-  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color }] });
+  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color, syncSource: null }] });
+  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color, syncSource: null }] });
   return groups;
 }
 
@@ -207,6 +220,7 @@ export async function POST(request: Request) {
               .map((item) => ({
                 label: item.label.trim(),
                 color: item.color ?? 'default',
+                syncSource: cloneScheduleSyncSource(item.syncSource),
               }))
               .filter((item) => item.label.length > 0),
           }))
@@ -228,14 +242,14 @@ export async function POST(request: Request) {
         items: await Promise.all(
           group.items.map(async (item) => {
             const site = await resolveSiteByName(item.label, kind);
-            return site ? { site, color: item.color } : null;
+            return site ? { site, color: item.color, syncSource: item.syncSource } : null;
           }),
         ),
       })),
     );
 
-    const finalGroups: Array<{ items: Array<{ site: { id: string; name: string }; color: LabelColor }> }> = resolvedGroups.map((group) => ({
-      items: group.items.filter((item): item is { site: { id: string; name: string }; color: LabelColor } => !!item),
+    const finalGroups: Array<{ items: Array<{ site: { id: string; name: string }; color: LabelColor; syncSource: ScheduleSyncSource | null }> }> = resolvedGroups.map((group) => ({
+      items: group.items.filter((item): item is { site: { id: string; name: string }; color: LabelColor; syncSource: ScheduleSyncSource | null } => !!item),
     }));
 
     await prisma.$transaction(async (tx) => {
@@ -256,6 +270,7 @@ export async function POST(request: Request) {
                 labelColor: item.color,
                 scheduleGroupIndex: groupIndex,
                 scheduleItemIndex: itemIndex,
+                ...(item.syncSource ? { scheduleSyncSource: item.syncSource } : {}),
               },
             },
             select: { id: true },
@@ -285,7 +300,7 @@ export async function POST(request: Request) {
       before: beforeSnapshot,
       after: buildSnapshotFromGroups(
         finalGroups.map((group) => ({
-          items: group.items.map((item) => ({ label: item.site.name, color: item.color })),
+          items: group.items.map((item) => ({ label: item.site.name, color: item.color, syncSource: item.syncSource })),
         })),
       ),
     });
