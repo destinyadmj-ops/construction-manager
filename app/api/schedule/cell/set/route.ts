@@ -11,6 +11,11 @@ import {
   isScheduleSyncSource,
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
+import {
+  isScheduleCellEntryKind,
+  normalizeScheduleCellEntryKind,
+  type ScheduleCellEntryKind,
+} from '@/shared/schedule-cell-entry';
 import { findSiteFamily, hasSiteFamilyDisplayPrefix, normalizeSiteFamilyKey } from '@/shared/site-family';
 import { z } from 'zod';
 
@@ -24,6 +29,9 @@ const CellGroupItemSchema = z
   .object({
     label: z.string().trim().min(1).max(200),
     color: LabelColorSchema.optional().nullable(),
+    kind: z.custom<ScheduleCellEntryKind>((value) => isScheduleCellEntryKind(value), {
+      message: 'Invalid entry kind',
+    }).optional().nullable(),
     syncSource: ScheduleSyncSourceSchema.optional().nullable(),
   })
   .strict();
@@ -43,12 +51,17 @@ const BodySchema = z
     slot2: z.string().trim().max(200).nullable().optional(),
     slot1Color: LabelColorSchema.optional().nullable(),
     slot2Color: LabelColorSchema.optional().nullable(),
-    groups: z.array(CellGroupSchema).max(2).optional().nullable(),
+    groups: z.array(CellGroupSchema).max(4).optional().nullable(),
   })
   .strict();
 
   type LabelColor = z.infer<typeof LabelColorSchema>;
-  type NormalizedGroupItem = { label: string; color: LabelColor; syncSource: ScheduleSyncSource | null };
+  type NormalizedGroupItem = {
+    label: string;
+    color: LabelColor;
+    kind: ScheduleCellEntryKind;
+    syncSource: ScheduleSyncSource | null;
+  };
   type NormalizedGroup = { items: NormalizedGroupItem[] };
 
 function startOfDayLocal(ymd: string) {
@@ -75,6 +88,10 @@ function buildSnapshotFromGroups(groups: NormalizedGroup[]) {
     slot1Color: groups[0]?.items[0]?.color ?? 'default',
     slot2: groups[1] ? groups[1].items.map((item) => item.label).join(' / ') : null,
     slot2Color: groups[1]?.items[0]?.color ?? 'default',
+    slot3: groups[2] ? groups[2].items.map((item) => item.label).join(' / ') : null,
+    slot3Color: groups[2]?.items[0]?.color ?? 'default',
+    slot4: groups[3] ? groups[3].items.map((item) => item.label).join(' / ') : null,
+    slot4Color: groups[3]?.items[0]?.color ?? 'default',
   });
 }
 
@@ -101,24 +118,29 @@ function buildGroupsFromEntries(
       const color = LabelColorSchema.safeParse(meta?.labelColor).success
         ? (meta?.labelColor as LabelColor)
         : 'default';
+      const kind = normalizeScheduleCellEntryKind(meta?.scheduleEntryKind ?? (entry.site ? 'site' : 'note'));
       const syncSource = isScheduleSyncSource(meta?.scheduleSyncSource)
         ? cloneScheduleSyncSource(meta.scheduleSyncSource)
         : null;
       const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
       const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
-      return { label, color, syncSource, groupIndex, itemIndex, entryOrder };
+      return { label, color, kind, syncSource, groupIndex, itemIndex, entryOrder };
     })
     .filter((item): item is NormalizedGroupItem & { groupIndex: number | null; itemIndex: number | null; entryOrder: number } => !!item);
 
   if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
-    const grouped = new Map<number, Array<{ label: string; color: LabelColor; syncSource: ScheduleSyncSource | null; order: number }>>();
+    const grouped = new Map<
+      number,
+      Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null; order: number }>
+    >();
     for (const item of items) {
       const groupIndex = item.groupIndex as number;
-      if (groupIndex < 0 || groupIndex > 1) continue;
+      if (groupIndex < 0 || groupIndex > 3) continue;
       const hit = grouped.get(groupIndex) ?? [];
       hit.push({
         label: item.label,
         color: item.color,
+        kind: item.kind,
         syncSource: item.syncSource,
         order: typeof item.itemIndex === 'number' ? item.itemIndex : item.entryOrder,
       });
@@ -131,14 +153,19 @@ function buildGroupsFromEntries(
         items: [...groupItems]
           .sort((left, right) => left.order - right.order)
           .slice(0, 4)
-          .map(({ label, color, syncSource }) => ({ label, color, syncSource })),
+          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource })),
       }))
-      .slice(0, 2);
+      .slice(0, 4);
   }
 
   const groups: Array<{ key: string; items: NormalizedGroupItem[] }> = [];
-  const peerNames = items.map((item) => item.label);
+  const peerNames = items.filter((item) => item.kind === 'site').map((item) => item.label);
   for (const item of items) {
+    if (item.kind === 'note') {
+      groups.push({ key: `note:${item.entryOrder}`, items: [item] });
+      continue;
+    }
+
     const family = findSiteFamily(item.label, peerNames);
     const explicitPrefix = hasSiteFamilyDisplayPrefix(item.label);
     const key = family.key
@@ -151,7 +178,7 @@ function buildGroupsFromEntries(
       groups.push({ key, items: [item] });
     }
   }
-  return groups.slice(0, 2).map((group) => ({ items: group.items.slice(0, 4) }));
+  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4) }));
 }
 
 function groupsFromLegacySlots(input: {
@@ -161,8 +188,8 @@ function groupsFromLegacySlots(input: {
   slot2Color: LabelColor;
 }): NormalizedGroup[] {
   const groups: NormalizedGroup[] = [];
-  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color, syncSource: null }] });
-  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color, syncSource: null }] });
+  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color, kind: 'site', syncSource: null }] });
+  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color, kind: 'site', syncSource: null }] });
   return groups;
 }
 
@@ -220,6 +247,7 @@ export async function POST(request: Request) {
               .map((item) => ({
                 label: item.label.trim(),
                 color: item.color ?? 'default',
+                kind: normalizeScheduleCellEntryKind(item.kind),
                 syncSource: cloneScheduleSyncSource(item.syncSource),
               }))
               .filter((item) => item.label.length > 0),
@@ -227,11 +255,8 @@ export async function POST(request: Request) {
           .filter((group) => group.items.length > 0)
       : groupsFromLegacySlots({ slot1Name, slot2Name, slot1Color, slot2Color });
 
-    if (normalizedGroups.length > 2) {
-      return Response.json({ ok: false, error: '最大2枠までです' }, { status: 400 });
-    }
-    if (normalizedGroups.filter((group) => group.items.length > 1).length > 1) {
-      return Response.json({ ok: false, error: '複数店舗を持てる枠は1つだけです' }, { status: 400 });
+    if (normalizedGroups.length > 4) {
+      return Response.json({ ok: false, error: '最大4枠までです' }, { status: 400 });
     }
     if (normalizedGroups.some((group) => group.items.length > 4)) {
       return Response.json({ ok: false, error: '同名別店舗は1枠4件までです' }, { status: 400 });
@@ -241,15 +266,29 @@ export async function POST(request: Request) {
       normalizedGroups.map(async (group) => ({
         items: await Promise.all(
           group.items.map(async (item) => {
+            if (item.kind === 'note') {
+              return { kind: 'note' as const, label: item.label, color: item.color, syncSource: null };
+            }
             const site = await resolveSiteByName(item.label, kind);
-            return site ? { site, color: item.color, syncSource: item.syncSource } : null;
+            return site ? { kind: 'site' as const, site, label: site.name, color: item.color, syncSource: item.syncSource } : null;
           }),
         ),
       })),
     );
 
-    const finalGroups: Array<{ items: Array<{ site: { id: string; name: string }; color: LabelColor; syncSource: ScheduleSyncSource | null }> }> = resolvedGroups.map((group) => ({
-      items: group.items.filter((item): item is { site: { id: string; name: string }; color: LabelColor; syncSource: ScheduleSyncSource | null } => !!item),
+    const finalGroups: Array<{
+      items: Array<
+        | { kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }
+        | { kind: 'note'; label: string; color: LabelColor; syncSource: null }
+      >;
+    }> = resolvedGroups.map((group) => ({
+      items: group.items.filter(
+        (
+          item,
+        ): item is
+          | { kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }
+          | { kind: 'note'; label: string; color: LabelColor; syncSource: null } => !!item,
+      ),
     }));
 
     await prisma.$transaction(async (tx) => {
@@ -263,10 +302,11 @@ export async function POST(request: Request) {
               userId,
               kind,
               startAt: addMinutes(startAt, minuteOffset),
-              summary: item.site.name,
-              siteId: item.site.id,
+              summary: item.label,
+              note: item.kind === 'note' ? item.label : null,
+              siteId: item.kind === 'site' ? item.site.id : null,
               accountingMeta: {
-                siteName: item.site.name,
+                ...(item.kind === 'site' ? { siteName: item.site.name } : { scheduleEntryKind: 'note', scheduleText: item.label }),
                 labelColor: item.color,
                 scheduleGroupIndex: groupIndex,
                 scheduleItemIndex: itemIndex,
@@ -283,6 +323,7 @@ export async function POST(request: Request) {
     try {
       for (const group of finalGroups) {
         for (const item of group.items) {
+          if (item.kind !== 'site') continue;
           await ensureSiteDayFolders({ siteId: item.site.id, siteName: item.site.name, dayYmd: day });
         }
       }
@@ -300,7 +341,7 @@ export async function POST(request: Request) {
       before: beforeSnapshot,
       after: buildSnapshotFromGroups(
         finalGroups.map((group) => ({
-          items: group.items.map((item) => ({ label: item.site.name, color: item.color, syncSource: item.syncSource })),
+          items: group.items.map((item) => ({ label: item.label, color: item.color, kind: item.kind, syncSource: item.syncSource })),
         })),
       ),
     });

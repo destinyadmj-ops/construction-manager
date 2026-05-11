@@ -16,6 +16,10 @@ export type ScheduleCellSnapshot = {
   slot1Color: ScheduleLabelColor;
   slot2: string | null;
   slot2Color: ScheduleLabelColor;
+  slot3: string | null;
+  slot3Color: ScheduleLabelColor;
+  slot4: string | null;
+  slot4Color: ScheduleLabelColor;
 };
 
 export type ScheduleChangeHistoryListItem = {
@@ -97,6 +101,10 @@ export function emptyScheduleCellSnapshot(): ScheduleCellSnapshot {
     slot1Color: 'default',
     slot2: null,
     slot2Color: 'default',
+    slot3: null,
+    slot3Color: 'default',
+    slot4: null,
+    slot4Color: 'default',
   };
 }
 
@@ -105,12 +113,20 @@ export function createScheduleCellSnapshot(input: {
   slot1Color?: ScheduleLabelColor | null;
   slot2?: string | null;
   slot2Color?: ScheduleLabelColor | null;
+  slot3?: string | null;
+  slot3Color?: ScheduleLabelColor | null;
+  slot4?: string | null;
+  slot4Color?: ScheduleLabelColor | null;
 }): ScheduleCellSnapshot {
   return {
     slot1: normalize(input.slot1) || null,
     slot1Color: normalizeColor(input.slot1Color),
     slot2: normalize(input.slot2) || null,
     slot2Color: normalizeColor(input.slot2Color),
+    slot3: normalize(input.slot3) || null,
+    slot3Color: normalizeColor(input.slot3Color),
+    slot4: normalize(input.slot4) || null,
+    slot4Color: normalizeColor(input.slot4Color),
   };
 }
 
@@ -122,6 +138,10 @@ export function createScheduleCellSnapshotFromWorkEntries(
     slot1Color: entries[0] ? extractEntryColor(entries[0]) : 'default',
     slot2: entries[1] ? extractEntryLabel(entries[1]) : null,
     slot2Color: entries[1] ? extractEntryColor(entries[1]) : 'default',
+    slot3: entries[2] ? extractEntryLabel(entries[2]) : null,
+    slot3Color: entries[2] ? extractEntryColor(entries[2]) : 'default',
+    slot4: entries[3] ? extractEntryLabel(entries[3]) : null,
+    slot4Color: entries[3] ? extractEntryColor(entries[3]) : 'default',
   });
 }
 
@@ -130,7 +150,11 @@ export function scheduleCellSnapshotEquals(a: ScheduleCellSnapshot, b: ScheduleC
     a.slot1 === b.slot1 &&
     a.slot1Color === b.slot1Color &&
     a.slot2 === b.slot2 &&
-    a.slot2Color === b.slot2Color
+    a.slot2Color === b.slot2Color &&
+    a.slot3 === b.slot3 &&
+    a.slot3Color === b.slot3Color &&
+    a.slot4 === b.slot4 &&
+    a.slot4Color === b.slot4Color
   );
 }
 
@@ -159,12 +183,16 @@ export function formatScheduleCellSnapshot(snapshot: ScheduleCellSnapshot) {
   const parts = [
     snapshot.slot1 ? `${snapshot.slot1}${snapshot.slot1Color === 'default' ? '' : ` [${colorLabel(snapshot.slot1Color)}]`}` : null,
     snapshot.slot2 ? `${snapshot.slot2}${snapshot.slot2Color === 'default' ? '' : ` [${colorLabel(snapshot.slot2Color)}]`}` : null,
+    snapshot.slot3 ? `${snapshot.slot3}${snapshot.slot3Color === 'default' ? '' : ` [${colorLabel(snapshot.slot3Color)}]`}` : null,
+    snapshot.slot4 ? `${snapshot.slot4}${snapshot.slot4Color === 'default' ? '' : ` [${colorLabel(snapshot.slot4Color)}]`}` : null,
   ].filter((value): value is string => Boolean(value));
   return parts.length > 0 ? parts.join(' / ') : '（空）';
 }
 
 function formatScheduleCellProjectLabel(snapshot: ScheduleCellSnapshot) {
-  const parts = [snapshot.slot1, snapshot.slot2].map((value) => normalize(value)).filter((value): value is string => Boolean(value));
+  const parts = [snapshot.slot1, snapshot.slot2, snapshot.slot3, snapshot.slot4]
+    .map((value) => normalize(value))
+    .filter((value): value is string => Boolean(value));
   return parts.length > 0 ? parts.join(' / ') : '';
 }
 
