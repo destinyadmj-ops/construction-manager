@@ -1,5 +1,6 @@
 import { getAccountingProvider } from '@/server/accounting';
 import { prisma } from '@/server/db/prisma';
+import { excludeScheduleCellNoteEntries } from '@/server/schedule/work-entry-filters';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -29,10 +30,10 @@ export async function POST(request: Request) {
   const metaKeys = parsed.data.metaKeys ?? [];
 
   const entries = await prisma.workEntry.findMany({
-    where: {
+    where: excludeScheduleCellNoteEntries({
       ...(since ? { startAt: { gte: since } } : {}),
       ...(until ? { startAt: { lt: until } } : {}),
-    },
+    }),
     orderBy: { startAt: 'asc' },
     select: {
       id: true,

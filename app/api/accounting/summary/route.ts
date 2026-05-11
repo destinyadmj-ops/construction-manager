@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { excludeScheduleCellNoteEntries } from '@/server/schedule/work-entry-filters';
 
 export const runtime = 'nodejs';
 
@@ -55,11 +56,11 @@ export async function GET(request: Request) {
   try {
     const grouped = await prisma.workEntry.groupBy({
       by: ['accountingType'],
-      where: {
+      where: excludeScheduleCellNoteEntries({
         startAt: { gte: since, lt: until },
         accountingType: { not: null },
         amount: { not: null },
-      },
+      }),
       _sum: { amount: true },
     });
 
@@ -75,11 +76,11 @@ export async function GET(request: Request) {
     }
 
     const receivableRows = await prisma.workEntry.findMany({
-      where: {
+      where: excludeScheduleCellNoteEntries({
         startAt: { gte: since, lt: until },
         accountingType: 'ACCOUNTS_RECEIVABLE',
         amount: { not: null },
-      },
+      }),
       select: { startAt: true, amount: true },
       take: 20_000,
     });
