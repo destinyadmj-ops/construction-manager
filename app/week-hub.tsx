@@ -15,6 +15,7 @@ import {
   type WheelEvent,
 } from 'react';
 import { buildAutoFillTargets, buildRepeatRuleWithPace, hasConfiguredPace, type RepeatRule } from '@/shared/pace';
+import { findSiteFamily, stripSiteFamilyLabel } from '@/shared/site-family';
 import {
   DEFAULT_WEEK_GRID_PREFS,
   WEEK_GRID_PREFS_VERSION,
@@ -309,8 +310,7 @@ function previewCellAction(input: {
   action: CellClickAction;
   siteName?: string | null;
   color: CellTextColor;
-  site?: SiteItem | null;
-  resolveSite?: (siteName: string) => SiteItem | null;
+  familyKeyForSiteName?: (siteName: string) => string | null;
 }): {
   cell: ApiCell;
   changed: boolean;
@@ -321,13 +321,11 @@ function previewCellAction(input: {
   const currentCell = cloneApiCell(input.cell);
   const groups = apiCellToGroups(currentCell);
   const siteName = input.siteName?.trim() ?? '';
-  const resolvedSite = input.site ?? (siteName ? input.resolveSite?.(siteName) ?? null : null);
   const hitGroupIndex = siteName ? groups.findIndex((group) => group.items.some((entry) => entry.label === siteName)) : -1;
   const hitItemIndex = hitGroupIndex >= 0 ? groups[hitGroupIndex]?.items.findIndex((entry) => entry.label === siteName) ?? -1 : -1;
-  const siblingGroupIndex = resolvedSite
-    ? groups.findIndex((group) =>
-        group.items.some((entry) => sameCompanySite(input.resolveSite?.(entry.label) ?? null, resolvedSite)),
-      )
+  const targetFamilyKey = siteName ? input.familyKeyForSiteName?.(siteName) ?? null : null;
+  const siblingGroupIndex = targetFamilyKey
+    ? groups.findIndex((group) => group.items.some((entry) => input.familyKeyForSiteName?.(entry.label) === targetFamilyKey))
     : -1;
 
   const updateGroups = (nextGroups: ApiCellGroup[]) => groupsToApiCell(nextGroups);
@@ -527,13 +525,6 @@ function depreciationBadgeClass(alert: boolean) {
   }`;
 }
 
-function normalizeSiteMatchKey(input: string | null | undefined) {
-  return (input ?? '')
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .toLocaleLowerCase('ja-JP');
-}
-
 function splitSiteLabel(label: string | null | undefined) {
   const value = (label ?? '').trim();
   if (!value) return { companyName: null, name: '' };
@@ -551,22 +542,6 @@ function siteStoredName(site: Pick<SiteItem, 'name' | 'label'> | null | undefine
   const name = site?.name?.trim();
   if (name) return name;
   return splitSiteLabel(site?.label).name;
-}
-
-function siteCompanyName(site: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
-  const companyName = site?.companyName?.trim();
-  if (companyName) return companyName;
-  return splitSiteLabel(site?.label).companyName;
-}
-
-function siteCompanyKey(site: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
-  return normalizeSiteMatchKey(siteCompanyName(site));
-}
-
-function sameCompanySite(a: Pick<SiteItem, 'companyName' | 'label'> | null | undefined, b: Pick<SiteItem, 'companyName' | 'label'> | null | undefined) {
-  const aKey = siteCompanyKey(a);
-  const bKey = siteCompanyKey(b);
-  return aKey.length > 0 && aKey === bKey;
 }
 
 function mergeSiteItems(
@@ -5120,16 +5095,51 @@ function Row({
     [allSites, resolveSiteReference],
   );
 
+  const allSiteStoredNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allSites
+            .map((site) => siteStoredName(site))
+            .filter((name): name is string => typeof name === 'string' && name.trim().length > 0),
+        ),
+      ),
+    [allSites],
+  );
+
+  const siteFamilyInfoForName = useCallback(
+    (siteName: string) => findSiteFamily(siteName, allSiteStoredNames),
+    [allSiteStoredNames],
+  );
+
+  const siteFamilyKeyForName = useCallback(
+    (siteName: string) => siteFamilyInfoForName(siteName).key,
+    [siteFamilyInfoForName],
+  );
+
+  const siteFamilyLabelForName = useCallback(
+    (siteName: string) => siteFamilyInfoForName(siteName).label,
+    [siteFamilyInfoForName],
+  );
+
+  const sameFamilySiteName = useCallback(
+    (left: string, right: string) => {
+      const leftKey = siteFamilyKeyForName(left);
+      const rightKey = siteFamilyKeyForName(right);
+      return Boolean(leftKey) && leftKey === rightKey;
+    },
+    [siteFamilyKeyForName],
+  );
+
   const cellEntriesForDay = useCallback((day: string) => apiCellToEntries(grid[day]), [grid]);
   const siblingEntryNamesForSite = useCallback(
     (day: string, siteName: string) => {
-      const anchorSite = resolveStoredSite(siteName);
-      if (!anchorSite) return [siteName.trim()].filter(Boolean);
+      if (!siteFamilyKeyForName(siteName)) return [siteName.trim()].filter(Boolean);
       return cellEntriesForDay(day)
-        .filter((entry) => sameCompanySite(resolveStoredSite(entry.label), anchorSite))
+        .filter((entry) => sameFamilySiteName(entry.label, siteName))
         .map((entry) => entry.label);
     },
-    [cellEntriesForDay, resolveStoredSite],
+    [cellEntriesForDay, sameFamilySiteName, siteFamilyKeyForName],
   );
 
   const closeSlotContextMenu = useCallback(() => {
@@ -5204,19 +5214,18 @@ function Row({
         beforeCell: cloneApiCell(input.beforeCell),
         x: event.clientX,
         y: event.clientY,
-        companyName: siteCompanyName(resolveStoredSite(input.siteName)),
+        companyName: siteFamilyLabelForName(input.siteName),
         mode: 'actions',
         selectedUserIds: assignedUserIdsForSite(input.day, input.siteName),
         selectedSiblingNames: siblingEntryNamesForSite(input.day, input.siteName),
       });
     },
-    [assignedUserIdsForSite, isEditable, onNotify, resolveStoredSite, siblingEntryNamesForSite],
+    [assignedUserIdsForSite, isEditable, onNotify, siblingEntryNamesForSite, siteFamilyLabelForName],
   );
 
   const slotContextUserOptions = useMemo(() => {
     if (!slotContextMenu || slotContextMenu.mode !== 'assign-users') return [];
     const selected = new Set(slotContextMenu.selectedUserIds);
-    const targetSite = resolveStoredSite(slotContextMenu.siteName);
     return allUsers.map((candidate) => {
       const beforeCell = cloneApiCell(allGrid[candidate.id]?.[slotContextMenu.day]);
       const entries = apiCellToEntries(beforeCell);
@@ -5226,8 +5235,7 @@ function Row({
         action: 'add',
         siteName: slotContextMenu.siteName,
         color: slotContextMenu.color,
-        site: targetSite,
-        resolveSite: resolveStoredSite,
+        familyKeyForSiteName: siteFamilyKeyForName,
       });
       return {
         userId: candidate.id,
@@ -5238,7 +5246,7 @@ function Row({
         disabledReason: typeof preview.reason === 'string' ? preview.reason : null,
       };
     });
-  }, [allGrid, allUsers, resolveStoredSite, slotContextMenu]);
+  }, [allGrid, allUsers, siteFamilyKeyForName, slotContextMenu]);
 
   const toggleSlotContextUser = useCallback((targetUserId: string) => {
     setSlotContextMenu((current) => {
@@ -5252,16 +5260,14 @@ function Row({
 
   const slotContextRelatedSiteOptions = useMemo(() => {
     if (!slotContextMenu) return [];
-    const anchorSite = resolveStoredSite(slotContextMenu.siteName);
-    if (!anchorSite) return [];
-    const anchorCompanyKey = siteCompanyKey(anchorSite);
-    if (!anchorCompanyKey) return [];
+    const anchorFamily = siteFamilyInfoForName(slotContextMenu.siteName);
+    if (!anchorFamily.key || !anchorFamily.label) return [];
 
     const seen = new Set<string>();
     const selected = new Set(slotContextMenu.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
 
     return allSites
-      .filter((site) => siteCompanyKey(site) === anchorCompanyKey)
+      .filter((site) => siteFamilyKeyForName(siteStoredName(site)) === anchorFamily.key)
       .map((site) => {
         const storedName = siteStoredName(site);
         if (!storedName || seen.has(storedName)) return null;
@@ -5271,13 +5277,13 @@ function Row({
         return {
           site,
           storedName,
-          displayName: storedName,
+          displayName: stripSiteFamilyLabel(storedName, anchorFamily.label) || storedName,
           checked,
           disabled,
         };
       })
       .filter((option): option is { site: SiteItem; storedName: string; displayName: string; checked: boolean; disabled: boolean } => !!option);
-  }, [allSites, resolveStoredSite, slotContextMenu]);
+  }, [allSites, siteFamilyInfoForName, siteFamilyKeyForName, slotContextMenu]);
 
   const toggleSlotContextSibling = useCallback((storedName: string) => {
     setSlotContextMenu((current) => {
@@ -5347,7 +5353,6 @@ function Row({
     if (!current || current.mode !== 'assign-users') return;
 
     const selected = new Set(current.selectedUserIds);
-    const targetSite = resolveStoredSite(current.siteName);
     let addedCount = 0;
     let removedCount = 0;
     let recoloredCount = 0;
@@ -5362,8 +5367,7 @@ function Row({
         action,
         siteName: current.siteName,
         color: current.color,
-        site: targetSite,
-        resolveSite: resolveStoredSite,
+        familyKeyForSiteName: siteFamilyKeyForName,
       });
       if (!preview.changed) {
         if (preview.reason === 'cell-full' || preview.reason === 'group-full') skippedCapacityCount += 1;
@@ -5402,14 +5406,14 @@ function Row({
     if (skippedCapacityCount) messages.push(`${skippedCapacityCount}名は枠上限`);
     if (failedCount) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.length > 0 ? `同日・同現場を更新: ${messages.join(' / ')}` : '変更はありません');
-  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, resolveStoredSite, slotContextMenu]);
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu]);
 
   const applySelectedSiblingSites = useCallback(async () => {
     const current = slotContextMenu;
     if (!current || current.mode !== 'related-sites') return;
 
-    const anchorSite = resolveStoredSite(current.siteName);
-    if (!anchorSite) {
+    const anchorFamilyKey = siteFamilyKeyForName(current.siteName);
+    if (!anchorFamilyKey) {
       onNotify?.('同名別店舗を判定できませんでした');
       return;
     }
@@ -5433,7 +5437,7 @@ function Row({
     const replacementGroup: ApiCellGroup = { items: replacementItems };
 
     const targetGroupIndex = currentGroups.findIndex((group) =>
-      group.items.some((entry) => sameCompanySite(resolveStoredSite(entry.label), anchorSite)),
+      group.items.some((entry) => siteFamilyKeyForName(entry.label) === anchorFamilyKey),
     );
     const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
     if (targetGroupIndex >= 0) nextGroups[targetGroupIndex] = replacementGroup;
@@ -5466,7 +5470,7 @@ function Row({
     }
     onNotify?.('同名別店舗を反映しました');
     void Promise.resolve(onAssigned()).catch(() => undefined);
-  }, [closeSlotContextMenu, grid, onAssigned, onNotify, persistCellSet, resolveStoredSite, slotContextMenu, slotContextRelatedSiteOptions, user]);
+  }, [closeSlotContextMenu, grid, onAssigned, onNotify, persistCellSet, siteFamilyKeyForName, slotContextMenu, slotContextRelatedSiteOptions, user]);
 
   const renderSiteLabel = useCallback(
     (
@@ -5522,22 +5526,23 @@ function Row({
       if (groups.length === 0) return null;
 
       return groups.map((group, groupIndex) => {
-        const firstSite = resolveStoredSite(group.items[0]?.label ?? '');
-        const companyName = siteCompanyName(firstSite);
+        const familyLabel = siteFamilyLabelForName(group.items[0]?.label ?? '');
         const renderedItems = group.items.map((entry) => {
           const site = resolveStoredSite(entry.label);
           return {
             entry,
             storedName: entry.label,
-            displayName: siteStoredName(site) || entry.label,
+            displayName: familyLabel
+              ? stripSiteFamilyLabel(siteStoredName(site) || entry.label, familyLabel) || (siteStoredName(site) || entry.label)
+              : siteStoredName(site) || entry.label,
           };
         });
 
-        if (companyName && renderedItems.length > 1) {
+        if (familyLabel && renderedItems.length > 1) {
           return (
             <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1.5' : ''}>
               <div className="text-[11px] font-semibold leading-tight text-zinc-700 dark:text-zinc-200">
-                {companyName}
+                {familyLabel}
               </div>
               <div className="mt-0.5 space-y-0.5">
                 {renderedItems.map((item) =>
@@ -5568,7 +5573,7 @@ function Row({
         );
       });
     },
-    [gridLayout, renderSiteLabel, resolveStoredSite],
+    [gridLayout, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName],
   );
 
   const formatCellActionReason = (
@@ -5639,8 +5644,7 @@ function Row({
       action: input.action,
       siteName: resolvedSiteName,
       color: requestedColor,
-      site: resolvedSite,
-      resolveSite: resolveStoredSite,
+      familyKeyForSiteName: siteFamilyKeyForName,
     });
 
     if (!preview.changed) {
@@ -5783,7 +5787,7 @@ function Row({
               
               if (draggedSite) {
                 const shouldAddSibling = cellEntriesForDay(d.key).some((entry) =>
-                  sameCompanySite(resolveStoredSite(entry.label), draggedSite),
+                  sameFamilySiteName(entry.label, draggedSite.label),
                 );
                 // 現場リストからドラッグされた現場をセルに入力
                 void runCellAction({
