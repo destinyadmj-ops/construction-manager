@@ -6,7 +6,7 @@ import {
 } from '@/server/schedule/change-history';
 import { findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { ensureSiteDayFolders } from '@/server/site-storage';
-import { findSiteFamily, normalizeSiteFamilyKey } from '@/shared/site-family';
+import { findSiteFamily, hasSiteFamilyDisplayPrefix, normalizeSiteFamilyKey } from '@/shared/site-family';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -77,7 +77,7 @@ function buildGroupsFromEntries(
   }>,
 ): NormalizedGroup[] {
   const items = entries
-    .map((entry) => {
+    .map((entry, entryOrder) => {
       const label =
         typeof entry.site?.name === 'string' && entry.site.name.trim()
           ? entry.site.name.trim()
@@ -92,15 +92,45 @@ function buildGroupsFromEntries(
       const color = LabelColorSchema.safeParse(meta?.labelColor).success
         ? (meta?.labelColor as LabelColor)
         : 'default';
-      return { label, color };
+      const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
+      const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
+      return { label, color, groupIndex, itemIndex, entryOrder };
     })
-    .filter((item): item is NormalizedGroupItem => !!item);
+    .filter((item): item is NormalizedGroupItem & { groupIndex: number | null; itemIndex: number | null; entryOrder: number } => !!item);
+
+  if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
+    const grouped = new Map<number, Array<{ label: string; color: LabelColor; order: number }>>();
+    for (const item of items) {
+      const groupIndex = item.groupIndex as number;
+      if (groupIndex < 0 || groupIndex > 1) continue;
+      const hit = grouped.get(groupIndex) ?? [];
+      hit.push({
+        label: item.label,
+        color: item.color,
+        order: typeof item.itemIndex === 'number' ? item.itemIndex : item.entryOrder,
+      });
+      grouped.set(groupIndex, hit);
+    }
+
+    return Array.from(grouped.entries())
+      .sort((left, right) => left[0] - right[0])
+      .map(([, groupItems]) => ({
+        items: [...groupItems]
+          .sort((left, right) => left.order - right.order)
+          .slice(0, 4)
+          .map(({ label, color }) => ({ label, color })),
+      }))
+      .slice(0, 2);
+  }
 
   const groups: Array<{ key: string; items: NormalizedGroupItem[] }> = [];
   const peerNames = items.map((item) => item.label);
   for (const item of items) {
     const family = findSiteFamily(item.label, peerNames);
-    const key = family.key ? `family:${family.key}` : `single:${normalizeSiteFamilyKey(item.label)}`;
+    const explicitPrefix = hasSiteFamilyDisplayPrefix(item.label);
+    const key = family.key
+      ? `${explicitPrefix ? 'prefixed-family' : 'family'}:${family.key}`
+      : `${explicitPrefix ? 'prefixed-single' : 'single'}:${normalizeSiteFamilyKey(item.label)}`;
     const hit = groups.find((group) => group.key === key);
     if (hit) {
       hit.items.push(item);
@@ -212,8 +242,8 @@ export async function POST(request: Request) {
       await tx.workEntry.deleteMany({ where: { userId, kind, startAt: { gte: startAt, lt: until } } });
 
       let minuteOffset = 0;
-      for (const group of finalGroups) {
-        for (const item of group.items) {
+      for (const [groupIndex, group] of finalGroups.entries()) {
+        for (const [itemIndex, item] of group.items.entries()) {
           await tx.workEntry.create({
             data: {
               userId,
@@ -221,7 +251,12 @@ export async function POST(request: Request) {
               startAt: addMinutes(startAt, minuteOffset),
               summary: item.site.name,
               siteId: item.site.id,
-              accountingMeta: { siteName: item.site.name, labelColor: item.color },
+              accountingMeta: {
+                siteName: item.site.name,
+                labelColor: item.color,
+                scheduleGroupIndex: groupIndex,
+                scheduleItemIndex: itemIndex,
+              },
             },
             select: { id: true },
           });
