@@ -93,6 +93,33 @@ function colorForEntry(input: {
   return input.label.includes('!') ? 'red' : 'default';
 }
 
+function normalizeGroupKey(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .toLocaleLowerCase('ja-JP');
+}
+
+function formatGroupValue(group: { items: Array<{ label: string }> } | null | undefined) {
+  const labels = (group?.items ?? []).map((item) => item.label.trim()).filter((label) => label.length > 0);
+  return labels.length > 0 ? labels.join(' / ') : null;
+}
+
+function buildCellGroups(items: Array<{ label: string; color: LabelColor; companyName: string | null }>) {
+  const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor }> }> = [];
+  for (const item of items) {
+    const companyKey = normalizeGroupKey(item.companyName);
+    const key = companyKey ? `company:${companyKey}` : `single:${normalizeGroupKey(item.label)}`;
+    const hit = groups.find((group) => group.key === key);
+    if (hit) {
+      hit.items.push({ label: item.label, color: item.color });
+    } else {
+      groups.push({ key, items: [{ label: item.label, color: item.color }] });
+    }
+  }
+  return groups.slice(0, 2).map((group) => ({ items: group.items.slice(0, 4) }));
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const monthParam = (url.searchParams.get('month') ?? '').trim();
@@ -129,7 +156,7 @@ export async function GET(request: Request) {
       note: true,
       summary: true,
       accountingMeta: true,
-      site: { select: { name: true, scheduleLabelColor: true } },
+      site: { select: { name: true, companyName: true, scheduleLabelColor: true } },
     },
   });
 
@@ -142,13 +169,14 @@ export async function GET(request: Request) {
         slot2: string | null;
         color1: LabelColor;
         color2: LabelColor;
+        groups?: Array<{ items: Array<{ label: string; color: LabelColor }> }>;
       }
     >
   > = {};
 
   for (const u of users) grid[u.id] = {};
 
-  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor }>>> = {};
+  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; companyName: string | null }>>> = {};
 
   for (const e of entries) {
     const day = toYmd(e.startAt);
@@ -160,7 +188,7 @@ export async function GET(request: Request) {
     const color: LabelColor = colorForEntry({ label, site: e.site, accountingMeta: e.accountingMeta });
     if (!cellItems[e.userId]) cellItems[e.userId] = {};
     if (!cellItems[e.userId]![day]) cellItems[e.userId]![day] = [];
-    cellItems[e.userId]![day]!.push({ label, color });
+    cellItems[e.userId]![day]!.push({ label, color, companyName: e.site?.companyName ?? null });
   }
 
   for (const uid of Object.keys(cellItems)) {
@@ -177,17 +205,12 @@ export async function GET(request: Request) {
           color2: 'default',
         });
 
-      cell.slot1 = items[0]!.label;
-      cell.color1 = items[0]!.color;
-
-      if (items.length >= 2) {
-        const extra = items.length - 2;
-        cell.slot2 = extra > 0 ? `${items[1]!.label} +${extra}` : items[1]!.label;
-        cell.color2 = items[1]!.color;
-      } else {
-        cell.slot2 = null;
-        cell.color2 = 'default';
-      }
+      const groups = buildCellGroups(items);
+      cell.groups = groups;
+      cell.slot1 = formatGroupValue(groups[0]) ?? null;
+      cell.slot2 = formatGroupValue(groups[1]) ?? null;
+      cell.color1 = groups[0]?.items[0]?.color ?? 'default';
+      cell.color2 = groups[1]?.items[0]?.color ?? 'default';
     }
   }
 

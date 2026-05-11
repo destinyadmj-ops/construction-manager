@@ -195,11 +195,18 @@ export default function AppHeader() {
     [],
   );
 
+  const enterColorEditMode = useCallback(() => {
+    writeWeekColorPickMode(true);
+  }, [writeWeekColorPickMode]);
+
+  const exitColorEditMode = useCallback(() => {
+    writeWeekColorPickMode(false);
+  }, [writeWeekColorPickMode]);
+
   useEffect(() => {
     // 通常時は必ずOFF（編集中のみONを維持したい）
-    writeColorEditMode(false);
-    setWeekColorPickMode(false);
-  }, []);
+    exitColorEditMode();
+  }, [exitColorEditMode]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined') return;
@@ -1184,7 +1191,7 @@ export default function AppHeader() {
               </div>
             ) : null}
 
-            <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
+            <div ref={settingsRef} className="relative" data-color-edit-keep>
               <button
                 type="button"
                 data-color-edit-id="header:settings-toggle"
@@ -1304,11 +1311,11 @@ export default function AppHeader() {
                             type="button"
                             onClick={() => {
                               if (actions.save) {
-                                writeColorEditMode(false);
-                                setWeekColorPickMode(false);
+                                exitColorEditMode();
                                 void actions.save.onClick();
                                 return;
                               }
+                              enterColorEditMode();
                               void actions.add?.onClick();
                             }}
                             disabled={scheduleEditButtonDisabled}
@@ -1317,7 +1324,11 @@ export default function AppHeader() {
                           >
                             {scheduleEditButtonLabel}
                           </button>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{scheduleEditHelpText}</div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {actions.save
+                              ? '右クリックで各ボタンや枠の色を編集できます。終了すると通常表示へ戻ります。'
+                              : scheduleEditHelpText}
+                          </div>
                         </div>
                       </>
                     ) : null}
@@ -1686,8 +1697,7 @@ export default function AppHeader() {
               type="button"
               data-testid="header-action-save"
               onClick={() => {
-                writeColorEditMode(false);
-                setWeekColorPickMode(false);
+                exitColorEditMode();
                 void actions.save?.onClick();
               }}
               disabled={!actions.save || actions.save.disabled}
@@ -1719,7 +1729,10 @@ export default function AppHeader() {
             <button
               type="button"
               data-testid="header-action-add"
-              onClick={() => void actions.add?.onClick()}
+              onClick={() => {
+                enterColorEditMode();
+                void actions.add?.onClick();
+              }}
               disabled={!actions.add || actions.add.disabled}
               title={actions.add?.title ?? '編集'}
               className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden xl:ml-1 xl:inline-flex'} mh-btn`}

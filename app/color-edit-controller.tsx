@@ -423,8 +423,8 @@ export default function ColorEditController() {
       const t = e.target instanceof Element ? e.target : null;
       if (!t) return;
 
-      // Settings / editor UI should remain clickable
-      if (t.closest('[data-color-edit-ui]')) return;
+      // Keep panels (settings, popup, etc.) should remain normally clickable.
+      if (t.closest('[data-color-edit-ui], [data-color-edit-keep]')) return;
 
       if (e.button !== 0) return;
 

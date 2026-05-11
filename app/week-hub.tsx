@@ -36,6 +36,7 @@ type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'reco
 const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 type LabelColor = (typeof LABEL_COLORS)[number];
 type ApiCellEntry = { label: string; color: LabelColor };
+type ApiCellGroup = { items: ApiCellEntry[] };
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
@@ -55,6 +56,7 @@ type ApiCell = {
   color1: LabelColor;
   color2: LabelColor;
   entries?: ApiCellEntry[];
+  groups?: ApiCellGroup[];
 };
 
 type ApiResponse = {
@@ -97,17 +99,17 @@ type SiteItem = {
   createdAt?: string | null;
 };
 
-type CellSlots = [string | null, string | null];
-
 type CellHistoryEntry = {
   kind: 'cell';
   userId: string;
   day: string; // YYYY-MM-DD
-  before: CellSlots;
-  after: CellSlots;
+  before: ApiCell;
+  after: ApiCell;
   editorLabel: string;
   at: number;
 };
+
+type DraggedCellState = { userId: string; day: string; cell: ApiCell };
 
 type ScheduleChangeHistoryItem = {
   id: string;
@@ -213,11 +215,55 @@ function normalizeUserOrder(order: string[], users: ApiUser[]) {
   return [...filtered, ...appended];
 }
 
-function slotsEqual(a: CellSlots, b: CellSlots) {
-  return a[0] === b[0] && a[1] === b[1];
+function cloneCellGroupItems(items: ApiCellEntry[] | null | undefined): ApiCellEntry[] {
+  return (items ?? [])
+    .map((entry) => ({
+      label: typeof entry?.label === 'string' ? entry.label.trim() : '',
+      color: isLabelColor(entry?.color) ? entry.color : 'default',
+    }))
+    .filter((entry) => entry.label.length > 0);
+}
+
+function cloneCellGroups(groups: ApiCellGroup[] | null | undefined): ApiCellGroup[] {
+  return (groups ?? [])
+    .map((group) => ({ items: cloneCellGroupItems(group?.items) }))
+    .filter((group) => group.items.length > 0);
+}
+
+function apiCellToGroups(cell: ApiCell | null | undefined): ApiCellGroup[] {
+  const normalizedGroups = cloneCellGroups(cell?.groups);
+  if (normalizedGroups.length > 0) return normalizedGroups;
+
+  const groups: ApiCellGroup[] = [];
+  if (cell?.slot1) groups.push({ items: [{ label: cell.slot1, color: cell.color1 ?? 'default' }] });
+  if (cell?.slot2) groups.push({ items: [{ label: cell.slot2, color: cell.color2 ?? 'default' }] });
+  return groups;
+}
+
+function apiCellGroupValue(group: ApiCellGroup | null | undefined) {
+  const parts = cloneCellGroupItems(group?.items).map((item) => item.label);
+  return parts.length > 0 ? parts.join(' / ') : null;
+}
+
+function apiCellGroupsEqual(a: ApiCellGroup[] | null | undefined, b: ApiCellGroup[] | null | undefined) {
+  const left = cloneCellGroups(a);
+  const right = cloneCellGroups(b);
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftItems = left[index]?.items ?? [];
+    const rightItems = right[index]?.items ?? [];
+    if (leftItems.length !== rightItems.length) return false;
+    for (let itemIndex = 0; itemIndex < leftItems.length; itemIndex += 1) {
+      if (leftItems[itemIndex]?.label !== rightItems[itemIndex]?.label) return false;
+      if (leftItems[itemIndex]?.color !== rightItems[itemIndex]?.color) return false;
+    }
+  }
+  return true;
 }
 
 function apiCellsEqual(a: ApiCell | null | undefined, b: ApiCell | null | undefined) {
+  const hasExplicitGroups = Array.isArray(a?.groups) || Array.isArray(b?.groups);
+  if (hasExplicitGroups) return apiCellGroupsEqual(a?.groups, b?.groups);
   return (
     (a?.slot1 ?? null) === (b?.slot1 ?? null) &&
     (a?.slot2 ?? null) === (b?.slot2 ?? null) &&
@@ -227,52 +273,34 @@ function apiCellsEqual(a: ApiCell | null | undefined, b: ApiCell | null | undefi
 }
 
 function cloneApiCell(cell: ApiCell | null | undefined): ApiCell {
+  const groups = apiCellToGroups(cell);
+  const flatEntries = groups.flatMap((group) => group.items);
   return {
-    slot1: cell?.slot1 ?? null,
-    slot2: cell?.slot2 ?? null,
-    color1: cell?.color1 ?? 'default',
-    color2: cell?.color2 ?? 'default',
-    entries: Array.isArray(cell?.entries)
-      ? cell.entries
-          .map((entry) => ({
-            label: typeof entry?.label === 'string' ? entry.label : '',
-            color: isLabelColor(entry?.color) ? entry.color : 'default',
-          }))
-          .filter((entry) => entry.label.trim().length > 0)
-      : undefined,
+    slot1: apiCellGroupValue(groups[0]) ?? null,
+    slot2: apiCellGroupValue(groups[1]) ?? null,
+    color1: groups[0]?.items[0]?.color ?? 'default',
+    color2: groups[1]?.items[0]?.color ?? 'default',
+    entries: flatEntries,
+    groups,
   };
 }
 
 type CellEntry = ApiCellEntry;
 
 function apiCellToEntries(cell: ApiCell | null | undefined): CellEntry[] {
-  if (Array.isArray(cell?.entries) && cell.entries.length > 0) {
-    return cell.entries
-      .map((entry) => ({
-        label: typeof entry?.label === 'string' ? entry.label : '',
-        color: isLabelColor(entry?.color) ? entry.color : 'default',
-      }))
-      .filter((entry) => entry.label.trim().length > 0);
-  }
-  const entries: CellEntry[] = [];
-  if (cell?.slot1) entries.push({ label: cell.slot1, color: cell.color1 ?? 'default' });
-  if (cell?.slot2) entries.push({ label: cell.slot2, color: cell.color2 ?? 'default' });
-  return entries;
+  return apiCellToGroups(cell).flatMap((group) => group.items);
 }
 
-function entriesToApiCell(entries: CellEntry[]): ApiCell {
-  const normalizedEntries = entries
-    .map((entry) => ({
-      label: entry.label?.trim() ?? '',
-      color: isLabelColor(entry.color) ? entry.color : 'default',
-    }))
-    .filter((entry) => entry.label.length > 0);
+function groupsToApiCell(groups: ApiCellGroup[]): ApiCell {
+  const normalizedGroups = cloneCellGroups(groups);
+  const normalizedEntries = normalizedGroups.flatMap((group) => group.items);
   return {
-    slot1: normalizedEntries[0]?.label ?? null,
-    slot2: normalizedEntries[1]?.label ?? null,
-    color1: normalizedEntries[0]?.color ?? 'default',
-    color2: normalizedEntries[1]?.color ?? 'default',
+    slot1: apiCellGroupValue(normalizedGroups[0]) ?? null,
+    slot2: apiCellGroupValue(normalizedGroups[1]) ?? null,
+    color1: normalizedGroups[0]?.items[0]?.color ?? 'default',
+    color2: normalizedGroups[1]?.items[0]?.color ?? 'default',
     entries: normalizedEntries,
+    groups: normalizedGroups,
   };
 }
 
@@ -281,6 +309,8 @@ function previewCellAction(input: {
   action: CellClickAction;
   siteName?: string | null;
   color: CellTextColor;
+  site?: SiteItem | null;
+  resolveSite?: (siteName: string) => SiteItem | null;
 }): {
   cell: ApiCell;
   changed: boolean;
@@ -289,68 +319,150 @@ function previewCellAction(input: {
   replaced?: 'slot2';
 } {
   const currentCell = cloneApiCell(input.cell);
-  const entries = apiCellToEntries(currentCell);
+  const groups = apiCellToGroups(currentCell);
   const siteName = input.siteName?.trim() ?? '';
-  const hitIndex = siteName ? entries.findIndex((entry) => entry.label === siteName) : -1;
+  const resolvedSite = input.site ?? (siteName ? input.resolveSite?.(siteName) ?? null : null);
+  const hitGroupIndex = siteName ? groups.findIndex((group) => group.items.some((entry) => entry.label === siteName)) : -1;
+  const hitItemIndex = hitGroupIndex >= 0 ? groups[hitGroupIndex]?.items.findIndex((entry) => entry.label === siteName) ?? -1 : -1;
+  const siblingGroupIndex = resolvedSite
+    ? groups.findIndex((group) =>
+        group.items.some((entry) => sameCompanySite(input.resolveSite?.(entry.label) ?? null, resolvedSite)),
+      )
+    : -1;
+
+  const updateGroups = (nextGroups: ApiCellGroup[]) => groupsToApiCell(nextGroups);
 
   switch (input.action) {
     case 'swap':
-      if (entries.length < 2) return { cell: currentCell, changed: false, reason: 'not-enough-entries' };
-      return { cell: entriesToApiCell([entries[1]!, entries[0]!]), changed: true };
+      if (groups.length < 2) return { cell: currentCell, changed: false, reason: 'not-enough-entries' };
+      return { cell: updateGroups([groups[1]!, groups[0]!]), changed: true };
     case 'recolor':
-      if (!siteName || hitIndex < 0) return { cell: currentCell, changed: false, reason: 'not-found' };
+      if (!siteName || hitGroupIndex < 0 || hitItemIndex < 0) {
+        return { cell: currentCell, changed: false, reason: 'not-found' };
+      }
       return {
-        cell: entriesToApiCell(
-          entries.map((entry, index) => (index === hitIndex ? { ...entry, color: input.color } : entry)),
+        cell: updateGroups(
+          groups.map((group, groupIndex) =>
+            groupIndex !== hitGroupIndex
+              ? group
+              : {
+                  items: group.items.map((entry, itemIndex) =>
+                    itemIndex === hitItemIndex ? { ...entry, color: input.color } : entry,
+                  ),
+                },
+          ),
         ),
         changed: true,
       };
     case 'remove':
-      if (!siteName || hitIndex < 0) return { cell: currentCell, changed: false, reason: 'not-found' };
+      if (!siteName || hitGroupIndex < 0 || hitItemIndex < 0) {
+        return { cell: currentCell, changed: false, reason: 'not-found' };
+      }
       return {
-        cell: entriesToApiCell(entries.filter((_, index) => index !== hitIndex)),
+        cell: updateGroups(
+          groups
+            .map((group, groupIndex) =>
+              groupIndex !== hitGroupIndex
+                ? group
+                : { items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
+            )
+            .filter((group) => group.items.length > 0),
+        ),
         changed: true,
       };
     case 'toggle':
-      if (siteName && hitIndex >= 0) {
+      if (siteName && hitGroupIndex >= 0 && hitItemIndex >= 0) {
         return {
-          cell: entriesToApiCell(entries.filter((_, index) => index !== hitIndex)),
+          cell: updateGroups(
+            groups
+              .map((group, groupIndex) =>
+                groupIndex !== hitGroupIndex
+                  ? group
+                  : { items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
+              )
+              .filter((group) => group.items.length > 0),
+          ),
           changed: true,
           toggled: 'off',
         };
       }
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
-      if (entries.length >= 2) {
+      if (siblingGroupIndex >= 0) {
+        const siblingGroup = groups[siblingGroupIndex]!;
+        if (siblingGroup.items.length >= 4) {
+          return { cell: currentCell, changed: false, reason: 'group-full' };
+        }
         return {
-          cell: entriesToApiCell([entries[0]!, { label: siteName, color: input.color }]),
+          cell: updateGroups(
+            groups.map((group, groupIndex) =>
+              groupIndex !== siblingGroupIndex
+                ? group
+                : { items: [...group.items, { label: siteName, color: input.color }] },
+            ),
+          ),
+          changed: true,
+          toggled: 'on',
+        };
+      }
+      if (groups.length >= 2) {
+        return {
+          cell: updateGroups([groups[0]!, { items: [{ label: siteName, color: input.color }] }]),
           changed: true,
           replaced: 'slot2',
         };
       }
       return {
-        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
         changed: true,
         toggled: 'on',
       };
     case 'add':
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
-      if (hitIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
-      if (entries.length >= 2) return { cell: currentCell, changed: false, reason: 'cell-full' };
+      if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
+      if (siblingGroupIndex >= 0) {
+        const siblingGroup = groups[siblingGroupIndex]!;
+        if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
+        return {
+          cell: updateGroups(
+            groups.map((group, groupIndex) =>
+              groupIndex !== siblingGroupIndex
+                ? group
+                : { items: [...group.items, { label: siteName, color: input.color }] },
+            ),
+          ),
+          changed: true,
+        };
+      }
+      if (groups.length >= 2) return { cell: currentCell, changed: false, reason: 'cell-full' };
       return {
-        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
         changed: true,
       };
     case 'replace2':
       if (!siteName) return { cell: currentCell, changed: false, reason: 'not-found' };
-      if (hitIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
-      if (entries.length >= 2) {
+      if (hitGroupIndex >= 0) return { cell: currentCell, changed: false, reason: 'already-exists' };
+      if (siblingGroupIndex >= 0) {
+        const siblingGroup = groups[siblingGroupIndex]!;
+        if (siblingGroup.items.length >= 4) return { cell: currentCell, changed: false, reason: 'group-full' };
         return {
-          cell: entriesToApiCell([entries[0]!, { label: siteName, color: input.color }]),
+          cell: updateGroups(
+            groups.map((group, groupIndex) =>
+              groupIndex !== siblingGroupIndex
+                ? group
+                : { items: [...group.items, { label: siteName, color: input.color }] },
+            ),
+          ),
+          changed: true,
+        };
+      }
+      if (groups.length >= 2) {
+        return {
+          cell: updateGroups([groups[0]!, { items: [{ label: siteName, color: input.color }] }]),
           changed: true,
         };
       }
       return {
-        cell: entriesToApiCell([...entries, { label: siteName, color: input.color }]),
+        cell: updateGroups([...groups, { items: [{ label: siteName, color: input.color }] }]),
         changed: true,
       };
   }
@@ -378,8 +490,9 @@ function formatHistoryChange(beforeValue: string, afterValue: string) {
   return `${formatHistoryCellValue(beforeValue)} → ${formatHistoryCellValue(afterValue)}`;
 }
 
-function formatCellSlotsValue(slots: CellSlots) {
-  const parts = slots.map((slot) => (slot ?? '').trim()).filter((slot): slot is string => slot.length > 0);
+function formatCellSlotsValue(cell: ApiCell | null | undefined) {
+  const groups = apiCellToGroups(cell);
+  const parts = groups.map((group) => apiCellGroupValue(group)).filter((value): value is string => Boolean(value));
   return parts.length > 0 ? parts.join(' / ') : '空欄';
 }
 
@@ -557,7 +670,7 @@ function WeekHubInner() {
 
   const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
-  const [draggedCell, setDraggedCell] = useState<{ userId: string; day: string; slots: CellSlots } | null>(null);
+  const [draggedCell, setDraggedCell] = useState<DraggedCellState | null>(null);
   const [editingCell, setEditingCell] = useState<{ userId: string; day: string; slotIndex: number } | null>(null);
   const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
@@ -1689,7 +1802,7 @@ function WeekHubInner() {
         last.day === entry.day &&
         last.editorLabel === entry.editorLabel &&
         entry.at - last.at <= HISTORY_GROUP_MS &&
-        slotsEqual(last.after, entry.before)
+        apiCellsEqual(last.after, entry.before)
       ) {
         const merged: CellHistoryEntry = {
           ...last,
@@ -1711,28 +1824,15 @@ function WeekHubInner() {
   const restoreCell = useCallback(async (entry: CellHistoryEntry, target: 'before' | 'after') => {
     setIsUndoRedoBusy(true);
     try {
-      const slots = target === 'before' ? entry.before : entry.after;
-      const rollbackSlots = target === 'before' ? entry.after : entry.before;
+      const targetCell = cloneApiCell(target === 'before' ? entry.before : entry.after);
+      const rollbackCellFromHistory = cloneApiCell(target === 'before' ? entry.after : entry.before);
       const visibleCell =
         mode === 'week'
           ? data?.grid[entry.userId]?.[entry.day]
           : mode === 'month'
             ? monthData?.grid[entry.userId]?.[entry.day]
             : null;
-      const rollbackCell = cloneApiCell(
-        visibleCell ?? {
-          slot1: rollbackSlots[0],
-          slot2: rollbackSlots[1],
-          color1: 'default',
-          color2: 'default',
-        },
-      );
-      const targetCell = cloneApiCell({
-        slot1: slots[0],
-        slot2: slots[1],
-        color1: 'default',
-        color2: 'default',
-      });
+      const rollbackCell = cloneApiCell(visibleCell ?? rollbackCellFromHistory);
 
       updateVisibleCell({ userId: entry.userId, day: entry.day, cell: targetCell });
 
@@ -1743,10 +1843,10 @@ function WeekHubInner() {
           userId: entry.userId,
           day: entry.day,
           kind: apiKind,
-          slot1: slots[0],
-          slot2: slots[1],
-          slot1Color: 'default',
-          slot2Color: 'default',
+          slot1: targetCell.slot1,
+          slot2: targetCell.slot2,
+          slot1Color: targetCell.color1,
+          slot2Color: targetCell.color2,
         }),
       });
       const json = (await r.json().catch(() => null)) as
@@ -1762,16 +1862,10 @@ function WeekHubInner() {
       void refreshCurrentView();
       return true;
     } catch {
-      const rollbackSlots = target === 'before' ? entry.after : entry.before;
       updateVisibleCell({
         userId: entry.userId,
         day: entry.day,
-        cell: cloneApiCell({
-          slot1: rollbackSlots[0],
-          slot2: rollbackSlots[1],
-          color1: 'default',
-          color2: 'default',
-        }),
+        cell: cloneApiCell(target === 'before' ? entry.after : entry.before),
       });
       showCellActionMsg('Undo/Redoの通信に失敗しました');
       return false;
@@ -3973,8 +4067,8 @@ function WeekGrid({
   draggedSite: SiteItem | null;
   selectedCell: { userId: string; day: string } | null;
   onSetSelectedCell: (cell: { userId: string; day: string } | null) => void;
-  draggedCell: { userId: string; day: string; slots: CellSlots } | null;
-  onSetDraggedCell: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
+  draggedCell: DraggedCellState | null;
+  onSetDraggedCell: (cell: DraggedCellState | null) => void;
   editingCell: { userId: string; day: string; slotIndex: number } | null;
   setEditingCell: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
   editingInput: string;
@@ -4984,8 +5078,8 @@ function Row({
   draggedSite: SiteItem | null;
   selectedCell?: { userId: string; day: string } | null;
   onSetSelectedCell?: (cell: { userId: string; day: string } | null) => void;
-  draggedCell?: { userId: string; day: string; slots: CellSlots } | null;
-  onSetDraggedCell?: (cell: { userId: string; day: string; slots: CellSlots } | null) => void;
+  draggedCell?: DraggedCellState | null;
+  onSetDraggedCell?: (cell: DraggedCellState | null) => void;
   editingCell?: { userId: string; day: string; slotIndex: number } | null;
   setEditingCell?: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
   editingInput?: string;
@@ -5001,7 +5095,7 @@ function Row({
     day: string;
     siteName: string;
     color: LabelColor;
-    beforeFallback: CellSlots;
+    beforeCell: ApiCell;
     x: number;
     y: number;
     companyName: string | null;
@@ -5027,7 +5121,6 @@ function Row({
   );
 
   const cellEntriesForDay = useCallback((day: string) => apiCellToEntries(grid[day]), [grid]);
-
   const siblingEntryNamesForSite = useCallback(
     (day: string, siteName: string) => {
       const anchorSite = resolveStoredSite(siteName);
@@ -5095,7 +5188,7 @@ function Row({
   const openSlotContextMenu = useCallback(
     (
       event: ReactMouseEvent<HTMLElement>,
-      input: { day: string; siteName: string; color: LabelColor; beforeFallback: CellSlots },
+      input: { day: string; siteName: string; color: LabelColor; beforeCell: ApiCell },
     ) => {
       event.preventDefault();
       event.stopPropagation();
@@ -5108,7 +5201,7 @@ function Row({
         day: input.day,
         siteName: input.siteName,
         color: input.color,
-        beforeFallback: input.beforeFallback,
+        beforeCell: cloneApiCell(input.beforeCell),
         x: event.clientX,
         y: event.clientY,
         companyName: siteCompanyName(resolveStoredSite(input.siteName)),
@@ -5123,19 +5216,29 @@ function Row({
   const slotContextUserOptions = useMemo(() => {
     if (!slotContextMenu || slotContextMenu.mode !== 'assign-users') return [];
     const selected = new Set(slotContextMenu.selectedUserIds);
+    const targetSite = resolveStoredSite(slotContextMenu.siteName);
     return allUsers.map((candidate) => {
-      const entries = apiCellToEntries(allGrid[candidate.id]?.[slotContextMenu.day]);
+      const beforeCell = cloneApiCell(allGrid[candidate.id]?.[slotContextMenu.day]);
+      const entries = apiCellToEntries(beforeCell);
       const hasSite = entries.some((entry) => entry.label === slotContextMenu.siteName);
-      const isFull = entries.length >= 2 && !hasSite;
+      const preview = previewCellAction({
+        cell: beforeCell,
+        action: 'add',
+        siteName: slotContextMenu.siteName,
+        color: slotContextMenu.color,
+        site: targetSite,
+        resolveSite: resolveStoredSite,
+      });
       return {
         userId: candidate.id,
         userLabel: (candidate.name ?? candidate.email ?? candidate.id).trim(),
         checked: selected.has(candidate.id),
         hasSite,
-        disabled: isFull,
+        disabled: !hasSite && !preview.changed,
+        disabledReason: typeof preview.reason === 'string' ? preview.reason : null,
       };
     });
-  }, [allGrid, allUsers, slotContextMenu]);
+  }, [allGrid, allUsers, resolveStoredSite, slotContextMenu]);
 
   const toggleSlotContextUser = useCallback((targetUserId: string) => {
     setSlotContextMenu((current) => {
@@ -5155,8 +5258,6 @@ function Row({
     if (!anchorCompanyKey) return [];
 
     const seen = new Set<string>();
-    const currentEntries = cellEntriesForDay(slotContextMenu.day);
-    const otherCount = currentEntries.filter((entry) => !sameCompanySite(resolveStoredSite(entry.label), anchorSite)).length;
     const selected = new Set(slotContextMenu.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
 
     return allSites
@@ -5166,7 +5267,7 @@ function Row({
         if (!storedName || seen.has(storedName)) return null;
         seen.add(storedName);
         const checked = selected.has(storedName);
-        const disabled = !checked && otherCount + selected.size >= 2;
+        const disabled = !checked && selected.size >= 4;
         return {
           site,
           storedName,
@@ -5176,7 +5277,7 @@ function Row({
         };
       })
       .filter((option): option is { site: SiteItem; storedName: string; displayName: string; checked: boolean; disabled: boolean } => !!option);
-  }, [allSites, cellEntriesForDay, resolveStoredSite, slotContextMenu]);
+  }, [allSites, resolveStoredSite, slotContextMenu]);
 
   const toggleSlotContextSibling = useCallback((storedName: string) => {
     setSlotContextMenu((current) => {
@@ -5208,6 +5309,7 @@ function Row({
             slot2: input.nextCell.slot2,
             slot1Color: input.nextCell.color1,
             slot2Color: input.nextCell.color2,
+            groups: apiCellToGroups(input.nextCell),
           }),
         });
 
@@ -5225,8 +5327,8 @@ function Row({
           kind: 'cell',
           userId: input.targetUser.id,
           day: input.day,
-          before: [input.beforeCell.slot1, input.beforeCell.slot2],
-          after: [input.nextCell.slot1, input.nextCell.slot2],
+          before: cloneApiCell(input.beforeCell),
+          after: cloneApiCell(input.nextCell),
           editorLabel: currentEditorLabel,
           at: Date.now(),
         });
@@ -5245,56 +5347,46 @@ function Row({
     if (!current || current.mode !== 'assign-users') return;
 
     const selected = new Set(current.selectedUserIds);
+    const targetSite = resolveStoredSite(current.siteName);
     let addedCount = 0;
     let removedCount = 0;
     let recoloredCount = 0;
-    let skippedFullCount = 0;
+    let skippedCapacityCount = 0;
     let failedCount = 0;
 
     for (const targetUser of allUsers) {
       const beforeCell = cloneApiCell(allGrid[targetUser.id]?.[current.day]);
-      const entries = apiCellToEntries(beforeCell);
-      const hitIndex = entries.findIndex((entry) => entry.label === current.siteName);
-      let nextEntries = entries;
-      let changeKind: 'added' | 'removed' | 'recolored' | null = null;
-
-      if (selected.has(targetUser.id)) {
-        if (hitIndex >= 0) {
-          if (entries[hitIndex]!.color !== current.color) {
-            nextEntries = entries.map((entry, index) =>
-              index === hitIndex ? { ...entry, color: current.color } : entry,
-            );
-            changeKind = 'recolored';
-          }
-        } else {
-          if (entries.length >= 2) {
-            skippedFullCount += 1;
-            continue;
-          }
-          nextEntries = [...entries, { label: current.siteName, color: current.color }];
-          changeKind = 'added';
-        }
-      } else {
-        if (hitIndex < 0) continue;
-        nextEntries = entries.filter((_, index) => index !== hitIndex);
-        changeKind = 'removed';
+      const action = selected.has(targetUser.id) ? 'add' : 'remove';
+      const preview = previewCellAction({
+        cell: beforeCell,
+        action,
+        siteName: current.siteName,
+        color: current.color,
+        site: targetSite,
+        resolveSite: resolveStoredSite,
+      });
+      if (!preview.changed) {
+        if (preview.reason === 'cell-full' || preview.reason === 'group-full') skippedCapacityCount += 1;
+        continue;
       }
 
-      if (!changeKind) continue;
       const result = await persistCellSet({
         targetUser,
         day: current.day,
         beforeCell,
-        nextCell: entriesToApiCell(nextEntries),
+        nextCell: preview.cell,
       });
       if (result.failed) {
         failedCount += 1;
         continue;
       }
 
-      if (changeKind === 'added') addedCount += 1;
-      if (changeKind === 'removed') removedCount += 1;
-      if (changeKind === 'recolored') recoloredCount += 1;
+      if (action === 'add') {
+        const hadSite = apiCellToEntries(beforeCell).some((entry) => entry.label === current.siteName);
+        if (hadSite) recoloredCount += 1;
+        else addedCount += 1;
+      }
+      if (action === 'remove') removedCount += 1;
     }
 
     closeSlotContextMenu();
@@ -5307,10 +5399,10 @@ function Row({
     if (addedCount) messages.push(`${addedCount}名追加`);
     if (removedCount) messages.push(`${removedCount}名削除`);
     if (recoloredCount) messages.push(`${recoloredCount}名色同期`);
-    if (skippedFullCount) messages.push(`${skippedFullCount}名は2枠埋まり`);
+    if (skippedCapacityCount) messages.push(`${skippedCapacityCount}名は枠上限`);
     if (failedCount) messages.push(`${failedCount}名失敗`);
     onNotify?.(messages.length > 0 ? `同日・同現場を更新: ${messages.join(' / ')}` : '変更はありません');
-  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu]);
+  }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, resolveStoredSite, slotContextMenu]);
 
   const applySelectedSiblingSites = useCallback(async () => {
     const current = slotContextMenu;
@@ -5330,29 +5422,28 @@ function Row({
       return;
     }
 
+    const currentGroups = apiCellToGroups(beforeCell);
     const currentColorByName = new Map(currentEntries.map((entry) => [entry.label, entry.color] as const));
-    const replacementEntries = slotContextRelatedSiteOptions
+    const replacementItems = slotContextRelatedSiteOptions
       .filter((option) => selectedNames.has(option.storedName))
       .map((option) => ({
         label: option.storedName,
         color: currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, current.color),
       }));
+    const replacementGroup: ApiCellGroup = { items: replacementItems };
 
-    const nextEntries: CellEntry[] = [];
-    let inserted = false;
-    for (const entry of currentEntries) {
-      if (sameCompanySite(resolveStoredSite(entry.label), anchorSite)) {
-        if (!inserted) {
-          nextEntries.push(...replacementEntries);
-          inserted = true;
-        }
-        continue;
-      }
-      nextEntries.push(entry);
+    const targetGroupIndex = currentGroups.findIndex((group) =>
+      group.items.some((entry) => sameCompanySite(resolveStoredSite(entry.label), anchorSite)),
+    );
+    const nextGroups = currentGroups.map((group) => ({ items: [...group.items] }));
+    if (targetGroupIndex >= 0) nextGroups[targetGroupIndex] = replacementGroup;
+    else nextGroups.push(replacementGroup);
+
+    if (replacementGroup.items.length > 4) {
+      onNotify?.('同名別店舗は4件までです');
+      return;
     }
-    if (!inserted) nextEntries.push(...replacementEntries);
-
-    if (nextEntries.length > 2) {
+    if (nextGroups.length > 2) {
       onNotify?.('2枠を超えるため、この組み合わせでは登録できません');
       return;
     }
@@ -5361,7 +5452,7 @@ function Row({
       targetUser: user,
       day: current.day,
       beforeCell,
-      nextCell: entriesToApiCell(nextEntries),
+      nextCell: groupsToApiCell(nextGroups),
     });
     if (result.failed) {
       onNotify?.(result.message ?? '同名別店舗の反映に失敗しました');
@@ -5384,7 +5475,7 @@ function Row({
         siteName: string;
         className: string;
         fontSize: string;
-        contextInput?: { day: string; beforeFallback: CellSlots; color: LabelColor };
+        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor };
       },
     ) => {
       const contextInput = input.contextInput;
@@ -5394,7 +5485,7 @@ function Row({
               day: contextInput.day,
               siteName: input.siteName,
               color: contextInput.color,
-              beforeFallback: contextInput.beforeFallback,
+              beforeCell: contextInput.beforeCell,
             });
           }
         : undefined;
@@ -5426,62 +5517,36 @@ function Row({
   );
 
   const renderCellLabels = useCallback(
-    (cell: ApiCell | null | undefined, day: string, beforeFallback: CellSlots) => {
-      const entries = apiCellToEntries(cell);
-      if (entries.length === 0) return null;
-
-      const companyCounts = new Map<string, number>();
-      for (const entry of entries) {
-        const key = siteCompanyKey(resolveStoredSite(entry.label));
-        if (!key) continue;
-        companyCounts.set(key, (companyCounts.get(key) ?? 0) + 1);
-      }
-
-      const groups: Array<{
-        key: string;
-        companyName: string | null;
-        items: Array<{ entry: CellEntry; storedName: string; displayName: string }>;
-      }> = [];
-
-      for (const entry of entries) {
-        const site = resolveStoredSite(entry.label);
-        const companyName = siteCompanyName(site);
-        const companyKeyValue = siteCompanyKey(site);
-        const shouldGroup = companyKeyValue.length > 0 && (companyCounts.get(companyKeyValue) ?? 0) > 1;
-        const displayName = siteStoredName(site) || entry.label;
-        if (shouldGroup) {
-          const groupKey = `company:${companyKeyValue}`;
-          const hit = groups.find((group) => group.key === groupKey);
-          const item = { entry, storedName: entry.label, displayName };
-          if (hit) {
-            hit.items.push(item);
-          } else {
-            groups.push({ key: groupKey, companyName, items: [item] });
-          }
-          continue;
-        }
-        groups.push({
-          key: `single:${entry.label}:${groups.length}`,
-          companyName: null,
-          items: [{ entry, storedName: entry.label, displayName: entry.label }],
-        });
-      }
+    (cell: ApiCell | null | undefined, day: string, beforeCell: ApiCell) => {
+      const groups = apiCellToGroups(cell);
+      if (groups.length === 0) return null;
 
       return groups.map((group, groupIndex) => {
-        if (group.companyName && group.items.length > 1) {
+        const firstSite = resolveStoredSite(group.items[0]?.label ?? '');
+        const companyName = siteCompanyName(firstSite);
+        const renderedItems = group.items.map((entry) => {
+          const site = resolveStoredSite(entry.label);
+          return {
+            entry,
+            storedName: entry.label,
+            displayName: siteStoredName(site) || entry.label,
+          };
+        });
+
+        if (companyName && renderedItems.length > 1) {
           return (
-            <div key={group.key} className={groupIndex > 0 ? 'mt-1.5' : ''}>
+            <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1.5' : ''}>
               <div className="text-[11px] font-semibold leading-tight text-zinc-700 dark:text-zinc-200">
-                {group.companyName}
+                {companyName}
               </div>
               <div className="mt-0.5 space-y-0.5">
-                {group.items.map((item) =>
+                {renderedItems.map((item) =>
                   renderSiteLabel({
                     displayValue: item.displayName,
                     siteName: item.storedName,
                     className: `whitespace-normal break-words pl-2 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, 'secondary')}`,
                     fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-                    contextInput: { day, beforeFallback, color: item.entry.color },
+                    contextInput: { day, beforeCell, color: item.entry.color },
                   }),
                 )}
               </div>
@@ -5489,15 +5554,15 @@ function Row({
           );
         }
 
-        const item = group.items[0]!;
+        const item = renderedItems[0]!;
         return (
-          <div key={group.key} className={groupIndex > 0 ? 'mt-0.5' : ''}>
+          <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-0.5' : ''}>
             {renderSiteLabel({
               displayValue: item.displayName,
               siteName: item.storedName,
               className: `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, groupIndex === 0 ? 'primary' : 'secondary')}`,
               fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-              contextInput: { day, beforeFallback, color: item.entry.color },
+              contextInput: { day, beforeCell, color: item.entry.color },
             })}
           </div>
         );
@@ -5511,6 +5576,7 @@ function Row({
     action: CellClickAction,
   ): string | null => {
     if (typeof reason !== 'string') return null;
+    if (reason === 'group-full') return '同名別店舗は1枠4件までです';
     if (reason === 'cell-full') {
       return action === 'add'
         ? '満杯のため追加できません（2枠あり）'
@@ -5549,7 +5615,7 @@ function Row({
     color: CellTextColor;
     siteId?: string | null;
     siteName?: string | null;
-    beforeFallback: CellSlots;
+    beforeCell: ApiCell;
   }) => {
     let resolvedSite =
       input.action === 'swap'
@@ -5565,13 +5631,7 @@ function Row({
       }
     }
 
-    const currentCell = grid[input.day];
-    const beforeCell = cloneApiCell({
-      slot1: input.beforeFallback[0],
-      slot2: input.beforeFallback[1],
-      color1: currentCell?.color1 ?? 'default',
-      color2: currentCell?.color2 ?? 'default',
-    });
+    const beforeCell = cloneApiCell(input.beforeCell);
     const resolvedSiteName = input.siteName ?? resolvedSite?.label ?? null;
     const requestedColor = input.action === 'recolor' ? input.color : resolveSiteLabelColor(resolvedSite, input.color);
     const preview = previewCellAction({
@@ -5579,6 +5639,8 @@ function Row({
       action: input.action,
       siteName: resolvedSiteName,
       color: requestedColor,
+      site: resolvedSite,
+      resolveSite: resolveStoredSite,
     });
 
     if (!preview.changed) {
@@ -5586,70 +5648,29 @@ function Row({
       return;
     }
 
-    onPreviewCellChange?.({ userId: user.id, day: input.day, cell: preview.cell });
-
-    try {
-      const r = await fetch('/api/schedule/cell', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          day: input.day,
-          kind: apiKind,
-          action: input.action,
-          siteId: input.siteId ?? resolvedSite?.id ?? null,
-          siteName: resolvedSiteName,
-          color: requestedColor,
-        }),
-      });
-
-      type CellApiOk = {
-        ok: true;
-        action: CellClickAction;
-        changed?: boolean;
-        reason?: unknown;
-        toggled?: unknown;
-        replaced?: unknown;
-      };
-      type CellApiErr = { ok: false; error?: string };
-      const json = (await r.json().catch(() => null)) as CellApiOk | CellApiErr | null;
-
-      if (!r.ok || !json || json.ok !== true) {
-        onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
-        const error = json && json.ok === false ? json.error : undefined;
-        onNotify?.(error ? `操作に失敗しました: ${error}` : `操作に失敗しました（HTTP ${r.status}）`);
-        return;
-      }
-
-      if (!json.changed) {
-        onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
-        onNotify?.(formatCellActionReason(json.reason, input.action) ?? '反映されませんでした');
-        return;
-      }
-
-      onCellHistory?.({
-        kind: 'cell',
-        userId: user.id,
-        day: input.day,
-        before: [beforeCell.slot1, beforeCell.slot2],
-        after: [preview.cell.slot1, preview.cell.slot2],
-        editorLabel: currentEditorLabel,
-        // eslint-disable-next-line react-hooks/purity -- executed from an event-triggered async action
-        at: Date.now(),
-      });
-
-      onNotify?.(
-        formatCellActionSuccess({
-          action: json.action ?? input.action,
-          toggled: json.toggled ?? preview.toggled,
-          replaced: json.replaced ?? preview.replaced,
-        }),
-      );
-      void Promise.resolve(onAssigned()).catch(() => undefined);
-    } catch {
-      onPreviewCellChange?.({ userId: user.id, day: input.day, cell: beforeCell });
-      onNotify?.('通信に失敗しました');
+    const result = await persistCellSet({
+      targetUser: user,
+      day: input.day,
+      beforeCell,
+      nextCell: preview.cell,
+    });
+    if (result.failed) {
+      onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+      return;
     }
+    if (!result.changed) {
+      onNotify?.('変更はありません');
+      return;
+    }
+
+    onNotify?.(
+      formatCellActionSuccess({
+        action: input.action,
+        toggled: preview.toggled,
+        replaced: preview.replaced,
+      }),
+    );
+    void Promise.resolve(onAssigned()).catch(() => undefined);
   };
 
   return (
@@ -5733,7 +5754,7 @@ function Row({
         const cell = grid[d.key];
         const slot1 = cell?.slot1 ?? null;
         const slot2 = cell?.slot2 ?? null;
-        const beforeFallback: CellSlots = [slot1, slot2];
+        const beforeCell = cloneApiCell(cell);
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
@@ -5747,7 +5768,7 @@ function Row({
             draggable={isEditable && Boolean(slot1 || slot2)}
             onDragStart={(e) => {
               if (!isEditable || (!slot1 && !slot2)) return;
-              onSetDraggedCell?.({ userId: user.id, day: d.key, slots: [slot1, slot2] });
+              onSetDraggedCell?.({ userId: user.id, day: d.key, cell: beforeCell });
               e.dataTransfer.effectAllowed = 'copy';
             }}
             onDragEnd={() => onSetDraggedCell?.(null)}
@@ -5771,18 +5792,18 @@ function Row({
                   color: cellTextColor,
                   siteId: draggedSite.id,
                   siteName: draggedSite.label,
-                  beforeFallback,
+                  beforeCell,
                 });
               } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
                 // 別のセルからドラッグされた現場をコピー
-                const siteName = draggedCell.slots.find(Boolean);
+                const siteName = apiCellToEntries(draggedCell.cell)[0]?.label;
                 if (siteName) {
                   void runCellAction({
                     day: d.key,
                     action: 'toggle',
                     color: cellTextColor,
                     siteName,
-                    beforeFallback,
+                    beforeCell,
                   });
                 }
               }
@@ -5808,7 +5829,7 @@ function Row({
                   day: d.key,
                   action: cellClickAction,
                   color: cellTextColor,
-                  beforeFallback,
+                  beforeCell,
                 });
               } else {
                 // セルを選択状態にする（もう一度クリックすると入力モードになる）
@@ -5841,7 +5862,7 @@ function Row({
                   day: d.key,
                   action: cellClickAction,
                   color: cellTextColor,
-                  beforeFallback,
+                  beforeCell,
                 });
               } else {
                 onSetSelectedCell?.({ userId: user.id, day: d.key });
@@ -5886,7 +5907,7 @@ function Row({
                             color: cellTextColor,
                             siteId: site.id,
                             siteName: site.label,
-                            beforeFallback,
+                              beforeCell,
                           });
                         } else if (editingInput?.trim()) {
                           // 直接入力
@@ -5899,7 +5920,7 @@ function Row({
                             action: 'toggle',
                             color: cellTextColor,
                             siteName,
-                            beforeFallback,
+                            beforeCell,
                           });
                         }
                       }
@@ -5929,7 +5950,7 @@ function Row({
                               color: cellTextColor,
                               siteId: site.id,
                               siteName: site.label,
-                              beforeFallback,
+                              beforeCell,
                             });
                           }}
                           className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -5946,7 +5967,7 @@ function Row({
                 </div>
               ) : (
                 // 通常表示
-                <>{renderCellLabels(cell, d.key, beforeFallback)}</>
+                <>{renderCellLabels(cell, d.key, beforeCell)}</>
               )}
             </div>
             {slotContextMenu?.day === d.key ? (
@@ -5982,7 +6003,7 @@ function Row({
                           action: 'recolor',
                           color: 'red',
                           siteName: current.siteName,
-                          beforeFallback: current.beforeFallback,
+                          beforeCell: current.beforeCell,
                         });
                       }}
                       className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
@@ -6034,7 +6055,7 @@ function Row({
                           action: 'remove',
                           color: current.color,
                           siteName: current.siteName,
-                          beforeFallback: current.beforeFallback,
+                          beforeCell: current.beforeCell,
                         });
                       }}
                       className="w-full rounded-md border border-red-200 px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
@@ -6065,7 +6086,7 @@ function Row({
                           />
                           <span className="min-w-0 flex-1 truncate">{option.userLabel}</span>
                           {option.disabled ? (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400">2枠埋まり</span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
                           ) : option.hasSite ? (
                             <span className="text-[10px] text-zinc-500 dark:text-zinc-400">登録済み</span>
                           ) : null}
@@ -6116,7 +6137,7 @@ function Row({
                           />
                           <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
                           {option.disabled ? (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400">2枠埋まり</span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
                           ) : null}
                         </label>
                       ))}
