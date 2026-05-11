@@ -5004,9 +5004,40 @@ function Row({
     beforeFallback: CellSlots;
     x: number;
     y: number;
-    mode: 'actions' | 'assign-users';
+    companyName: string | null;
+    mode: 'actions' | 'assign-users' | 'related-sites';
     selectedUserIds: string[];
+    selectedSiblingNames: string[];
   }>(null);
+
+  const resolveStoredSite = useCallback(
+    (siteName: string) => {
+      const trimmed = siteName.trim();
+      if (!trimmed) return null;
+      const resolved = resolveSiteReference?.({ siteName: trimmed });
+      if (resolved) return resolved;
+      return (
+        allSites.find((site) => {
+          const storedName = siteStoredName(site);
+          return storedName === trimmed || site.label.trim() === trimmed;
+        }) ?? null
+      );
+    },
+    [allSites, resolveSiteReference],
+  );
+
+  const cellEntriesForDay = useCallback((day: string) => apiCellToEntries(grid[day]), [grid]);
+
+  const siblingEntryNamesForSite = useCallback(
+    (day: string, siteName: string) => {
+      const anchorSite = resolveStoredSite(siteName);
+      if (!anchorSite) return [siteName.trim()].filter(Boolean);
+      return cellEntriesForDay(day)
+        .filter((entry) => sameCompanySite(resolveStoredSite(entry.label), anchorSite))
+        .map((entry) => entry.label);
+    },
+    [cellEntriesForDay, resolveStoredSite],
+  );
 
   const closeSlotContextMenu = useCallback(() => {
     setSlotContextMenu(null);
@@ -5080,11 +5111,13 @@ function Row({
         beforeFallback: input.beforeFallback,
         x: event.clientX,
         y: event.clientY,
+        companyName: siteCompanyName(resolveStoredSite(input.siteName)),
         mode: 'actions',
         selectedUserIds: assignedUserIdsForSite(input.day, input.siteName),
+        selectedSiblingNames: siblingEntryNamesForSite(input.day, input.siteName),
       });
     },
-    [assignedUserIdsForSite, isEditable, onNotify],
+    [assignedUserIdsForSite, isEditable, onNotify, resolveStoredSite, siblingEntryNamesForSite],
   );
 
   const slotContextUserOptions = useMemo(() => {
@@ -5111,6 +5144,47 @@ function Row({
       if (next.has(targetUserId)) next.delete(targetUserId);
       else next.add(targetUserId);
       return { ...current, selectedUserIds: Array.from(next) };
+    });
+  }, []);
+
+  const slotContextRelatedSiteOptions = useMemo(() => {
+    if (!slotContextMenu) return [];
+    const anchorSite = resolveStoredSite(slotContextMenu.siteName);
+    if (!anchorSite) return [];
+    const anchorCompanyKey = siteCompanyKey(anchorSite);
+    if (!anchorCompanyKey) return [];
+
+    const seen = new Set<string>();
+    const currentEntries = cellEntriesForDay(slotContextMenu.day);
+    const otherCount = currentEntries.filter((entry) => !sameCompanySite(resolveStoredSite(entry.label), anchorSite)).length;
+    const selected = new Set(slotContextMenu.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
+
+    return allSites
+      .filter((site) => siteCompanyKey(site) === anchorCompanyKey)
+      .map((site) => {
+        const storedName = siteStoredName(site);
+        if (!storedName || seen.has(storedName)) return null;
+        seen.add(storedName);
+        const checked = selected.has(storedName);
+        const disabled = !checked && otherCount + selected.size >= 2;
+        return {
+          site,
+          storedName,
+          displayName: storedName,
+          checked,
+          disabled,
+        };
+      })
+      .filter((option): option is { site: SiteItem; storedName: string; displayName: string; checked: boolean; disabled: boolean } => !!option);
+  }, [allSites, cellEntriesForDay, resolveStoredSite, slotContextMenu]);
+
+  const toggleSlotContextSibling = useCallback((storedName: string) => {
+    setSlotContextMenu((current) => {
+      if (!current || current.mode !== 'related-sites') return current;
+      const next = new Set(current.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
+      if (next.has(storedName)) next.delete(storedName);
+      else next.add(storedName);
+      return { ...current, selectedSiblingNames: Array.from(next) };
     });
   }, []);
 
@@ -5238,28 +5312,95 @@ function Row({
     onNotify?.(messages.length > 0 ? `同日・同現場を更新: ${messages.join(' / ')}` : '変更はありません');
   }, [allGrid, allUsers, closeSlotContextMenu, onAssigned, onNotify, persistCellSet, slotContextMenu]);
 
-  const renderSlotLabel = useCallback(
+  const applySelectedSiblingSites = useCallback(async () => {
+    const current = slotContextMenu;
+    if (!current || current.mode !== 'related-sites') return;
+
+    const anchorSite = resolveStoredSite(current.siteName);
+    if (!anchorSite) {
+      onNotify?.('同名別店舗を判定できませんでした');
+      return;
+    }
+
+    const beforeCell = cloneApiCell(grid[current.day]);
+    const currentEntries = apiCellToEntries(beforeCell);
+    const selectedNames = new Set(current.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
+    if (selectedNames.size === 0) {
+      onNotify?.('少なくとも1店舗は選択してください');
+      return;
+    }
+
+    const currentColorByName = new Map(currentEntries.map((entry) => [entry.label, entry.color] as const));
+    const replacementEntries = slotContextRelatedSiteOptions
+      .filter((option) => selectedNames.has(option.storedName))
+      .map((option) => ({
+        label: option.storedName,
+        color: currentColorByName.get(option.storedName) ?? resolveSiteLabelColor(option.site, current.color),
+      }));
+
+    const nextEntries: CellEntry[] = [];
+    let inserted = false;
+    for (const entry of currentEntries) {
+      if (sameCompanySite(resolveStoredSite(entry.label), anchorSite)) {
+        if (!inserted) {
+          nextEntries.push(...replacementEntries);
+          inserted = true;
+        }
+        continue;
+      }
+      nextEntries.push(entry);
+    }
+    if (!inserted) nextEntries.push(...replacementEntries);
+
+    if (nextEntries.length > 2) {
+      onNotify?.('2枠を超えるため、この組み合わせでは登録できません');
+      return;
+    }
+
+    const result = await persistCellSet({
+      targetUser: user,
+      day: current.day,
+      beforeCell,
+      nextCell: entriesToApiCell(nextEntries),
+    });
+    if (result.failed) {
+      onNotify?.(result.message ?? '同名別店舗の反映に失敗しました');
+      return;
+    }
+
+    closeSlotContextMenu();
+    if (!result.changed) {
+      onNotify?.('変更はありません');
+      return;
+    }
+    onNotify?.('同名別店舗を反映しました');
+    void Promise.resolve(onAssigned()).catch(() => undefined);
+  }, [closeSlotContextMenu, grid, onAssigned, onNotify, persistCellSet, resolveStoredSite, slotContextMenu, slotContextRelatedSiteOptions, user]);
+
+  const renderSiteLabel = useCallback(
     (
-      value: string | null,
-      className: string,
-      fontSize: string,
-      contextInput?: { day: string; beforeFallback: CellSlots; color: LabelColor },
+      input: {
+        displayValue: string;
+        siteName: string;
+        className: string;
+        fontSize: string;
+        contextInput?: { day: string; beforeFallback: CellSlots; color: LabelColor };
+      },
     ) => {
-      if (!value) return <div className={className} style={{ fontSize }} />;
-      const handleContextMenu = contextInput
+      const handleContextMenu = input.contextInput
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
-              day: contextInput.day,
-              siteName: value,
-              color: contextInput.color,
-              beforeFallback: contextInput.beforeFallback,
+              day: input.contextInput.day,
+              siteName: input.siteName,
+              color: input.contextInput.color,
+              beforeFallback: input.contextInput.beforeFallback,
             });
           }
         : undefined;
       if (!onOpenSiteFromCell) {
         return (
-          <div className={className} style={{ fontSize }} onContextMenu={handleContextMenu}>
-            {value}
+          <div className={input.className} style={{ fontSize }} onContextMenu={handleContextMenu}>
+            {input.displayValue}
           </div>
         );
       }
@@ -5269,18 +5410,99 @@ function Row({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onOpenSiteFromCell(value);
+            onOpenSiteFromCell(input.siteName);
           }}
           onContextMenu={handleContextMenu}
-          className={`${className} w-full text-left hover:underline`}
-          style={{ fontSize }}
+          className={`${input.className} w-full text-left hover:underline`}
+          style={{ fontSize: input.fontSize }}
           title="現場詳細を開く"
         >
-          {value}
+          {input.displayValue}
         </button>
       );
     },
     [onOpenSiteFromCell, openSlotContextMenu],
+  );
+
+  const renderCellLabels = useCallback(
+    (cell: ApiCell | null | undefined, day: string, beforeFallback: CellSlots) => {
+      const entries = apiCellToEntries(cell);
+      if (entries.length === 0) return null;
+
+      const companyCounts = new Map<string, number>();
+      for (const entry of entries) {
+        const key = siteCompanyKey(resolveStoredSite(entry.label));
+        if (!key) continue;
+        companyCounts.set(key, (companyCounts.get(key) ?? 0) + 1);
+      }
+
+      const groups: Array<{
+        key: string;
+        companyName: string | null;
+        items: Array<{ entry: CellEntry; storedName: string; displayName: string }>;
+      }> = [];
+
+      for (const entry of entries) {
+        const site = resolveStoredSite(entry.label);
+        const companyName = siteCompanyName(site);
+        const companyKeyValue = siteCompanyKey(site);
+        const shouldGroup = companyKeyValue.length > 0 && (companyCounts.get(companyKeyValue) ?? 0) > 1;
+        const displayName = siteStoredName(site) || entry.label;
+        if (shouldGroup) {
+          const groupKey = `company:${companyKeyValue}`;
+          const hit = groups.find((group) => group.key === groupKey);
+          const item = { entry, storedName: entry.label, displayName };
+          if (hit) {
+            hit.items.push(item);
+          } else {
+            groups.push({ key: groupKey, companyName, items: [item] });
+          }
+          continue;
+        }
+        groups.push({
+          key: `single:${entry.label}:${groups.length}`,
+          companyName: null,
+          items: [{ entry, storedName: entry.label, displayName: entry.label }],
+        });
+      }
+
+      return groups.map((group, groupIndex) => {
+        if (group.companyName && group.items.length > 1) {
+          return (
+            <div key={group.key} className={groupIndex > 0 ? 'mt-1.5' : ''}>
+              <div className="text-[11px] font-semibold leading-tight text-zinc-700 dark:text-zinc-200">
+                {group.companyName}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {group.items.map((item) =>
+                  renderSiteLabel({
+                    displayValue: item.displayName,
+                    siteName: item.storedName,
+                    className: `whitespace-normal break-words pl-2 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, 'secondary')}`,
+                    fontSize: 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
+                    contextInput: { day, beforeFallback, color: item.entry.color },
+                  }),
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        const item = group.items[0]!;
+        return (
+          <div key={group.key} className={groupIndex > 0 ? 'mt-0.5' : ''}>
+            {renderSiteLabel({
+              displayValue: item.displayName,
+              siteName: item.storedName,
+              className: `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(item.entry.color, groupIndex === 0 ? 'primary' : 'secondary')}`,
+              fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
+              contextInput: { day, beforeFallback, color: item.entry.color },
+            })}
+          </div>
+        );
+      });
+    },
+    [gridLayout, renderSiteLabel, resolveStoredSite],
   );
 
   const formatCellActionReason = (
@@ -5540,10 +5762,13 @@ function Row({
               e.preventDefault();
               
               if (draggedSite) {
+                const shouldAddSibling = cellEntriesForDay(d.key).some((entry) =>
+                  sameCompanySite(resolveStoredSite(entry.label), draggedSite),
+                );
                 // 現場リストからドラッグされた現場をセルに入力
                 void runCellAction({
                   day: d.key,
-                  action: 'toggle',
+                  action: shouldAddSibling ? 'add' : 'toggle',
                   color: cellTextColor,
                   siteId: draggedSite.id,
                   siteName: draggedSite.label,
@@ -5722,20 +5947,7 @@ function Row({
                 </div>
               ) : (
                 // 通常表示
-                <>
-                  {renderSlotLabel(
-                    slot1,
-                    `whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c1, 'primary')}`,
-                    'var(--weekhub-cell-font-size, 12px)',
-                    { day: d.key, beforeFallback, color: c1 },
-                  )}
-                  {renderSlotLabel(
-                    slot2,
-                    `mt-0.5 whitespace-normal break-words ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(c2, 'secondary')}`,
-                    'calc(var(--weekhub-cell-font-size, 12px) * 0.9)',
-                    { day: d.key, beforeFallback, color: c2 },
-                  )}
-                </>
+                <>{renderCellLabels(cell, d.key, beforeFallback)}</>
               )}
             </div>
             {slotContextMenu?.day === d.key ? (
@@ -5794,6 +6006,24 @@ function Row({
                     >
                       同日・同現場の従業員を選択
                     </button>
+                    {slotContextRelatedSiteOptions.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSlotContextMenu((current) => {
+                            if (!current) return current;
+                            return {
+                              ...current,
+                              mode: 'related-sites',
+                              selectedSiblingNames: siblingEntryNamesForSite(current.day, current.siteName),
+                            };
+                          });
+                        }}
+                        className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      >
+                        同名別店舗を選択
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => {
@@ -5813,7 +6043,7 @@ function Row({
                       当該現場をセルから削除
                     </button>
                   </div>
-                ) : (
+                ) : slotContextMenu.mode === 'assign-users' ? (
                   <div className="mt-2">
                     <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
                       同日・同現場に入れる従業員を複数選択
@@ -5857,6 +6087,55 @@ function Row({
                         type="button"
                         onClick={() => {
                           void applySelectedUsersToSite();
+                        }}
+                        className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+                      >
+                        決定
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+                      同名別店舗をチェック選択
+                    </div>
+                    <div className="max-h-56 space-y-1 overflow-auto pr-1">
+                      {slotContextRelatedSiteOptions.map((option) => (
+                        <label
+                          key={option.storedName}
+                          className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                            option.disabled
+                              ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
+                              : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={option.checked}
+                            disabled={option.disabled}
+                            onChange={() => toggleSlotContextSibling(option.storedName)}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
+                          {option.disabled ? (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400">2枠埋まり</span>
+                          ) : null}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSlotContextMenu((current) => (current ? { ...current, mode: 'actions' } : current));
+                        }}
+                        className="rounded-md border border-zinc-200 px-3 py-2 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      >
+                        戻る
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void applySelectedSiblingSites();
                         }}
                         className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                       >
