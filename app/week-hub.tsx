@@ -3147,6 +3147,7 @@ function WeekHubInner() {
                     現場を選択 → 週表のセルをクリックで入力
                   </div>
 
+  const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
                   <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
@@ -3290,7 +3291,6 @@ function WeekHubInner() {
                       </div>
                     )}
                   </div>
-
                   <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
                     選択中: {selectedSite?.label ?? '（なし）'}
                   </div>
