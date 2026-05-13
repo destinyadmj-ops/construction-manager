@@ -29,6 +29,7 @@ import {
   UI_THEME_SETTING_KEY,
   writeLocalUiTheme,
 } from './ui-theme';
+import { markForceDesktopWeekHomeOnce, readStoredScheduleReturn } from '@/shared/schedule-return';
 
 type JsonObject = Record<string, unknown>;
 
@@ -495,6 +496,11 @@ export default function AppHeader() {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
   }, [pathname, searchParams]);
+  const storedScheduleBackHref = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const stored = readStoredScheduleReturn();
+    return stored?.href && stored.href !== routeKey ? stored.href : null;
+  }, [routeKey]);
 
   const navIntentRef = useRef<'push' | 'back' | 'forward' | null>(null);
   const didInitNavRef = useRef(false);
@@ -1084,8 +1090,8 @@ export default function AppHeader() {
 
   const canBack = useMemo(() => {
     if (actions.undo) return !actions.undo.disabled;
-    return navIndex > 0 || !isWeek;
-  }, [actions.undo, isWeek, navIndex]);
+    return navIndex > 0 || Boolean(storedScheduleBackHref);
+  }, [actions.undo, navIndex, storedScheduleBackHref]);
 
   const canForward = useMemo(() => {
     if (actions.redo) return !actions.redo.disabled;
@@ -1732,9 +1738,9 @@ export default function AppHeader() {
                   return;
                 }
 
-                if (!isWeek) {
+                if (storedScheduleBackHref) {
                   navIntentRef.current = 'push';
-                  router.push('/?mode=week');
+                  router.push(storedScheduleBackHref);
                 }
               }}
               disabled={!canBack}
@@ -2175,6 +2181,14 @@ export default function AppHeader() {
             data-color-edit-id="header:nav:week"
             onClick={() => {
               navIntentRef.current = 'push';
+              markForceDesktopWeekHomeOnce();
+              if (pathname === '/') {
+                try {
+                  window.dispatchEvent(new CustomEvent('masterHub:jumpCurrentWeek'));
+                } catch {
+                  // ignore
+                }
+              }
             }}
             className={navLinkClass(isNormalWeek)}
             title="週予定へ（週モードに戻す）"

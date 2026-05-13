@@ -8,6 +8,7 @@ import {
   normalizeWeekGridPrefs,
   type WeekGridPrefs,
 } from '@/shared/week-grid-prefs';
+import { getCurrentPathWithSearch, readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -64,6 +65,13 @@ type CellEntryMenuState = {
 
 type JsonObject = Record<string, unknown>;
 
+type MobileWeekHubHistoryState = {
+  v: 1;
+  cursorDate: string;
+};
+
+const MOBILE_WEEK_HUB_HISTORY_STATE_KEY = 'masterHub.mobileWeekHubState';
+
 function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -113,6 +121,21 @@ function normalizeSiteLookupKey(value: string) {
 
 function asObject(value: unknown): JsonObject | null {
   return value && typeof value === 'object' ? (value as JsonObject) : null;
+}
+
+function normalizeMobileWeekHubHistoryState(raw: unknown): MobileWeekHubHistoryState | null {
+  const obj = asObject(raw);
+  if (!obj) return null;
+  const cursorDate = typeof obj.cursorDate === 'string' ? obj.cursorDate : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cursorDate)) return null;
+  return { v: 1, cursorDate };
+}
+
+function readMobileWeekHubHistoryState(): MobileWeekHubHistoryState | null {
+  if (typeof window === 'undefined') return null;
+  const rawState = window.history.state;
+  if (!rawState || typeof rawState !== 'object') return null;
+  return normalizeMobileWeekHubHistoryState((rawState as Record<string, unknown>)[MOBILE_WEEK_HUB_HISTORY_STATE_KEY]);
 }
 
 function resolveScheduleEntryTargets(entries: string[], siteIdByScheduleEntry: Map<string, string>): ScheduleEntryTarget[] {
@@ -176,7 +199,24 @@ function MobileWeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toolbarRef = useRef<HTMLDivElement | null>(null);
-  const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
+  const currentMobileHref = typeof window === 'undefined' ? '/mobile/week-hub' : getCurrentPathWithSearch();
+  const initialStoredMobileState =
+    typeof window === 'undefined'
+      ? null
+      : (() => {
+          const stored = readStoredScheduleReturn();
+          if (stored?.target !== 'mobile-week-hub' || stored.href !== currentMobileHref) return null;
+          return normalizeMobileWeekHubHistoryState(stored.state);
+        })();
+  const initialHistoryStateRef = useRef<MobileWeekHubHistoryState | null>(
+    typeof window === 'undefined' ? null : readMobileWeekHubHistoryState() ?? initialStoredMobileState,
+  );
+  const initialHistoryState = initialHistoryStateRef.current;
+  const [cursorDate, setCursorDate] = useState<Date>(() => {
+    const restored = initialHistoryState?.cursorDate ? new Date(`${initialHistoryState.cursorDate}T00:00:00`) : null;
+    if (restored && !Number.isNaN(restored.getTime())) return restored;
+    return new Date();
+  });
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
@@ -416,16 +456,6 @@ function MobileWeekHubInner() {
     return map;
   }, [sites]);
 
-  const handleSiteClick = useCallback((siteId: string) => {
-    router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=${encodeURIComponent(scheduleKind)}#punch`);
-  }, [router, scheduleKind]);
-
-  const handleScheduleEntryClick = useCallback((entry: string) => {
-    const siteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry));
-    if (!siteId) return;
-    handleSiteClick(siteId);
-  }, [handleSiteClick, siteIdByScheduleEntry]);
-
   const closeCellEntryMenu = useCallback(() => {
     setCellEntryMenu(null);
   }, []);
@@ -502,6 +532,47 @@ function MobileWeekHubInner() {
   const rangeLabel = useMemo(() => {
     return `${toYmd(weekStart)}〜${toYmd(addDays(weekStart, 6))}`;
   }, [weekStart]);
+
+  const historySnapshotJsonRef = useRef<string | null>(null);
+  const writeMobileWeekHubHistorySnapshot = useCallback((overrides?: Partial<MobileWeekHubHistoryState>) => {
+    if (typeof window === 'undefined') return;
+    const snapshot: MobileWeekHubHistoryState = {
+      v: 1,
+      cursorDate: overrides?.cursorDate ?? toYmd(cursorDate),
+    };
+    const nextJson = JSON.stringify(snapshot);
+    if (historySnapshotJsonRef.current === nextJson) return;
+    const currentState =
+      window.history.state && typeof window.history.state === 'object'
+        ? (window.history.state as Record<string, unknown>)
+        : {};
+    try {
+      window.history.replaceState({ ...currentState, [MOBILE_WEEK_HUB_HISTORY_STATE_KEY]: snapshot }, '', window.location.href);
+      writeStoredScheduleReturn({
+        target: 'mobile-week-hub',
+        href: currentMobileHref,
+        state: snapshot,
+      });
+      historySnapshotJsonRef.current = nextJson;
+    } catch {
+      // ignore
+    }
+  }, [currentMobileHref, cursorDate]);
+
+  useEffect(() => {
+    writeMobileWeekHubHistorySnapshot();
+  }, [writeMobileWeekHubHistorySnapshot]);
+
+  const handleSiteClick = useCallback((siteId: string) => {
+    writeMobileWeekHubHistorySnapshot();
+    router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=${encodeURIComponent(scheduleKind)}#punch`);
+  }, [router, scheduleKind, writeMobileWeekHubHistorySnapshot]);
+
+  const handleScheduleEntryClick = useCallback((entry: string) => {
+    const siteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry));
+    if (!siteId) return;
+    handleSiteClick(siteId);
+  }, [handleSiteClick, siteIdByScheduleEntry]);
 
   const weekGridCellMinH = useMemo(() => {
     return weekGridPrefs.gridLayout === 'comfortable'

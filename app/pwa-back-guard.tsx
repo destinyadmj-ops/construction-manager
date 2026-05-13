@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { getCurrentPathWithSearch, readStoredScheduleReturn } from '@/shared/schedule-return';
 
 function isAndroid() {
   if (typeof navigator === 'undefined') return false;
@@ -39,12 +40,10 @@ export default function PwaBackGuard() {
         // When we're at the start of the in-app stack, keep the app open.
         window.history.pushState({ masterHubGuard: true }, '', window.location.href);
 
-        // If the user is not already on the Week home, route there.
-        const sp = new URLSearchParams(window.location.search);
-        const mode = sp.get('mode');
-        const atWeekHome = window.location.pathname === '/' && (!mode || mode === 'week');
-        if (!atWeekHome) {
-          router.replace('/?mode=week');
+        const currentHref = getCurrentPathWithSearch();
+        const stored = readStoredScheduleReturn();
+        if (stored?.href && stored.href !== currentHref) {
+          router.replace(stored.href);
         }
       } catch {
         // If anything goes wrong, fail open (no hard block).

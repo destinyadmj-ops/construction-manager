@@ -1040,7 +1040,7 @@ export default function SiteLedgerPage() {
             <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">（データがありません）</div>
           ) : (
             <div className="mt-2 max-h-64 overflow-auto">
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-8">
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
                   <div key={`grid-${s.id}`} className="relative">
                     {canEditSite ? (
@@ -1049,64 +1049,64 @@ export default function SiteLedgerPage() {
                         checked={selectedSites.has(s.id)}
                         onChange={(e) => handleSelectSite(s.id, e.target.checked)}
                         onClick={(e) => e.stopPropagation()}
-                        className="absolute -left-1 -top-1 z-10 h-3 w-3 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
+                        className="absolute -left-1.5 -top-1.5 z-10 h-4 w-4 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
                       />
                     ) : null}
                     <button
                       type="button"
                       onClick={() => router.push(buildSiteDetailHref(s.id))}
-                      className="relative w-full rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-10 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
+                      className="relative min-h-[4.5rem] w-full rounded border border-zinc-200 bg-white/60 px-2.5 py-2.5 pr-12 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
                         deprMap[s.id]
                           ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
                           : ''
                       }`}
                     >
-                    <div className="absolute left-1 top-1">
+                    <div className="absolute left-1.5 top-1.5">
                       <span
-                        className={`h-2.5 w-2.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
+                        className={`h-3.5 w-3.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
                         aria-hidden
                       />
                     </div>
-                    <div className="absolute right-1 top-1 flex items-center gap-1">
+                    <div className="absolute right-1.5 top-1.5 flex items-center gap-1.5">
                       {s.alertsEnabled && s.invoiceIssuedThisMonth === false ? (
                         <span
-                          className="mh-alert-dot mh-alert-dot-invoice mh-alert-dot-active"
+                          className="mh-alert-dot mh-alert-dot-invoice mh-alert-dot-active scale-125"
                           title="請求書未発行（当月）"
                         />
                       ) : null}
                       {s.alertsEnabled && s.reportIssuedThisMonth === false ? (
                         <span
-                          className="mh-alert-dot mh-alert-dot-report mh-alert-dot-active"
+                          className="mh-alert-dot mh-alert-dot-report mh-alert-dot-active scale-125"
                           title="報告書未発行（当月）"
                         />
                       ) : null}
                       {s.alertsEnabled && s.unassignedThisMonth ? (
                         <span
-                          className="mh-alert-dot mh-alert-dot-unassigned mh-alert-dot-active"
+                          className="mh-alert-dot mh-alert-dot-unassigned mh-alert-dot-active scale-125"
                           title="当月 現場未配置"
                         />
                       ) : null}
                     </div>
 
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="min-w-0 flex-1 truncate">{s.name}</div>
-                      <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex items-start justify-between gap-1.5 pt-3">
+                      <div className="min-w-0 flex-1 truncate text-[11px] leading-5">{s.name}</div>
+                      <div className="flex shrink-0 items-center gap-1.5">
                         {s.caution?.trim() ? (
-                          <span className="rounded-md border border-red-200 px-1 py-0.5 text-[9px] text-red-700 dark:border-red-900 dark:text-red-300">
+                          <span className="rounded-md border border-red-200 px-1.5 py-0.5 text-[10px] leading-none text-red-700 dark:border-red-900 dark:text-red-300">
                             注意
                           </span>
                         ) : null}
 
                         {s.alertsEnabled && s.paceNotConsumedAlert ? (
-                          <span className="rounded-md border border-red-200 px-1 py-0.5 text-[9px] text-red-700 dark:border-red-900 dark:text-red-300">
+                          <span className="rounded-md border border-red-200 px-1.5 py-0.5 text-[10px] leading-none text-red-700 dark:border-red-900 dark:text-red-300">
                             ペース未
                           </span>
                         ) : null}
 
                         {deprMap[s.id] ? (
                           <span
-                            className={`rounded-md border px-1 py-0.5 text-[9px] tabular-nums ${
+                            className={`rounded-md border px-1.5 py-0.5 text-[10px] leading-none tabular-nums ${
                               deprMap[s.id].alert
                                 ? 'border-red-200 text-red-700 dark:border-red-900 dark:text-red-300'
                                 : 'border-zinc-200 text-zinc-600 dark:border-zinc-800 dark:text-zinc-300'
