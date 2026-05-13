@@ -120,6 +120,8 @@ model ScheduleChangeHistory {
   targetLabel       String   @default("")
   beforeValue       String   @default("")
   afterValue        String   @default("")
+  beforeGroups      Json?
+  afterGroups       Json?
   editorLabel       String   @default("")
   editorIpHash      String?
   editorUserAgentHash String?
