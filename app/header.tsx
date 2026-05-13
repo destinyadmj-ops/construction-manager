@@ -496,10 +496,12 @@ export default function AppHeader() {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
   }, [pathname, searchParams]);
-  const storedScheduleBackHref = useMemo(() => {
-    if (typeof window === 'undefined') return null;
+  const [storedScheduleBackHref, setStoredScheduleBackHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const stored = readStoredScheduleReturn();
-    return stored?.href && stored.href !== routeKey ? stored.href : null;
+    setStoredScheduleBackHref(stored?.href && stored.href !== routeKey ? stored.href : null);
   }, [routeKey]);
 
   const navIntentRef = useRef<'push' | 'back' | 'forward' | null>(null);
