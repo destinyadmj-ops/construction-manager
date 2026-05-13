@@ -2671,7 +2671,7 @@ function WeekHubInner() {
   }, [isUndoRedoBusy, redo, redoStack.length, setRedoAction, setUndoAction, undo, undoStack.length]);
 
   return (
-    <div className="min-h-[calc(100vh-56px)] overflow-x-hidden bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+    <div className="min-h-[calc(100vh-56px)] bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50" style={{ overflowX: 'clip' }}>
       <div className="w-full min-w-0 px-2 py-3 sm:px-3 sm:py-4 lg:px-6">
         {isOffline ? (
           <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
@@ -4550,9 +4550,11 @@ function MonthGrid({
   const grid = data?.grid ?? {};
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const topScrollbarRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
   const stickyStackRef = useRef<HTMLDivElement | null>(null);
   const [bodyTopInset, setBodyTopInset] = useState(0);
+  const [topScrollbarMetrics, setTopScrollbarMetrics] = useState({ contentWidth: 0, viewportWidth: 0 });
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
@@ -4584,6 +4586,32 @@ function MonthGrid({
   }, [monthKey]);
 
   useEffect(() => {
+    const body = scrollRootRef.current;
+    const content = body?.firstElementChild;
+    if (!body || !(content instanceof HTMLElement)) return;
+
+    const apply = () => {
+      const next = {
+        contentWidth: body.scrollWidth,
+        viewportWidth: body.clientWidth,
+      };
+      setTopScrollbarMetrics((prev) =>
+        prev.contentWidth === next.contentWidth && prev.viewportWidth === next.viewportWidth ? prev : next,
+      );
+    };
+
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(body);
+    ro.observe(content);
+    window.addEventListener('resize', apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, [monthKey, users.length]);
+
+  useEffect(() => {
     if (!selectedUserId) return;
     const root = scrollRootRef.current;
     if (!root) return;
@@ -4604,6 +4632,7 @@ function MonthGrid({
     if (syncingRef.current) return;
     syncingRef.current = 1;
     syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
+    syncScrollLeft(headerScrollRef.current, topScrollbarRef.current);
     window.requestAnimationFrame(() => {
       syncingRef.current = 0;
     });
@@ -4613,6 +4642,17 @@ function MonthGrid({
     if (syncingRef.current) return;
     syncingRef.current = 1;
     syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
+    syncScrollLeft(scrollRootRef.current, topScrollbarRef.current);
+    window.requestAnimationFrame(() => {
+      syncingRef.current = 0;
+    });
+  }, [syncScrollLeft]);
+
+  const onTopScrollbarScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = 1;
+    syncScrollLeft(topScrollbarRef.current, headerScrollRef.current);
+    syncScrollLeft(topScrollbarRef.current, scrollRootRef.current);
     window.requestAnimationFrame(() => {
       syncingRef.current = 0;
     });
@@ -4698,6 +4738,19 @@ function MonthGrid({
             </div>
           </div>
         </div>
+
+        {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
+          <div className="border-b border-zinc-400 bg-white/90 px-2 py-1 dark:border-zinc-600 dark:bg-black/90">
+            <div
+              ref={topScrollbarRef}
+              className="h-4 overflow-x-auto overflow-y-hidden"
+              onScroll={onTopScrollbarScroll}
+              data-testid="month-grid-top-scrollbar"
+            >
+              <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Body: horizontal scroll */}

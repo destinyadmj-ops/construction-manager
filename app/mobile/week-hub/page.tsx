@@ -501,6 +501,33 @@ function MobileWeekHubInner() {
   }, [weekGridPrefs.cellMinW, weekGridPrefs.nameColW]);
 
   const scheduleCellFontSize = 'var(--weekhub-cell-font-size, 12px)';
+  const weekGridHeaderScrollRef = useRef<HTMLDivElement | null>(null);
+  const weekGridBodyScrollRef = useRef<HTMLDivElement | null>(null);
+  const weekGridScrollSyncRef = useRef<0 | 1>(0);
+
+  const syncWeekGridScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to) return;
+    const left = from.scrollLeft;
+    if (to.scrollLeft !== left) to.scrollLeft = left;
+  }, []);
+
+  const onWeekGridHeaderScroll = useCallback(() => {
+    if (weekGridScrollSyncRef.current) return;
+    weekGridScrollSyncRef.current = 1;
+    syncWeekGridScrollLeft(weekGridHeaderScrollRef.current, weekGridBodyScrollRef.current);
+    window.requestAnimationFrame(() => {
+      weekGridScrollSyncRef.current = 0;
+    });
+  }, [syncWeekGridScrollLeft]);
+
+  const onWeekGridBodyScroll = useCallback(() => {
+    if (weekGridScrollSyncRef.current) return;
+    weekGridScrollSyncRef.current = 1;
+    syncWeekGridScrollLeft(weekGridBodyScrollRef.current, weekGridHeaderScrollRef.current);
+    window.requestAnimationFrame(() => {
+      weekGridScrollSyncRef.current = 0;
+    });
+  }, [syncWeekGridScrollLeft]);
 
   useEffect(() => {
     const toolbar = toolbarRef.current;
@@ -651,121 +678,145 @@ function MobileWeekHubInner() {
             ) : (
               <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
                 <div
-                  className="grid"
-                  style={{ gridTemplateColumns: weekGridTemplateColumns, minWidth: `${weekGridMinWidth}px` }}
+                  className="sticky z-20 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
+                  style={{ top: `${toolbarHeight}px` }}
                 >
                   <div
-                    className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400"
-                    style={{ minHeight: `${weekGridCellMinH}px`, top: `${toolbarHeight}px` }}
+                    ref={weekGridHeaderScrollRef}
+                    className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+                    onScroll={onWeekGridHeaderScroll}
+                    data-testid="mobile-week-grid-header-scroll"
                   >
-                    従業員
-                  </div>
-                  {dayLabels.map((day) => (
                     <div
-                      key={`header:${day.key}`}
-                      className={`sticky z-20 border-b border-l border-zinc-200 bg-white px-2 py-3 text-center text-xs dark:border-zinc-800 dark:bg-black ${
-                        day.isSun
-                          ? 'text-red-600 dark:text-red-400'
-                          : day.isSat
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-zinc-500 dark:text-zinc-400'
-                      }`}
-                      style={{ minHeight: `${weekGridCellMinH}px`, top: `${toolbarHeight}px` }}
+                      className="grid"
+                      style={{ gridTemplateColumns: weekGridTemplateColumns, minWidth: `${weekGridMinWidth}px` }}
                     >
-                      <div>{day.dow}</div>
-                      <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{day.dayNum}</div>
-                    </div>
-                  ))}
-
-                  {schedule.users.map((user) => {
-                    const isCurrentUser = user.id === authUser?.id;
-                    return (
-                      <Fragment key={user.id}>
+                      <div
+                        className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400"
+                        style={{ minHeight: `${weekGridCellMinH}px` }}
+                      >
+                        従業員
+                      </div>
+                      {dayLabels.map((day) => (
                         <div
-                          className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-3 py-3 text-sm font-medium dark:border-zinc-800 ${
-                            isCurrentUser ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-white dark:bg-black'
+                          key={`header:${day.key}`}
+                          className={`border-l border-zinc-200 bg-white px-2 py-3 text-center text-xs dark:border-zinc-800 dark:bg-black ${
+                            day.isSun
+                              ? 'text-red-600 dark:text-red-400'
+                              : day.isSat
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-zinc-500 dark:text-zinc-400'
                           }`}
                           style={{ minHeight: `${weekGridCellMinH}px` }}
                         >
-                          {userLabel(user)}
+                          <div>{day.dow}</div>
+                          <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{day.dayNum}</div>
                         </div>
-                        {dayLabels.map((day) => {
-                          const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
-                          const entryTargets = resolveScheduleEntryTargets(entries, siteIdByScheduleEntry);
-                          const linkedTargets = entryTargets.filter(isLinkedScheduleEntryTarget);
-                          return (
-                            <div
-                              key={`${user.id}:${day.key}`}
-                              className={`border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
-                                isCurrentUser ? 'bg-blue-50/60 dark:bg-blue-950/10' : ''
-                              }`}
-                              style={{ minHeight: `${weekGridCellMinH}px` }}
-                            >
-                              {entries.length > 0 ? (
-                                linkedTargets.length > 1 ? (
-                                  <button
-                                    type="button"
-                                    onClick={(event) =>
-                                      openCellEntryMenu(
-                                        event,
-                                        `${userLabel(user)} / ${day.key}`,
-                                        linkedTargets,
-                                      )
-                                    }
-                                    className="w-full rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-left leading-snug dark:border-zinc-700 dark:bg-zinc-900"
-                                    style={{ fontSize: scheduleCellFontSize }}
-                                    title="現場一覧を開く"
-                                    aria-haspopup="menu"
-                                    aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
-                                    data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
-                                  >
-                                    <div className="space-y-1">
-                                      {linkedTargets.slice(0, 2).map((target) => (
-                                        <div key={`${user.id}:${day.key}:${target.entry}`} className="truncate">
-                                          {target.entry}
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  ref={weekGridBodyScrollRef}
+                  className="overflow-x-auto"
+                  onScroll={onWeekGridBodyScroll}
+                  data-testid="mobile-week-grid-body-scroll"
+                >
+                  <div
+                    className="grid"
+                    style={{ gridTemplateColumns: weekGridTemplateColumns, minWidth: `${weekGridMinWidth}px` }}
+                  >
+                    {schedule.users.map((user) => {
+                      const isCurrentUser = user.id === authUser?.id;
+                      return (
+                        <Fragment key={user.id}>
+                          <div
+                            className={`sticky left-0 z-10 border-b border-r border-zinc-200 px-3 py-3 text-sm font-medium dark:border-zinc-800 ${
+                              isCurrentUser ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-white dark:bg-black'
+                            }`}
+                            style={{ minHeight: `${weekGridCellMinH}px` }}
+                          >
+                            {userLabel(user)}
+                          </div>
+                          {dayLabels.map((day) => {
+                            const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
+                            const entryTargets = resolveScheduleEntryTargets(entries, siteIdByScheduleEntry);
+                            const linkedTargets = entryTargets.filter(isLinkedScheduleEntryTarget);
+                            return (
+                              <div
+                                key={`${user.id}:${day.key}`}
+                                className={`border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
+                                  isCurrentUser ? 'bg-blue-50/60 dark:bg-blue-950/10' : ''
+                                }`}
+                                style={{ minHeight: `${weekGridCellMinH}px` }}
+                              >
+                                {entries.length > 0 ? (
+                                  linkedTargets.length > 1 ? (
+                                    <button
+                                      type="button"
+                                      onClick={(event) =>
+                                        openCellEntryMenu(
+                                          event,
+                                          `${userLabel(user)} / ${day.key}`,
+                                          linkedTargets,
+                                        )
+                                      }
+                                      className="w-full rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-left leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                      style={{ fontSize: scheduleCellFontSize }}
+                                      title="現場一覧を開く"
+                                      aria-haspopup="menu"
+                                      aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
+                                      data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
+                                    >
+                                      <div className="space-y-1">
+                                        {linkedTargets.slice(0, 2).map((target) => (
+                                          <div key={`${user.id}:${day.key}:${target.entry}`} className="truncate">
+                                            {target.entry}
+                                          </div>
+                                        ))}
+                                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                          {linkedTargets.length}件の現場から選択
                                         </div>
-                                      ))}
-                                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                                        {linkedTargets.length}件の現場から選択
                                       </div>
+                                    </button>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {entryTargets.map((target) =>
+                                        target.siteId ? (
+                                          <button
+                                            key={`${user.id}:${day.key}:${target.entry}`}
+                                            type="button"
+                                            onClick={() => handleScheduleEntryClick(target.entry)}
+                                            className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                            style={{ fontSize: scheduleCellFontSize }}
+                                            title="現場詳細を開く"
+                                          >
+                                            {target.entry}
+                                          </button>
+                                        ) : (
+                                          <div
+                                            key={`${user.id}:${day.key}:${target.entry}`}
+                                            className="rounded border border-dashed border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                                            style={{ fontSize: scheduleCellFontSize }}
+                                            title="台帳未紐付けの予定"
+                                          >
+                                            {target.entry}
+                                          </div>
+                                        ),
+                                      )}
                                     </div>
-                                  </button>
+                                  )
                                 ) : (
-                                  <div className="space-y-1">
-                                    {entryTargets.map((target) =>
-                                      target.siteId ? (
-                                        <button
-                                          key={`${user.id}:${day.key}:${target.entry}`}
-                                          type="button"
-                                          onClick={() => handleScheduleEntryClick(target.entry)}
-                                          className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
-                                          style={{ fontSize: scheduleCellFontSize }}
-                                          title="現場詳細を開く"
-                                        >
-                                          {target.entry}
-                                        </button>
-                                      ) : (
-                                        <div
-                                          key={`${user.id}:${day.key}:${target.entry}`}
-                                          className="rounded border border-dashed border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
-                                          style={{ fontSize: scheduleCellFontSize }}
-                                          title="台帳未紐付けの予定"
-                                        >
-                                          {target.entry}
-                                        </div>
-                                      ),
-                                    )}
-                                  </div>
-                                )
-                              ) : (
-                                <div className="text-zinc-300 dark:text-zinc-700">-</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </Fragment>
-                    );
-                  })}
+                                  <div className="text-zinc-300 dark:text-zinc-700">-</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
