@@ -21,11 +21,15 @@ type SummaryItem = {
   photoCount: number;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   const userId = await requireUser();
   if (!userId) {
     return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
+
+  const url = new URL(request.url);
+  const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
+  const siteKind = kindParam === 'daily' ? 'DAILY' : kindParam === 'normal' ? 'NORMAL' : null;
 
   const groups = await prisma.storedDocument.groupBy({
     by: ['siteId'],
@@ -46,7 +50,7 @@ export async function GET() {
     .map((group) => group.siteId)
     .filter((id): id is string => !!id && id.trim() !== '');
   const sites = await prisma.site.findMany({
-    where: { id: { in: siteIds } },
+    where: { id: { in: siteIds }, ...(siteKind ? { kind: siteKind } : {}) },
     select: { id: true, name: true, companyName: true },
   });
   const siteMap: Record<string, { name: string; companyName: string | null }> = {};
