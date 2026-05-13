@@ -38,6 +38,12 @@ import {
   type WeekGridCellBg as CellBg,
   type WeekGridTextColor as CellTextColor,
 } from '@/shared/week-grid-prefs';
+import {
+  consumeForceDesktopWeekHomeOnce,
+  getCurrentPathWithSearch,
+  readStoredScheduleReturn,
+  writeStoredScheduleReturn,
+} from '@/shared/schedule-return';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { useHeaderActions } from './header-actions';
 import { writeCachedUserCandidates } from './user-candidate-cache';
@@ -608,11 +614,7 @@ function normalizeWeekHubEditingCellState(value: unknown): WeekHubEditingCellSta
   return { ...base, slotIndex };
 }
 
-function readWeekHubHistoryState(): WeekHubHistoryState | null {
-  if (typeof window === 'undefined') return null;
-  const rawState = window.history.state;
-  if (!rawState || typeof rawState !== 'object') return null;
-  const raw = (rawState as Record<string, unknown>)[WEEK_HUB_HISTORY_STATE_KEY];
+function normalizeWeekHubHistoryState(raw: unknown): WeekHubHistoryState | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
   if (!isViewMode(obj.mode) || !isScheduleKind(obj.scheduleKind) || !parseWeekHubCursorDate(obj.cursorDate)) {
@@ -631,6 +633,14 @@ function readWeekHubHistoryState(): WeekHubHistoryState | null {
     editingCell: normalizeWeekHubEditingCellState(obj.editingCell),
     editingInput: typeof obj.editingInput === 'string' ? obj.editingInput : '',
   };
+}
+
+function readWeekHubHistoryState(): WeekHubHistoryState | null {
+  if (typeof window === 'undefined') return null;
+  const rawState = window.history.state;
+  if (!rawState || typeof rawState !== 'object') return null;
+  const raw = (rawState as Record<string, unknown>)[WEEK_HUB_HISTORY_STATE_KEY];
+  return normalizeWeekHubHistoryState(raw);
 }
 
 function formatHistoryDateTime(value: string) {
@@ -827,7 +837,22 @@ function WeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
-  const initialHistoryStateRef = useRef<WeekHubHistoryState | null>(typeof window === 'undefined' ? null : readWeekHubHistoryState());
+  const skipStoredDesktopRestoreRef = useRef(consumeForceDesktopWeekHomeOnce());
+  const currentDesktopHref = (() => {
+    const qs = searchParams.toString();
+    return qs ? `/?${qs}` : '/';
+  })();
+  const initialStoredDesktopState =
+    typeof window === 'undefined' || skipStoredDesktopRestoreRef.current
+      ? null
+      : (() => {
+          const stored = readStoredScheduleReturn();
+          if (!stored || stored.target !== 'desktop-week-hub' || stored.href !== currentDesktopHref) return null;
+          return normalizeWeekHubHistoryState(stored.state);
+        })();
+  const initialHistoryStateRef = useRef<WeekHubHistoryState | null>(
+    typeof window === 'undefined' ? null : readWeekHubHistoryState() ?? initialStoredDesktopState,
+  );
   const initialHistoryState = initialHistoryStateRef.current;
   const qsMode = searchParams.get('mode');
   const qsKind = searchParams.get('kind');
@@ -1681,6 +1706,11 @@ function WeekHubInner() {
         : {};
     try {
       window.history.replaceState({ ...currentState, [WEEK_HUB_HISTORY_STATE_KEY]: snapshot }, '', window.location.href);
+      writeStoredScheduleReturn({
+        target: 'desktop-week-hub',
+        href: getCurrentPathWithSearch(),
+        state: snapshot,
+      });
       historySnapshotJsonRef.current = nextJson;
     } catch {
       // ignore
@@ -1719,6 +1749,22 @@ function WeekHubInner() {
   }, [historyScopeKey]);
 
   const restoreFocusCell = editingCell ?? selectedCell;
+
+  useEffect(() => {
+    const onJumpCurrentWeek = () => {
+      setMode('week');
+      setScheduleKind('normal');
+      setCursorDate(new Date());
+      setSelectedUserId(null);
+      setSelectedCell(null);
+      setEditingCell(null);
+      setEditingInput('');
+      setSiteSuggestions([]);
+    };
+
+    window.addEventListener('masterHub:jumpCurrentWeek', onJumpCurrentWeek as EventListener);
+    return () => window.removeEventListener('masterHub:jumpCurrentWeek', onJumpCurrentWeek as EventListener);
+  }, []);
 
   useEffect(() => {
     if (!restoreFocusCell || mode === 'year') return;
