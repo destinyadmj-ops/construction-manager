@@ -30,11 +30,37 @@ export default function SiteReportsPage() {
   const searchParams = useSearchParams();
 
   const siteId = useMemo(() => (params?.siteId ?? '').trim(), [params]);
+  const scheduleKind = useMemo(() => {
+    const kindParam = (searchParams?.get('kind') ?? '').trim().toLowerCase();
+    return kindParam === 'daily' ? 'daily' : 'normal';
+  }, [searchParams]);
+  const monthParam = useMemo(() => {
+    const value = (searchParams?.get('month') ?? '').trim();
+    return /^\d{4}-\d{2}$/.test(value) ? value : null;
+  }, [searchParams]);
 
   const dateParam = useMemo(() => {
     const v = (searchParams?.get('date') ?? '').trim();
     return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
   }, [searchParams]);
+
+  const detailHref = useMemo(() => {
+    const sp = new URLSearchParams();
+    sp.set('kind', scheduleKind);
+    if (monthParam) sp.set('month', monthParam);
+    return `/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}`;
+  }, [monthParam, scheduleKind, siteId]);
+
+  const buildReportsHref = useCallback(
+    (date: string) => {
+      const sp = new URLSearchParams();
+      sp.set('kind', scheduleKind);
+      if (monthParam) sp.set('month', monthParam);
+      sp.set('date', date);
+      return `/site-ledger/${encodeURIComponent(siteId)}/reports?${sp.toString()}`;
+    },
+    [monthParam, scheduleKind, siteId],
+  );
 
   const [dateYmd, setDateYmd] = useState(() => dateParam ?? ymdInTokyo(new Date()));
   const [busy, setBusy] = useState(false);
@@ -95,7 +121,7 @@ export default function SiteReportsPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push(`/site-ledger/${encodeURIComponent(siteId)}`)}
+              onClick={() => router.push(detailHref)}
               className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
             >
               現場詳細へ戻る
@@ -110,7 +136,7 @@ export default function SiteReportsPage() {
             onChange={(e) => {
               const v = e.target.value;
               setDateYmd(v);
-              router.replace(`/site-ledger/${encodeURIComponent(siteId)}/reports?date=${encodeURIComponent(v)}`);
+              router.replace(buildReportsHref(v));
             }}
             className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs tabular-nums dark:border-zinc-800 dark:bg-black"
           />

@@ -1,7 +1,7 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 function formatClockTimeTokyo(value: string | null) {
   if (!value) return '—';
@@ -28,7 +28,12 @@ type InvoiceSearchItem = {
 
 export default function SiteFoldersPage() {
   const params = useParams<{ siteId: string }>();
+  const searchParams = useSearchParams();
   const siteId = params?.siteId ?? '';
+  const scheduleKind = useMemo(() => {
+    const kindParam = (searchParams.get('kind') ?? '').trim().toLowerCase();
+    return kindParam === 'daily' ? 'daily' : 'normal';
+  }, [searchParams]);
   const [inputName, setInputName] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [folders, setFolders] = useState<Array<{ dateYmd: string }>>([]);
@@ -56,7 +61,7 @@ export default function SiteFoldersPage() {
   useEffect(() => {
     if (!siteId || !selectedDate) return;
     // 従業員一覧
-    fetch('/api/users?kind=NORMAL', { cache: 'no-store' })
+    fetch(`/api/users?kind=${encodeURIComponent(scheduleKind)}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(j => setEmployees(Array.isArray(j.users) ? j.users : []));
     // 打刻
@@ -91,7 +96,7 @@ export default function SiteFoldersPage() {
           setInvoices([]);
         }
       });
-  }, [siteId, selectedDate]);
+  }, [scheduleKind, siteId, selectedDate]);
   return (
     <main className="mx-auto w-full max-w-screen-md px-4 py-4">
       <h1 className="text-lg font-bold mb-4">フォルダ管理（現場ID: {siteId}）</h1>
