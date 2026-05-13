@@ -4273,7 +4273,7 @@ function WeekGrid({
       <div
         ref={stickyStackRef}
         className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
       >
         {/* Week switch tabs: sticky stack top row */}
         <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
@@ -4617,7 +4617,7 @@ function MonthGrid({
       <div
         ref={stickyStackRef}
         className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
       >
         {/* Month switch: sticky stack top row */}
         <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
@@ -4958,7 +4958,7 @@ function YearGrid({
       <div
         ref={stickyStackRef}
         className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
       >
         {/* Month header row: sticky + horizontal-scroll synced */}
         <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
