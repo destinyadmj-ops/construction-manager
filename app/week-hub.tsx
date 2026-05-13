@@ -850,29 +850,12 @@ function WeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
-  const skipStoredDesktopRestoreRef = useRef(consumeForceDesktopWeekHomeOnce());
-  const currentDesktopHref = (() => {
-    const qs = searchParams.toString();
-    return qs ? `/?${qs}` : '/';
-  })();
-  const initialStoredDesktopState =
-    typeof window === 'undefined' || skipStoredDesktopRestoreRef.current
-      ? null
-      : (() => {
-          const stored = readStoredScheduleReturn();
-          if (!stored || stored.target !== 'desktop-week-hub' || stored.href !== currentDesktopHref) return null;
-          return normalizeWeekHubHistoryState(stored.state);
-        })();
-  const initialHistoryStateRef = useRef<WeekHubHistoryState | null>(
-    typeof window === 'undefined' ? null : readWeekHubHistoryState() ?? initialStoredDesktopState,
-  );
-  const initialHistoryState = initialHistoryStateRef.current;
   const qsMode = searchParams.get('mode');
   const qsKind = searchParams.get('kind');
-  const [mode, setMode] = useState<ViewMode>(() => initialHistoryState?.mode ?? (isViewMode(qsMode) ? qsMode : 'week'));
-  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(() => initialHistoryState?.scheduleKind ?? (typeof qsKind === 'string' && qsKind.toLowerCase() === 'daily' ? 'daily' : 'normal'));
+  const [mode, setMode] = useState<ViewMode>(() => (isViewMode(qsMode) ? qsMode : 'week'));
+  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(() => (typeof qsKind === 'string' && qsKind.toLowerCase() === 'daily' ? 'daily' : 'normal'));
   const [gridLayout, setGridLayout] = useState<GridLayout>('compact');
-  const [cursorDate, setCursorDate] = useState<Date>(() => parseWeekHubCursorDate(initialHistoryState?.cursorDate) ?? new Date());
+  const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [data, setData] = useState<ApiResponse | null>(null);
   const [monthData, setMonthData] = useState<MonthApiResponse | null>(null);
   const [yearData, setYearData] = useState<YearSummaryApiResponse | null>(null);
@@ -902,7 +885,7 @@ function WeekHubInner() {
     e.preventDefault();
     el.scrollTop += e.deltaY;
   }, []);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(() => initialHistoryState?.selectedUserId ?? ((qsUserId ?? '').trim() || null));
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(() => ((qsUserId ?? '').trim() || null));
   const [nameColW, setNameColW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.nameColW);
   // たたみ時のセル幅
   const [cellMinW, setCellMinW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinW);
@@ -929,11 +912,11 @@ function WeekHubInner() {
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
   const [isUndoRedoBusy, setIsUndoRedoBusy] = useState(false);
 
-  const [selectedCell, setSelectedCell] = useState<WeekHubSelectedCellState | null>(() => initialHistoryState?.selectedCell ?? null);
+  const [selectedCell, setSelectedCell] = useState<WeekHubSelectedCellState | null>(null);
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
   const [draggedCell, setDraggedCell] = useState<DraggedCellState | null>(null);
-  const [editingCell, setEditingCell] = useState<WeekHubEditingCellState | null>(() => initialHistoryState?.editingCell ?? null);
-  const [editingInput, setEditingInput] = useState(() => initialHistoryState?.editingInput ?? '');
+  const [editingCell, setEditingCell] = useState<WeekHubEditingCellState | null>(null);
+  const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [scheduleHistoryItems, setScheduleHistoryItems] = useState<ScheduleChangeHistoryItem[]>([]);
@@ -944,9 +927,39 @@ function WeekHubInner() {
   const [scheduleHistorySearch, setScheduleHistorySearch] = useState('');
   const [scheduleHistoryTargetFilter, setScheduleHistoryTargetFilter] = useState<'all' | 'スケジュール' | 'カラー'>('all');
 
-  const skipInitialModeSyncRef = useRef(Boolean(initialHistoryState));
-  const skipInitialKindSyncRef = useRef(Boolean(initialHistoryState));
-  const skipInitialUserSyncRef = useRef(Boolean(initialHistoryState));
+  const skipInitialModeSyncRef = useRef(false);
+  const skipInitialKindSyncRef = useRef(false);
+  const skipInitialUserSyncRef = useRef(false);
+  const didInitialHistoryRestoreRef = useRef(false);
+
+  useEffect(() => {
+    if (didInitialHistoryRestoreRef.current) return;
+    didInitialHistoryRestoreRef.current = true;
+    const currentDesktopHref = (() => {
+      const qs = searchParams.toString();
+      return qs ? `/?${qs}` : '/';
+    })();
+    const skipStoredDesktopRestore = consumeForceDesktopWeekHomeOnce();
+    const storedDesktopState = (() => {
+      if (skipStoredDesktopRestore) return null;
+      const stored = readStoredScheduleReturn();
+      if (!stored || stored.target !== 'desktop-week-hub' || stored.href !== currentDesktopHref) return null;
+      return normalizeWeekHubHistoryState(stored.state);
+    })();
+    const restoredState = readWeekHubHistoryState() ?? storedDesktopState;
+    if (!restoredState) return;
+
+    skipInitialModeSyncRef.current = true;
+    skipInitialKindSyncRef.current = true;
+    skipInitialUserSyncRef.current = true;
+    setMode(restoredState.mode);
+    setScheduleKind(restoredState.scheduleKind);
+    setCursorDate(parseWeekHubCursorDate(restoredState.cursorDate) ?? new Date());
+    setSelectedUserId(restoredState.selectedUserId ?? null);
+    setSelectedCell(restoredState.selectedCell ?? null);
+    setEditingCell(restoredState.editingCell ?? null);
+    setEditingInput(restoredState.editingInput ?? '');
+  }, [searchParams]);
 
   useEffect(() => {
     if (skipInitialModeSyncRef.current) {
