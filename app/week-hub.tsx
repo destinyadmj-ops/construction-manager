@@ -166,6 +166,8 @@ type ScheduleChangeHistoryItem = {
   targetLabel: string;
   beforeValue: string;
   afterValue: string;
+  beforeGroups?: ApiCellGroup[] | null;
+  afterGroups?: ApiCellGroup[] | null;
   editorLabel: string;
   editorHost: string;
   editorPlatform: string;
@@ -566,8 +568,91 @@ function formatHistoryCellValue(value: string) {
   return value === '（空）' ? '空欄' : value;
 }
 
-function formatHistoryChange(beforeValue: string, afterValue: string) {
-  return `${formatHistoryCellValue(beforeValue)} → ${formatHistoryCellValue(afterValue)}`;
+function formatHistoryGroupValue(group: ApiCellGroup | null | undefined) {
+  if (!group) return null;
+  const labels = group.items
+    .map((item) => {
+      const label = item.label.trim();
+      if (!label) return null;
+      return normalizeScheduleCellEntryKind(item.kind) === 'note' ? `追記: ${label}` : label;
+    })
+    .filter((label): label is string => Boolean(label));
+  return formatScheduleCellGroupDisplayValue(labels, group.note);
+}
+
+function formatHistoryGroupsValue(groups: ApiCellGroup[] | null | undefined, fallbackValue: string) {
+  const parts = (groups ?? [])
+    .map((group) => formatHistoryGroupValue(group))
+    .filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(' | ') : formatHistoryCellValue(fallbackValue);
+}
+
+function formatHistoryChange(
+  beforeValue: string,
+  afterValue: string,
+  beforeGroups?: ApiCellGroup[] | null,
+  afterGroups?: ApiCellGroup[] | null,
+) {
+  return `${formatHistoryGroupsValue(beforeGroups, beforeValue)} → ${formatHistoryGroupsValue(afterGroups, afterValue)}`;
+}
+
+function renderHistoryCellValue(value: string, groups?: ApiCellGroup[] | null): ReactNode {
+  const normalizedGroups = (groups ?? [])
+    .map((group) => ({
+      items: group.items.filter((item) => item.label.trim().length > 0).slice(0, MAX_GROUP_ITEMS),
+      note: normalizeScheduleCellNote(group.note),
+    }))
+    .filter((group) => group.items.length > 0)
+    .slice(0, MAX_CELL_GROUPS);
+
+  if (normalizedGroups.length === 0) return formatHistoryCellValue(value);
+
+  return (
+    <div className="space-y-1">
+      {normalizedGroups.map((group, groupIndex) => {
+        const noteOnly = group.items.every((item) => normalizeScheduleCellEntryKind(item.kind) === 'note');
+        return (
+          <div
+            key={`history-group:${value}:${groupIndex}`}
+            className={`rounded-md border px-2 py-1 ${
+              noteOnly
+                ? 'border-amber-200/80 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20'
+                : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
+            }`}
+          >
+            <div className="whitespace-normal break-words leading-snug text-zinc-800 dark:text-zinc-200">
+              {group.items.map((item, itemIndex) => {
+                const kind = normalizeScheduleCellEntryKind(item.kind);
+                return (
+                  <Fragment key={`history-item:${value}:${groupIndex}:${itemIndex}`}>
+                    {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
+                    {kind === 'note' ? (
+                      <>
+                        <span className="text-red-600 dark:text-red-400">追記:</span>{' '}
+                        <span className="text-zinc-700 dark:text-zinc-200">{item.label}</span>
+                      </>
+                    ) : (
+                      <span className={labelTextClass(item.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
+                        {item.label}
+                      </span>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {group.note ? (
+                <>
+                  {group.items.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
+                  <span className="text-red-600 dark:text-red-400">追記:</span>{' '}
+                  <span className="text-zinc-700 dark:text-zinc-200">{group.note}</span>
+                  {group.items.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function formatCellSlotsValue(cell: ApiCell | null | undefined) {
@@ -718,7 +803,7 @@ function WeekHubInner() {
 
   const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
   const [userOrder, setUserOrder] = useState<string[]>([]);
-  const userOrderLoadedRef = useRef(false);
+  const userOrderLoadedScopeRef = useRef<string | null>(null);
   const userOrderSavingRef = useRef(false);
   const pendingUserOrderRef = useRef<string[] | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
@@ -821,7 +906,15 @@ function WeekHubInner() {
     return `week-hub:${scheduleKind}:userOrder`;
   }, [scheduleKind]);
 
+  const currentUserOrderScope = effectiveUserId ? `${effectiveUserId}:${userOrderKey}` : null;
+
   const resolveEffectiveUserId = useCallback(async () => {
+    const viewerUserId = (authMeUser?.id ?? '').trim();
+    if (viewerUserId) {
+      setEffectiveUserId(viewerUserId);
+      return viewerUserId;
+    }
+
     const q = (qsUserId ?? '').trim();
     if (q) {
       setEffectiveUserId(q);
@@ -837,11 +930,14 @@ function WeekHubInner() {
 
     setEffectiveUserId(firstVisibleUserId);
     return firstVisibleUserId;
-  }, [data?.users, mode, monthData?.users, qsUserId, yearData?.users]);
+  }, [authMeUser?.id, data?.users, mode, monthData?.users, qsUserId, yearData?.users]);
 
   const loadUserOrder = useCallback(
     async (userId: string | null) => {
       if (!userId) return;
+      const scope = `${userId}:${userOrderKey}`;
+      if (userOrderLoadedScopeRef.current === scope) return;
+
       try {
         const r = await fetch(
           `/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(userOrderKey)}`,
@@ -856,10 +952,11 @@ function WeekHubInner() {
           .map((x) => (typeof x === 'string' ? x.trim() : ''))
           .filter((x) => x.length > 0)
           .slice(0, 1000);
-        userOrderLoadedRef.current = true;
         setUserOrder(parsed);
       } catch {
         // ignore
+      } finally {
+        userOrderLoadedScopeRef.current = scope;
       }
     },
     [userOrderKey],
@@ -992,6 +1089,10 @@ function WeekHubInner() {
     },
     [userOrderKey],
   );
+
+  useEffect(() => {
+    userOrderLoadedScopeRef.current = null;
+  }, [userOrderKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1534,9 +1635,9 @@ function WeekHubInner() {
       return [
         item.projectLabel,
         item.targetLabel,
-        item.beforeValue,
-        item.afterValue,
-        formatHistoryChange(item.beforeValue, item.afterValue),
+        formatHistoryGroupsValue(item.beforeGroups, item.beforeValue),
+        formatHistoryGroupsValue(item.afterGroups, item.afterValue),
+        formatHistoryChange(item.beforeValue, item.afterValue, item.beforeGroups, item.afterGroups),
         item.targetUserLabel,
         item.editorLabel,
         item.dayYmd,
@@ -1613,13 +1714,13 @@ function WeekHubInner() {
   }, [apiKind, currentUsersForOrder]);
 
   useEffect(() => {
-    if (!userOrderLoadedRef.current) return;
-    if (!effectiveUserId) return;
+    if (!currentUserOrderScope) return;
+    if (userOrderLoadedScopeRef.current !== currentUserOrderScope) return;
     const next = normalizeUserOrder(userOrder, currentUsersForOrder);
     if (arrayEqual(next, userOrder)) return;
     setUserOrder(next);
     void saveUserOrder(effectiveUserId, next);
-  }, [currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
+  }, [currentUserOrderScope, currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -1957,6 +2058,7 @@ function WeekHubInner() {
           slot2: targetCell.slot2,
           slot1Color: targetCell.color1,
           slot2Color: targetCell.color2,
+          groups: apiCellToGroups(targetCell),
         }),
       });
       const json = (await r.json().catch(() => null)) as
@@ -4701,6 +4803,19 @@ function MonthGrid({
           </div>
         </div>
 
+        {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
+          <div className="border-b border-zinc-400 bg-white/90 px-2 py-1 dark:border-zinc-600 dark:bg-black/90">
+            <div
+              ref={topScrollbarRef}
+              className="h-4 overflow-x-auto overflow-y-hidden"
+              onScroll={onTopScrollbarScroll}
+              data-testid="month-grid-top-scrollbar"
+            >
+              <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
+            </div>
+          </div>
+        ) : null}
+
         {/* Date header row: sticky stack second row */}
         <div className="border-b border-zinc-400 dark:border-zinc-600">
           <div
@@ -4738,19 +4853,6 @@ function MonthGrid({
             </div>
           </div>
         </div>
-
-        {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
-          <div className="border-b border-zinc-400 bg-white/90 px-2 py-1 dark:border-zinc-600 dark:bg-black/90">
-            <div
-              ref={topScrollbarRef}
-              className="h-4 overflow-x-auto overflow-y-hidden"
-              onScroll={onTopScrollbarScroll}
-              data-testid="month-grid-top-scrollbar"
-            >
-              <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {/* Body: horizontal scroll */}
@@ -7341,8 +7443,8 @@ function ScheduleHistoryPanel({
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{formatHistoryDateTime(item.createdAt)}</div>
                     </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.beforeValue)}</td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{formatHistoryCellValue(item.afterValue)}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{renderHistoryCellValue(item.beforeValue, item.beforeGroups)}</td>
+                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{renderHistoryCellValue(item.afterValue, item.afterGroups)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.editorLabel}</div>
                     </td>
