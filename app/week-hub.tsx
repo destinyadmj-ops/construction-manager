@@ -4986,7 +4986,6 @@ function YearGrid({
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
-  const monthsSignature = useMemo(() => months.join('|'), [months]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
