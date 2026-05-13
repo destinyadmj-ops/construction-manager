@@ -1755,6 +1755,11 @@ function WeekHubInner() {
     [resolveSiteFromText, router, scheduleKind, selectedUserId, showCellActionMsg, writeWeekHubHistorySnapshot],
   );
 
+  const openDailySiteRegistration = useCallback(() => {
+    writeWeekHubHistorySnapshot();
+    router.push('/management?kind=daily&open=daily-site');
+  }, [router, writeWeekHubHistorySnapshot]);
+
   useEffect(() => {
     // Keep Undo/Redo local to the current view scope.
     setUndoStack([]);
@@ -1765,6 +1770,7 @@ function WeekHubInner() {
 
   useEffect(() => {
     const onJumpCurrentWeek = () => {
+      consumeForceDesktopWeekHomeOnce();
       setMode('week');
       setScheduleKind('normal');
       setCursorDate(new Date());
@@ -3724,6 +3730,7 @@ function WeekHubInner() {
                   weekStart={weekStart}
                   monthWeekTabs={monthWeekTabs}
                   apiKind={apiKind}
+                  onOpenDailySiteRegistration={openDailySiteRegistration}
                   gridLayout={gridLayout}
                   nameColW={nameColW}
                   cellMinW={cellMinW}
@@ -4486,6 +4493,7 @@ function WeekGrid({
   weekStart,
   monthWeekTabs,
   apiKind,
+  onOpenDailySiteRegistration,
   gridLayout,
   nameColW,
   cellMinW,
@@ -4539,6 +4547,7 @@ function WeekGrid({
   weekStart: Date;
   monthWeekTabs: { monthKey: string; tabs: Date[] };
   apiKind: 'NORMAL' | 'DAILY';
+  onOpenDailySiteRegistration: () => void;
   gridLayout: GridLayout;
   nameColW: number;
   cellMinW: number;
@@ -4689,13 +4698,26 @@ function WeekGrid({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={onToday}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-            >
-              今週
-            </button>
+            <div className="flex items-center gap-2">
+              {apiKind === 'DAILY' ? (
+                <button
+                  type="button"
+                  onClick={onOpenDailySiteRegistration}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  title="日常現場を管理画面で登録"
+                >
+                  日常現場登録
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={onToday}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              >
+                今週
+              </button>
+            </div>
           </div>
         </div>
 

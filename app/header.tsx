@@ -2178,7 +2178,7 @@ export default function AppHeader() {
             )}
           </Link>
           <Link
-            href="/?mode=week"
+            href="/?mode=week&kind=normal"
             data-color-edit-slot="button"
             data-color-edit-id="header:nav:week"
             onClick={() => {
