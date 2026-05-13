@@ -22,6 +22,8 @@ import {
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
 import {
+  formatScheduleCellGroupDisplayValue,
+  normalizeScheduleCellNote,
   normalizeScheduleCellEntryKind,
   type ScheduleCellEntryKind,
 } from '@/shared/schedule-cell-entry';
@@ -55,7 +57,7 @@ type ApiCellEntry = {
   kind?: ScheduleCellEntryKind | null;
   syncSource?: ScheduleSyncSource | null;
 };
-type ApiCellGroup = { items: ApiCellEntry[] };
+type ApiCellGroup = { items: ApiCellEntry[]; note?: string | null };
 
 type ApiUser = { id: string; name: string | null; email: string | null };
 
@@ -140,6 +142,7 @@ type SlotContextMenuState = {
   companyName: string | null;
   entryKind: ScheduleCellEntryKind;
   groupIndex: number;
+  groupNote: string | null;
   mode: 'actions' | 'change-color' | 'assign-users' | 'related-sites' | 'append-note';
   selectedUserIds: string[];
   selectedSiblingNames: string[];
@@ -278,7 +281,7 @@ function createCellEntry(
 
 function cloneCellGroups(groups: ApiCellGroup[] | null | undefined): ApiCellGroup[] {
   return (groups ?? [])
-    .map((group) => ({ items: cloneCellGroupItems(group?.items) }))
+    .map((group) => ({ items: cloneCellGroupItems(group?.items), note: normalizeScheduleCellNote(group?.note) }))
     .filter((group) => group.items.length > 0);
 }
 
@@ -294,7 +297,7 @@ function apiCellToGroups(cell: ApiCell | null | undefined): ApiCellGroup[] {
 
 function apiCellGroupValue(group: ApiCellGroup | null | undefined) {
   const parts = cloneCellGroupItems(group?.items).map((item) => item.label);
-  return parts.length > 0 ? parts.join(' / ') : null;
+  return formatScheduleCellGroupDisplayValue(parts, group?.note);
 }
 
 function apiCellGroupsEqual(a: ApiCellGroup[] | null | undefined, b: ApiCellGroup[] | null | undefined) {
@@ -311,6 +314,7 @@ function apiCellGroupsEqual(a: ApiCellGroup[] | null | undefined, b: ApiCellGrou
       if (normalizeScheduleCellEntryKind(leftItems[itemIndex]?.kind) !== normalizeScheduleCellEntryKind(rightItems[itemIndex]?.kind)) return false;
       if (!scheduleSyncSourceEquals(leftItems[itemIndex]?.syncSource, rightItems[itemIndex]?.syncSource)) return false;
     }
+    if (normalizeScheduleCellNote(left[index]?.note) !== normalizeScheduleCellNote(right[index]?.note)) return false;
   }
   return true;
 }
@@ -417,6 +421,7 @@ function previewCellAction(input: {
             groupIndex !== hitGroupIndex
               ? group
               : {
+                  ...group,
                   items: group.items.map((entry, itemIndex) =>
                     itemIndex === hitItemIndex ? { ...entry, color: input.color } : entry,
                   ),
@@ -435,7 +440,7 @@ function previewCellAction(input: {
             .map((group, groupIndex) =>
               groupIndex !== hitGroupIndex
                 ? group
-                : { items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
+                : { ...group, items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
             )
             .filter((group) => group.items.length > 0),
         ),
@@ -449,7 +454,7 @@ function previewCellAction(input: {
               .map((group, groupIndex) =>
                 groupIndex !== hitGroupIndex
                   ? group
-                  : { items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
+                  : { ...group, items: group.items.filter((_, itemIndex) => itemIndex !== hitItemIndex) },
               )
               .filter((group) => group.items.length > 0),
           ),
@@ -468,7 +473,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createSiteGroupEntry()] },
+                : { ...group, items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
@@ -492,7 +497,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createSiteGroupEntry()] },
+                : { ...group, items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
@@ -514,7 +519,7 @@ function previewCellAction(input: {
             groups.map((group, groupIndex) =>
               groupIndex !== siblingGroupIndex
                 ? group
-                : { items: [...group.items, createSiteGroupEntry()] },
+                : { ...group, items: [...group.items, createSiteGroupEntry()] },
             ),
           ),
           changed: true,
@@ -5321,6 +5326,7 @@ function Row({
         beforeCell: ApiCell;
         groupIndex: number;
         entryKind: ScheduleCellEntryKind;
+        groupNote?: string | null;
       },
     ) => {
       event.preventDefault();
@@ -5340,10 +5346,11 @@ function Row({
         companyName: input.entryKind === 'site' ? siteFamilyLabelForName(input.siteName) : null,
         entryKind: input.entryKind,
         groupIndex: input.groupIndex,
+        groupNote: normalizeScheduleCellNote(input.groupNote),
         mode: 'actions',
         selectedUserIds: input.entryKind === 'site' ? assignedUserIdsForSite(input.day, input.siteName) : [],
         selectedSiblingNames: input.entryKind === 'site' ? siblingEntryNamesForSite(input.day, input.siteName) : [],
-        noteDraft: '',
+        noteDraft: normalizeScheduleCellNote(input.groupNote) ?? '',
       });
     },
     [assignedUserIdsForSite, isEditable, onNotify, siblingEntryNamesForSite, siteFamilyLabelForName],
@@ -5552,6 +5559,7 @@ function Row({
             groupIndex !== exactGroupIndex
               ? group
               : {
+                  ...group,
                   items: group.items.map((entry) =>
                     createCellEntry(entry.label, entry.color, {
                       kind: entry.kind,
@@ -5583,6 +5591,7 @@ function Row({
             groupIndex !== legacyFamilyGroupIndex
               ? group
               : {
+                  ...group,
                   items: group.items.map((entry) =>
                     createCellEntry(entry.label, entry.color, {
                       kind: entry.kind,
@@ -5743,6 +5752,7 @@ function Row({
       const anchorColor = currentColorByName.get(current.siteName) ?? current.color;
       const nextSyncSource = targetUser.id === user.id || !isParentEdit ? null : ownerSyncSource;
       const replacementGroup: ApiCellGroup = {
+        note: currentGroups[targetGroupIndex]?.note ?? null,
         items: selectedSites.map((option) =>
           createCellEntry(
             option.storedName,
@@ -5810,6 +5820,7 @@ function Row({
           groupIndex !== current.groupIndex
             ? group
             : {
+                ...group,
                 items: group.items.map((entry) =>
                   createCellEntry(entry.label, nextColor, { kind: entry.kind, syncSource: entry.syncSource }),
                 ),
@@ -5925,8 +5936,10 @@ function Row({
 
     const beforeCell = cloneApiCell(current.beforeCell);
     const beforeGroups = apiCellToGroups(beforeCell);
-    if (beforeGroups.length >= MAX_CELL_GROUPS) {
-      onNotify?.('満杯のため追加記入できません（4枠あり）');
+    const targetGroup = beforeGroups[current.groupIndex];
+    if (!targetGroup || !targetGroup.items.some((entry) => isSiteCellEntry(entry))) {
+      closeSlotContextMenu();
+      onNotify?.('対象の枠が見つかりません');
       return;
     }
 
@@ -5934,10 +5947,11 @@ function Row({
       targetUser: user,
       day: current.day,
       beforeCell,
-      nextCell: groupsToApiCell([
-        ...beforeGroups,
-        { items: [createCellEntry(noteText, 'default', { kind: 'note' })] },
-      ]),
+      nextCell: groupsToApiCell(
+        beforeGroups.map((group, groupIndex) =>
+          groupIndex !== current.groupIndex ? group : { ...group, note: noteText },
+        ),
+      ),
     });
     if (result.failed) {
       onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
@@ -5949,7 +5963,7 @@ function Row({
     }
 
     closeSlotContextMenu();
-    onNotify?.('追加記入を反映しました');
+    onNotify?.('追加記入を更新しました');
     void Promise.resolve(onAssigned()).catch(() => undefined);
   }
 
@@ -5962,7 +5976,7 @@ function Row({
         entryKind: ScheduleCellEntryKind;
         className: string;
         fontSize: string;
-        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number };
+        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number; groupNote?: string | null };
       },
     ) => {
       const contextInput = input.contextInput;
@@ -5975,6 +5989,7 @@ function Row({
               beforeCell: contextInput.beforeCell,
               groupIndex: contextInput.groupIndex,
               entryKind: input.entryKind,
+              groupNote: contextInput.groupNote,
             });
           }
         : undefined;
@@ -6048,8 +6063,16 @@ function Row({
                 : fullName,
           };
         });
-        const tooltipValue = renderedItems.map((item) => item.displayName).join('\n');
-        const displayValue = renderedItems.map((item) => item.displayName).join(' / ');
+        const groupNote = normalizeScheduleCellNote(group.note);
+        const tooltipValue = [
+          ...renderedItems.map((item) => item.displayName),
+          ...(groupNote ? [`追記: ${groupNote}`] : []),
+        ].join('\n');
+        const displayValue =
+          formatScheduleCellGroupDisplayValue(
+            renderedItems.map((item) => item.displayName),
+            groupNote,
+          ) ?? '';
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         return (
           <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
@@ -6064,7 +6087,7 @@ function Row({
                   : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
               }`,
               fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
-              contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex },
+              contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
           </div>
         );
@@ -6639,15 +6662,19 @@ function Row({
               >
                 {slotContextMenu.entryKind === 'site' ? '当該現場の色変更' : '当該追記の色変更'}
               </button>
+              {slotContextMenu.entryKind === 'site' ? (
               <button
                 type="button"
                 onClick={() => {
-                  setSlotContextMenu((current) => (current ? { ...current, mode: 'append-note', noteDraft: '' } : current));
+                  setSlotContextMenu((current) =>
+                    current ? { ...current, mode: 'append-note', noteDraft: current.groupNote ?? '' } : current,
+                  );
                 }}
                 className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
               >
                 追加記入
               </button>
+              ) : null}
               {slotContextMenu.entryKind === 'site' ? (
               <button
                 type="button"
@@ -6839,7 +6866,7 @@ function Row({
             </div>
           ) : slotContextMenu.mode === 'append-note' ? (
             <div className="mt-2 space-y-2">
-              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">このセルだけに表示する追記を追加</div>
+              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">この枠の表示名へ追記します</div>
               <input
                 type="text"
                 value={slotContextMenu.noteDraft}
@@ -6880,7 +6907,7 @@ function Row({
                   }}
                   className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                 >
-                  追加
+                  保存
                 </button>
               </div>
             </div>
