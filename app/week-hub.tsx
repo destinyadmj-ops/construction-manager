@@ -7584,10 +7584,11 @@ function ScheduleHistoryPanel({
             <table className="min-w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                  <th className="px-2 py-2 font-medium">いつ</th>
+                  <th className="px-2 py-2 font-medium">対象セル</th>
                   <th className="px-2 py-2 font-medium">編集前</th>
                   <th className="px-2 py-2 font-medium">編集後</th>
                   <th className="px-2 py-2 font-medium">誰が</th>
+                  <th className="px-2 py-2 font-medium">いつ</th>
                 </tr>
               </thead>
               <tbody>
@@ -7599,12 +7600,16 @@ function ScheduleHistoryPanel({
                     onPointerLeave={() => onItemHover?.(null)}
                   >
                     <td className="px-2 py-3">
-                      <div className="text-zinc-800 dark:text-zinc-100">{formatHistoryDateTime(item.createdAt)}</div>
+                      <div className="text-zinc-800 dark:text-zinc-100">{item.dayYmd}</div>
+                      <div className="mt-1 text-zinc-500 dark:text-zinc-400">{item.targetUserLabel}</div>
                     </td>
                     <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{renderHistoryCellValue(item.beforeValue, item.beforeGroups)}</td>
                     <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{renderHistoryCellValue(item.afterValue, item.afterGroups)}</td>
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{item.editorLabel}</div>
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="text-zinc-800 dark:text-zinc-100">{formatHistoryDateTime(item.createdAt)}</div>
                     </td>
                   </tr>
                 ))}

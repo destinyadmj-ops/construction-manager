@@ -503,6 +503,7 @@ export default function AppHeader() {
   const [navIndex, setNavIndex] = useState(0);
   const [navLen, setNavLen] = useState(1);
   const [historyOpenMode, setHistoryOpenMode] = useState<'preview' | 'panel' | null>(null);
+  const [historyPreviewPosition, setHistoryPreviewPosition] = useState<{ left: number; top: number } | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -593,9 +594,20 @@ export default function AppHeader() {
   const isHistoryOpen = historyOpenMode !== null;
   const isHistoryPanelOpen = historyOpenMode === 'panel';
 
+  const updateHistoryPreviewPosition = useCallback(() => {
+    const headerRect = headerRef.current?.getBoundingClientRect();
+    const buttonRect = historyButtonRef.current?.getBoundingClientRect();
+    if (!headerRect || !buttonRect) return;
+    setHistoryPreviewPosition({
+      left: Math.max(8, Math.round(headerRect.left + 8)),
+      top: Math.round(buttonRect.bottom + 6),
+    });
+  }, []);
+
   const closeHistoryPopover = useCallback(() => {
     actions.historyMenu?.onHover?.(null);
     setHistoryOpenMode(null);
+    setHistoryPreviewPosition(null);
   }, [actions.historyMenu]);
 
   const openHistoryPreview = useCallback(() => {
@@ -603,8 +615,21 @@ export default function AppHeader() {
     if (!actions.historyMenu.loaded && !actions.historyMenu.loading) {
       void actions.history?.onClick();
     }
+    updateHistoryPreviewPosition();
     setHistoryOpenMode('preview');
-  }, [actions.history, actions.historyMenu, historyOpenMode]);
+  }, [actions.history, actions.historyMenu, historyOpenMode, updateHistoryPreviewPosition]);
+
+  useEffect(() => {
+    if (historyOpenMode !== 'preview') return;
+
+    const update = () => updateHistoryPreviewPosition();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [historyOpenMode, updateHistoryPreviewPosition]);
 
   useEffect(() => {
     setHistoryOpenMode(null);
@@ -1773,10 +1798,6 @@ export default function AppHeader() {
                 if (!isHistoryButtonEnabled) return;
                 openHistoryPreview();
               }}
-              onPointerLeave={() => {
-                if (historyOpenMode !== 'preview') return;
-                closeHistoryPopover();
-              }}
             >
               <button
                 type="button"
@@ -1802,6 +1823,7 @@ export default function AppHeader() {
                     closeHistoryPopover();
                     return;
                   }
+                  updateHistoryPreviewPosition();
                   setHistoryOpenMode('preview');
                 }}
                 disabled={!isHistoryButtonEnabled}
@@ -1815,9 +1837,17 @@ export default function AppHeader() {
                 <div
                   ref={historyMenuRef}
                   data-color-edit-slot="border"
-                  className={`absolute left-0 top-full mt-1 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
-                    isHistoryPanelOpen ? (actions.historyPanel?.widthClassName ?? 'w-[480px]') : 'w-[560px] max-w-[min(92vw,560px)]'
+                  className={`${isHistoryPanelOpen ? 'absolute left-0 top-full mt-1' : 'fixed z-[90]'} overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
+                    isHistoryPanelOpen ? (actions.historyPanel?.widthClassName ?? 'w-[480px]') : 'w-[560px] max-w-[min(calc(100vw-16px),560px)]'
                   }`}
+                  style={
+                    isHistoryPanelOpen || !historyPreviewPosition
+                      ? undefined
+                      : {
+                          left: historyPreviewPosition.left,
+                          top: historyPreviewPosition.top,
+                        }
+                  }
                 >
                   {actions.history && !actions.historyPanel ? (
                     <button
@@ -1854,8 +1884,7 @@ export default function AppHeader() {
                               onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
                               onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
                             >
-                              <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
-                                <div className="text-zinc-500 dark:text-zinc-400">{new Date(it.at).toLocaleString()}</div>
+                              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
                                 <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
                                   {it.beforeLabel}
                                 </div>
