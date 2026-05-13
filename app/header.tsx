@@ -607,8 +607,8 @@ export default function AppHeader() {
   }, [actions.history, actions.historyMenu, historyOpenMode]);
 
   useEffect(() => {
-    closeHistoryPopover();
-  }, [closeHistoryPopover, routeKey]);
+    setHistoryOpenMode(null);
+  }, [routeKey]);
 
   useEffect(() => {
     setIsOverflowMenuOpen(false);

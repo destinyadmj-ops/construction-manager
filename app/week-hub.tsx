@@ -45,6 +45,20 @@ import { writeCachedUserCandidates } from './user-candidate-cache';
 type ViewMode = 'week' | 'month' | 'year';
 
 type ScheduleKind = 'normal' | 'daily';
+type WeekHubSelectedCellState = { userId: string; day: string };
+type WeekHubEditingCellState = { userId: string; day: string; slotIndex: number };
+type WeekHubHistoryState = {
+  v: 1;
+  mode: ViewMode;
+  scheduleKind: ScheduleKind;
+  cursorDate: string;
+  selectedUserId: string | null;
+  selectedCell: WeekHubSelectedCellState | null;
+  editingCell: WeekHubEditingCellState | null;
+  editingInput: string;
+};
+
+const WEEK_HUB_HISTORY_STATE_KEY = 'masterHub.weekHubState';
 
 type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
@@ -555,8 +569,68 @@ function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
 
+function isViewMode(value: unknown): value is ViewMode {
+  return value === 'week' || value === 'month' || value === 'year';
+}
+
+function isScheduleKind(value: unknown): value is ScheduleKind {
+  return value === 'normal' || value === 'daily';
+}
+
 function toYmd(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function parseWeekHubCursorDate(value: unknown) {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  const date = new Date(`${value.trim()}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeWeekHubSelectedCellState(value: unknown): WeekHubSelectedCellState | null {
+  if (!value || typeof value !== 'object') return null;
+  const obj = value as Record<string, unknown>;
+  const userId = typeof obj.userId === 'string' ? obj.userId.trim() : '';
+  const day = typeof obj.day === 'string' ? obj.day.trim() : '';
+  if (!userId || !day) return null;
+  return { userId, day };
+}
+
+function normalizeWeekHubEditingCellState(value: unknown): WeekHubEditingCellState | null {
+  const base = normalizeWeekHubSelectedCellState(value);
+  if (!base || !value || typeof value !== 'object') return null;
+  const obj = value as Record<string, unknown>;
+  const slotIndexRaw = obj.slotIndex;
+  const slotIndex =
+    typeof slotIndexRaw === 'number' && Number.isFinite(slotIndexRaw)
+      ? Math.max(0, Math.trunc(slotIndexRaw))
+      : 0;
+  return { ...base, slotIndex };
+}
+
+function readWeekHubHistoryState(): WeekHubHistoryState | null {
+  if (typeof window === 'undefined') return null;
+  const rawState = window.history.state;
+  if (!rawState || typeof rawState !== 'object') return null;
+  const raw = (rawState as Record<string, unknown>)[WEEK_HUB_HISTORY_STATE_KEY];
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  if (!isViewMode(obj.mode) || !isScheduleKind(obj.scheduleKind) || !parseWeekHubCursorDate(obj.cursorDate)) {
+    return null;
+  }
+  return {
+    v: 1,
+    mode: obj.mode,
+    scheduleKind: obj.scheduleKind,
+    cursorDate: String(obj.cursorDate),
+    selectedUserId:
+      typeof obj.selectedUserId === 'string' && obj.selectedUserId.trim().length > 0
+        ? obj.selectedUserId.trim()
+        : null,
+    selectedCell: normalizeWeekHubSelectedCellState(obj.selectedCell),
+    editingCell: normalizeWeekHubEditingCellState(obj.editingCell),
+    editingInput: typeof obj.editingInput === 'string' ? obj.editingInput : '',
+  };
 }
 
 function formatHistoryDateTime(value: string) {
@@ -753,10 +827,14 @@ function WeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
-  const [mode, setMode] = useState<ViewMode>('week');
-  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>('normal');
+  const initialHistoryStateRef = useRef<WeekHubHistoryState | null>(typeof window === 'undefined' ? null : readWeekHubHistoryState());
+  const initialHistoryState = initialHistoryStateRef.current;
+  const qsMode = searchParams.get('mode');
+  const qsKind = searchParams.get('kind');
+  const [mode, setMode] = useState<ViewMode>(() => initialHistoryState?.mode ?? (isViewMode(qsMode) ? qsMode : 'week'));
+  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(() => initialHistoryState?.scheduleKind ?? (typeof qsKind === 'string' && qsKind.toLowerCase() === 'daily' ? 'daily' : 'normal'));
   const [gridLayout, setGridLayout] = useState<GridLayout>('compact');
-  const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
+  const [cursorDate, setCursorDate] = useState<Date>(() => parseWeekHubCursorDate(initialHistoryState?.cursorDate) ?? new Date());
   const [data, setData] = useState<ApiResponse | null>(null);
   const [monthData, setMonthData] = useState<MonthApiResponse | null>(null);
   const [yearData, setYearData] = useState<YearSummaryApiResponse | null>(null);
@@ -786,7 +864,7 @@ function WeekHubInner() {
     e.preventDefault();
     el.scrollTop += e.deltaY;
   }, []);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(() => initialHistoryState?.selectedUserId ?? ((qsUserId ?? '').trim() || null));
   const [nameColW, setNameColW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.nameColW);
   // たたみ時のセル幅
   const [cellMinW, setCellMinW] = useState<number>(DEFAULT_WEEK_GRID_PREFS.cellMinW);
@@ -813,11 +891,11 @@ function WeekHubInner() {
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
   const [isUndoRedoBusy, setIsUndoRedoBusy] = useState(false);
 
-  const [selectedCell, setSelectedCell] = useState<{ userId: string; day: string } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<WeekHubSelectedCellState | null>(() => initialHistoryState?.selectedCell ?? null);
   const [draggedSite, setDraggedSite] = useState<SiteItem | null>(null);
   const [draggedCell, setDraggedCell] = useState<DraggedCellState | null>(null);
-  const [editingCell, setEditingCell] = useState<{ userId: string; day: string; slotIndex: number } | null>(null);
-  const [editingInput, setEditingInput] = useState('');
+  const [editingCell, setEditingCell] = useState<WeekHubEditingCellState | null>(() => initialHistoryState?.editingCell ?? null);
+  const [editingInput, setEditingInput] = useState(() => initialHistoryState?.editingInput ?? '');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [scheduleHistoryItems, setScheduleHistoryItems] = useState<ScheduleChangeHistoryItem[]>([]);
@@ -828,12 +906,19 @@ function WeekHubInner() {
   const [scheduleHistorySearch, setScheduleHistorySearch] = useState('');
   const [scheduleHistoryTargetFilter, setScheduleHistoryTargetFilter] = useState<'all' | 'スケジュール' | 'カラー'>('all');
 
+  const skipInitialModeSyncRef = useRef(Boolean(initialHistoryState));
+  const skipInitialKindSyncRef = useRef(Boolean(initialHistoryState));
+  const skipInitialUserSyncRef = useRef(Boolean(initialHistoryState));
+
   useEffect(() => {
-    const m = searchParams.get('mode');
-    if (m === 'week' || m === 'month' || m === 'year') {
-      setMode(m);
+    if (skipInitialModeSyncRef.current) {
+      skipInitialModeSyncRef.current = false;
+      return;
     }
-  }, [searchParams]);
+    if (isViewMode(qsMode)) {
+      setMode(qsMode);
+    }
+  }, [qsMode]);
 
   const stopNameColResize = useCallback(() => {
     nameColResizeRef.current = null;
@@ -886,9 +971,23 @@ function WeekHubInner() {
   }, [isNameColResizing, stopNameColResize]);
 
   useEffect(() => {
-    const k = (searchParams.get('kind') ?? '').toLowerCase();
-    setScheduleKind(k === 'daily' ? 'daily' : 'normal');
-  }, [searchParams]);
+    if (skipInitialKindSyncRef.current) {
+      skipInitialKindSyncRef.current = false;
+      return;
+    }
+    if (typeof qsKind !== 'string') return;
+    setScheduleKind(qsKind.toLowerCase() === 'daily' ? 'daily' : 'normal');
+  }, [qsKind]);
+
+  useEffect(() => {
+    if (skipInitialUserSyncRef.current) {
+      skipInitialUserSyncRef.current = false;
+      return;
+    }
+    const next = (qsUserId ?? '').trim();
+    if (!next) return;
+    setSelectedUserId((current) => (current === next ? current : next));
+  }, [qsUserId]);
 
   useEffect(() => {
     const l = (searchParams.get('layout') ?? '').toLowerCase();
@@ -943,6 +1042,7 @@ function WeekHubInner() {
       try {
         const r = await fetch(
           `/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(userOrderKey)}`,
+          { cache: 'no-store' },
         );
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
@@ -1413,20 +1513,6 @@ function WeekHubInner() {
     lastNonColorCellActionRef.current = cellClickAction;
   }, [cellClickAction]);
 
-  const openSiteDetailFromCell = useCallback(
-    (siteName: string) => {
-      const site = resolveSiteFromText(siteName);
-      if (!site?.id) {
-        showCellActionMsg('該当する現場詳細を開けませんでした');
-        return;
-      }
-      const sp = new URLSearchParams({ kind: scheduleKind });
-      if (selectedUserId) sp.set('userId', selectedUserId);
-      router.push(`/site-ledger/${encodeURIComponent(site.id)}?${sp.toString()}#punch`);
-    },
-    [resolveSiteFromText, router, scheduleKind, selectedUserId, showCellActionMsg],
-  );
-
   const cellActionButtons = hasScheduleEditPermission ? (
     <div className="ml-1 flex items-center gap-1">
       <span className="text-xs text-zinc-500 dark:text-zinc-400">セル操作</span>
@@ -1562,11 +1648,96 @@ function WeekHubInner() {
     return `year:${cursorDate.getFullYear()}`;
   }, [cursorDate, mode, weekStart]);
 
+  const historySnapshotJsonRef = useRef<string | null>(null);
+  const writeWeekHubHistorySnapshot = useCallback((overrides?: Partial<WeekHubHistoryState>) => {
+    if (typeof window === 'undefined') return;
+    const snapshot: WeekHubHistoryState = {
+      v: 1,
+      mode: overrides?.mode ?? mode,
+      scheduleKind: overrides?.scheduleKind ?? scheduleKind,
+      cursorDate: overrides?.cursorDate ?? toYmd(cursorDate),
+      selectedUserId:
+        overrides && 'selectedUserId' in overrides
+          ? overrides.selectedUserId ?? null
+          : selectedUserId,
+      selectedCell:
+        overrides && 'selectedCell' in overrides
+          ? overrides.selectedCell ?? null
+          : selectedCell,
+      editingCell:
+        overrides && 'editingCell' in overrides
+          ? overrides.editingCell ?? null
+          : editingCell,
+      editingInput:
+        overrides && 'editingInput' in overrides
+          ? overrides.editingInput ?? ''
+          : editingInput,
+    };
+    const nextJson = JSON.stringify(snapshot);
+    if (historySnapshotJsonRef.current === nextJson) return;
+    const currentState =
+      window.history.state && typeof window.history.state === 'object'
+        ? (window.history.state as Record<string, unknown>)
+        : {};
+    try {
+      window.history.replaceState({ ...currentState, [WEEK_HUB_HISTORY_STATE_KEY]: snapshot }, '', window.location.href);
+      historySnapshotJsonRef.current = nextJson;
+    } catch {
+      // ignore
+    }
+  }, [cursorDate, editingCell, editingInput, mode, scheduleKind, selectedCell, selectedUserId]);
+
+  useEffect(() => {
+    writeWeekHubHistorySnapshot();
+  }, [writeWeekHubHistorySnapshot]);
+
+  const openSiteDetailFromCell = useCallback(
+    (siteName: string, focusCell?: WeekHubEditingCellState | null) => {
+      const site = resolveSiteFromText(siteName);
+      if (!site?.id) {
+        showCellActionMsg('該当する現場詳細を開けませんでした');
+        return;
+      }
+      if (focusCell) {
+        writeWeekHubHistorySnapshot({
+          selectedCell: { userId: focusCell.userId, day: focusCell.day },
+        });
+      } else {
+        writeWeekHubHistorySnapshot();
+      }
+      const sp = new URLSearchParams({ kind: scheduleKind });
+      if (selectedUserId) sp.set('userId', selectedUserId);
+      router.push(`/site-ledger/${encodeURIComponent(site.id)}?${sp.toString()}#punch`);
+    },
+    [resolveSiteFromText, router, scheduleKind, selectedUserId, showCellActionMsg, writeWeekHubHistorySnapshot],
+  );
+
   useEffect(() => {
     // Keep Undo/Redo local to the current view scope.
     setUndoStack([]);
     setRedoStack([]);
   }, [historyScopeKey]);
+
+  const restoreFocusCell = editingCell ?? selectedCell;
+
+  useEffect(() => {
+    if (!restoreFocusCell || mode === 'year') return;
+    if (typeof window === 'undefined') return;
+
+    const handle = window.requestAnimationFrame(() => {
+      const target = document.querySelector(`[data-testid="cell-${restoreFocusCell.userId}-${restoreFocusCell.day}"]`);
+      if (!(target instanceof HTMLElement)) return;
+      target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      if (!editingCell) return;
+      const input = target.querySelector('input[type="text"]');
+      if (!(input instanceof HTMLInputElement)) return;
+      input.focus({ preventScroll: true });
+      const caret = input.value.length;
+      input.setSelectionRange(caret, caret);
+    });
+
+    return () => window.cancelAnimationFrame(handle);
+  }, [data, editingCell, mode, monthData, restoreFocusCell, yearData]);
 
   const selectedUserLabel = useMemo(() => {
     if (!selectedUserId) return null;
@@ -1734,6 +1905,27 @@ function WeekHubInner() {
     return yearData?.users ?? [];
   }, [data?.users, mode, monthData?.users, yearData?.users]);
 
+  const normalizeCurrentUserOrder = useCallback(
+    (order: string[]) => normalizeUserOrder(order, currentUsersForOrder),
+    [currentUsersForOrder],
+  );
+
+  const moveUserOrder = useCallback(
+    (order: string[], userId: string, dir: -1 | 1) => {
+      const base = normalizeCurrentUserOrder(order);
+      const currentIndex = base.indexOf(userId);
+      if (currentIndex < 0) return base;
+      const nextIndex = currentIndex + dir;
+      if (nextIndex < 0 || nextIndex >= base.length) return base;
+      const next = [...base];
+      const temp = next[currentIndex];
+      next[currentIndex] = next[nextIndex];
+      next[nextIndex] = temp;
+      return next;
+    },
+    [normalizeCurrentUserOrder],
+  );
+
   useEffect(() => {
     if (currentUsersForOrder.length === 0) return;
     writeCachedUserCandidates(
@@ -1872,7 +2064,9 @@ function WeekHubInner() {
         if (!userId) return { ok: false as const, error: 'Invalid response' };
 
         setUserOrder((cur) => {
-          const next = cur.includes(userId) ? cur : [...cur, userId];
+          const base = normalizeCurrentUserOrder(cur);
+          const next = base.includes(userId) ? base : [...base, userId];
+          if (arrayEqual(next, cur)) return cur;
           queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
           return next;
         });
@@ -1893,7 +2087,7 @@ function WeekHubInner() {
         return { ok: false as const, error: '作成に失敗しました' };
       }
     },
-    [apiKind, effectiveUserId, refreshCurrentView, saveUserOrder, scheduleKind],
+    [apiKind, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, scheduleKind],
   );
 
   const deleteUser = useCallback(
@@ -1918,7 +2112,8 @@ function WeekHubInner() {
         }
 
         setUserOrder((cur) => {
-          const next = cur.filter((id) => id !== userId);
+          const next = normalizeCurrentUserOrder(cur).filter((id) => id !== userId);
+          if (arrayEqual(next, cur)) return cur;
           if (effectiveUserId && effectiveUserId !== userId) {
             queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
           }
@@ -1931,7 +2126,7 @@ function WeekHubInner() {
         showCellActionMsg('削除に失敗しました');
       }
     },
-    [effectiveUserId, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
+    [effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
   );
 
   const refreshSites = useCallback(async () => {
@@ -3509,14 +3704,8 @@ function WeekHubInner() {
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
                     setUserOrder((cur) => {
-                      const i = cur.indexOf(userId);
-                      if (i < 0) return cur;
-                      const j = i + dir;
-                      if (j < 0 || j >= cur.length) return cur;
-                      const next = [...cur];
-                      const tmp = next[i];
-                      next[i] = next[j];
-                      next[j] = tmp;
+                      const next = moveUserOrder(cur, userId, dir);
+                      if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
@@ -3779,14 +3968,8 @@ function WeekHubInner() {
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
                     setUserOrder((cur) => {
-                      const i = cur.indexOf(userId);
-                      if (i < 0) return cur;
-                      const j = i + dir;
-                      if (j < 0 || j >= cur.length) return cur;
-                      const next = [...cur];
-                      const tmp = next[i];
-                      next[i] = next[j];
-                      next[j] = tmp;
+                      const next = moveUserOrder(cur, userId, dir);
+                      if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
@@ -3998,14 +4181,8 @@ function WeekHubInner() {
                   onStartNameColResize={startNameColResize}
                   onMoveUser={(userId, dir) => {
                     setUserOrder((cur) => {
-                      const i = cur.indexOf(userId);
-                      if (i < 0) return cur;
-                      const j = i + dir;
-                      if (j < 0 || j >= cur.length) return cur;
-                      const next = [...cur];
-                      const tmp = next[i];
-                      next[i] = next[j];
-                      next[j] = tmp;
+                      const next = moveUserOrder(cur, userId, dir);
+                      if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
@@ -4318,7 +4495,7 @@ function WeekGrid({
   paceTargetDays: ReadonlySet<string>;
   paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
-  onOpenSiteFromCell: (siteName: string) => void;
+  onOpenSiteFromCell: (siteName: string, focusCell?: WeekHubEditingCellState | null) => void;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
@@ -4339,12 +4516,12 @@ function WeekGrid({
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
   draggedSite: SiteItem | null;
-  selectedCell: { userId: string; day: string } | null;
-  onSetSelectedCell: (cell: { userId: string; day: string } | null) => void;
+  selectedCell: WeekHubSelectedCellState | null;
+  onSetSelectedCell: (cell: WeekHubSelectedCellState | null) => void;
   draggedCell: DraggedCellState | null;
   onSetDraggedCell: (cell: DraggedCellState | null) => void;
-  editingCell: { userId: string; day: string; slotIndex: number } | null;
-  setEditingCell: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
+  editingCell: WeekHubEditingCellState | null;
+  setEditingCell: (cell: WeekHubEditingCellState | null) => void;
   editingInput: string;
   setEditingInput: (value: string) => void;
   siteSuggestions: SiteItem[];
@@ -4644,7 +4821,7 @@ function MonthGrid({
   paceTargetDays: ReadonlySet<string>;
   paceTargetUserId: string | null;
   onEnsureSite: () => Promise<SiteItem | null>;
-  onOpenSiteFromCell: (siteName: string) => void;
+  onOpenSiteFromCell: (siteName: string, focusCell?: WeekHubEditingCellState | null) => void;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
   isEditable: boolean;
@@ -5317,7 +5494,7 @@ function Row({
   selectedSite: SiteItem | null;
   resolveSiteReference?: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
   onEnsureSite?: () => Promise<SiteItem | null>;
-  onOpenSiteFromCell?: (siteName: string) => void;
+  onOpenSiteFromCell?: (siteName: string, focusCell?: WeekHubEditingCellState | null) => void;
   selectedUserId: string | null;
   cellClickAction: CellClickAction;
   cellTextColor: CellTextColor;
@@ -5343,12 +5520,12 @@ function Row({
   onStartNameColResize?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   rowCellClassName?: string;
   draggedSite: SiteItem | null;
-  selectedCell?: { userId: string; day: string } | null;
-  onSetSelectedCell?: (cell: { userId: string; day: string } | null) => void;
+  selectedCell?: WeekHubSelectedCellState | null;
+  onSetSelectedCell?: (cell: WeekHubSelectedCellState | null) => void;
   draggedCell?: DraggedCellState | null;
   onSetDraggedCell?: (cell: DraggedCellState | null) => void;
-  editingCell?: { userId: string; day: string; slotIndex: number } | null;
-  setEditingCell?: (cell: { userId: string; day: string; slotIndex: number } | null) => void;
+  editingCell?: WeekHubEditingCellState | null;
+  setEditingCell?: (cell: WeekHubEditingCellState | null) => void;
   editingInput?: string;
   setEditingInput?: (value: string) => void;
   siteSuggestions?: SiteItem[];
@@ -6133,7 +6310,7 @@ function Row({
         fontSize: string;
         dragState?: DraggedCellState | null;
         hoverMenuItems?: CellHoverMenuItem[];
-        contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number; groupNote?: string | null };
+        contextInput?: { userId: string; day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number; groupNote?: string | null };
       },
     ) => {
       const contextInput = input.contextInput;
@@ -6188,7 +6365,12 @@ function Row({
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    onOpenSiteFromCell?.(item.siteName ?? '');
+                    onOpenSiteFromCell?.(
+                      item.siteName ?? '',
+                      contextInput
+                        ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                        : undefined,
+                    );
                   }}
                 >
                   {item.label}
@@ -6233,13 +6415,23 @@ function Row({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onOpenSiteFromCell(siteName);
+              onOpenSiteFromCell(
+                siteName,
+                contextInput
+                  ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                  : undefined,
+              );
             }}
             onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
               if (event.key !== 'Enter' && event.key !== ' ') return;
               event.preventDefault();
               event.stopPropagation();
-              onOpenSiteFromCell(siteName);
+              onOpenSiteFromCell(
+                siteName,
+                contextInput
+                  ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                  : undefined,
+              );
             }}
             onContextMenu={handleContextMenu}
             draggable={Boolean(dragState)}
@@ -6378,7 +6570,7 @@ function Row({
               fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
               hoverMenuItems,
               dragState,
-              contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
+              contextInput: { userId: user.id, day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
           </div>
         );
