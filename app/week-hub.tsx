@@ -2757,7 +2757,6 @@ function WeekHubInner() {
       isScheduleHistoryLoaded,
       scheduleHistoryError,
       scheduleHistoryLoading,
-    hasScheduleEditPermission,
     setAddAction,
     setHistoryMenu,
     setColorEditMode,
