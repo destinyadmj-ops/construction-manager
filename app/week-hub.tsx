@@ -6010,10 +6010,12 @@ function Row({
         entryKind: ScheduleCellEntryKind;
         className: string;
         fontSize: string;
+        dragState?: DraggedCellState | null;
         contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number; groupNote?: string | null };
       },
     ) => {
       const contextInput = input.contextInput;
+      const dragState = input.dragState;
       const handleContextMenu = contextInput
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
@@ -6027,12 +6029,28 @@ function Row({
             });
           }
         : undefined;
+      const handleDragStart = dragState
+        ? (event: React.DragEvent<HTMLElement>) => {
+            event.stopPropagation();
+            onSetDraggedCell?.(dragState);
+            event.dataTransfer.effectAllowed = 'copy';
+          }
+        : undefined;
+      const handleDragEnd = dragState
+        ? (event: React.DragEvent<HTMLElement>) => {
+            event.stopPropagation();
+            onSetDraggedCell?.(null);
+          }
+        : undefined;
       if (input.entryKind !== 'site' || !input.siteName || !onOpenSiteFromCell) {
         return (
           <div
             data-color-edit-ignore-contextmenu
             className={input.className}
             style={{ fontSize: input.fontSize }}
+            draggable={Boolean(dragState)}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
             onContextMenu={handleContextMenu}
             title={input.tooltipValue}
           >
@@ -6058,6 +6076,9 @@ function Row({
             onOpenSiteFromCell(siteName);
           }}
           onContextMenu={handleContextMenu}
+          draggable={Boolean(dragState)}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
           className={`${input.className} w-full cursor-pointer text-left hover:underline`}
           style={{ fontSize: input.fontSize }}
           title={input.tooltipValue}
@@ -6067,7 +6088,7 @@ function Row({
         </div>
       );
     },
-    [onOpenSiteFromCell, openSlotContextMenu],
+    [onOpenSiteFromCell, onSetDraggedCell, openSlotContextMenu],
   );
 
   const renderCellLabels = useCallback(
@@ -6108,6 +6129,9 @@ function Row({
             groupNote,
           ) ?? '';
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
+        const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
+          ? { userId: user.id, day, cell: groupsToApiCell([group]) }
+          : null;
         return (
           <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
             {renderSiteLabel({
@@ -6121,13 +6145,14 @@ function Row({
                   : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
               }`,
               fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
+              dragState,
               contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
           </div>
         );
       });
     },
-    [gridLayout, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName],
+    [gridLayout, isEditable, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName, user.id],
   );
 
   const formatCellActionReason = useCallback((
@@ -6359,13 +6384,6 @@ function Row({
             tabIndex={0}
             data-testid={`cell-${user.id}-${d.key}`}
             data-cell-day={d.key}
-            draggable={isEditable && Boolean(primarySiteEntry)}
-            onDragStart={(e) => {
-              if (!isEditable || !primarySiteEntry) return;
-              onSetDraggedCell?.({ userId: user.id, day: d.key, cell: beforeCell });
-              e.dataTransfer.effectAllowed = 'copy';
-            }}
-            onDragEnd={() => onSetDraggedCell?.(null)}
             onDragOver={(e) => {
               if (!isEditable || (!draggedSite && !draggedCell)) return;
               e.preventDefault();
@@ -6461,7 +6479,7 @@ function Row({
               rowCellClassName ?? ''
             } ${isPaceTarget ? 'shadow-[inset_0_0_0_1px_rgba(245,158,11,0.6)]' : ''} ${
               isPaceTarget && !hasAnyEntry ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''
-            } ${isEditable && primarySiteEntry ? 'cursor-move' : ''}`}
+            }`}
           >
             {isPaceTarget ? (
               <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
@@ -6568,7 +6586,6 @@ function Row({
       historyHover,
       isEditable,
       onNotify,
-      onSetDraggedCell,
       onSetSelectedCell,
       paceTargetDays,
       paceTargetUserId,
