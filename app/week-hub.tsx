@@ -5404,6 +5404,7 @@ function Row({
   const isSelectedUser = selectedUserId === user.id;
   const isCurrentUser = currentUserId === user.id;
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const lastContextMenuWheelAtRef = useRef(0);
   const [slotContextMenu, setSlotContextMenu] = useState<SlotContextMenuState | null>(null);
 
   const resolveStoredSite = useCallback(
@@ -5485,6 +5486,7 @@ function Row({
 
     const handleScroll = (event: Event) => {
       const menu = contextMenuRef.current;
+      if (Date.now() - lastContextMenuWheelAtRef.current < 250) return;
       if (menu && event.target instanceof Node && menu.contains(event.target)) return;
       setSlotContextMenu(null);
     };
@@ -7006,6 +7008,9 @@ function Row({
           ref={contextMenuRef}
           className="fixed z-[90] min-w-[260px] max-w-[min(92vw,320px)] rounded-lg border border-zinc-200 bg-white p-2 text-xs shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
           style={{ left: `${slotContextMenu.x}px`, top: `${slotContextMenu.y}px` }}
+          onWheelCapture={() => {
+            lastContextMenuWheelAtRef.current = Date.now();
+          }}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -7171,7 +7176,7 @@ function Row({
           ) : slotContextMenu.mode === 'assign-users' ? (
             <div className="mt-2">
               <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同日・同現場に入れる従業員を複数選択</div>
-              <div className="max-h-56 space-y-1 overflow-auto pr-1">
+              <div className="max-h-56 space-y-1 overflow-auto overscroll-contain pr-1">
                 {slotContextUserOptions.map((option) => (
                   <button
                     key={option.userId}
@@ -7285,7 +7290,7 @@ function Row({
           ) : (
             <div className="mt-2">
               <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同名別店舗をチェック選択</div>
-              <div className="max-h-56 space-y-1 overflow-auto pr-1">
+              <div className="max-h-56 space-y-1 overflow-auto overscroll-contain pr-1">
                 {slotContextRelatedSiteOptions.map((option) => (
                   <button
                     key={option.storedName}
