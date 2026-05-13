@@ -5,7 +5,9 @@ import {
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
 import {
+  formatScheduleCellGroupDisplayValue,
   isScheduleCellEntryKind,
+  normalizeScheduleCellNote,
   normalizeScheduleCellEntryKind,
   type ScheduleCellEntryKind,
 } from '@/shared/schedule-cell-entry';
@@ -73,6 +75,11 @@ function extractManualText(meta: unknown): string {
   return typeof m?.scheduleText === 'string' ? m.scheduleText.trim() : '';
 }
 
+function extractGroupNote(meta: unknown): string | null {
+  const m = asObject(meta);
+  return normalizeScheduleCellNote(m?.scheduleGroupNote);
+}
+
 function entryKindForEntry(site: { name: string } | null, accountingMeta: unknown): ScheduleCellEntryKind {
   const meta = asObject(accountingMeta);
   return normalizeScheduleCellEntryKind(meta?.scheduleEntryKind ?? (site ? 'site' : 'note'));
@@ -126,22 +133,34 @@ function colorForEntry(input: {
   return input.label.includes('!') ? 'red' : 'default';
 }
 
-function formatGroupValue(group: { items: Array<{ label: string }> } | null | undefined) {
+function formatGroupValue(group: { items: Array<{ label: string }>; note?: string | null } | null | undefined) {
   const labels = (group?.items ?? []).map((item) => item.label.trim()).filter((label) => label.length > 0);
-  return labels.length > 0 ? labels.join(' / ') : null;
+  return formatScheduleCellGroupDisplayValue(labels, group?.note);
 }
 
-function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>) {
+function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null; groupNote?: string | null; legacyNoteText?: string | null }>) {
   if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
     const grouped = new Map<
       number,
-      Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; order: number; syncSource: ScheduleSyncSource | null }>
+      {
+        items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; order: number; syncSource: ScheduleSyncSource | null }>;
+        note: string | null;
+        fallbackNoteItem: { label: string; color: LabelColor } | null;
+      }
     >();
     items.forEach((item, itemOrder) => {
       const groupIndex = item.groupIndex as number;
       if (groupIndex < 0 || groupIndex > 3) return;
-      const hit = grouped.get(groupIndex) ?? [];
-      hit.push({
+      const hit = grouped.get(groupIndex) ?? { items: [], note: null, fallbackNoteItem: null };
+      if (item.groupNote && !hit.note) hit.note = item.groupNote;
+      if (item.kind === 'note') {
+        const noteText = item.legacyNoteText ?? normalizeScheduleCellNote(item.label);
+        if (noteText && !hit.note) hit.note = noteText;
+        if (noteText && !hit.fallbackNoteItem) hit.fallbackNoteItem = { label: noteText, color: item.color };
+        grouped.set(groupIndex, hit);
+        return;
+      }
+      hit.items.push({
         label: item.label,
         color: item.color,
         kind: item.kind,
@@ -153,20 +172,33 @@ function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: 
 
     return Array.from(grouped.entries())
       .sort((left, right) => left[0] - right[0])
-      .map(([, groupItems]) => ({
-        items: [...groupItems]
+      .map(([, group]) => {
+        const groupItems = [...group.items]
           .sort((left, right) => left.order - right.order)
           .slice(0, 4)
-          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource })),
-      }))
+          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource }));
+        if (groupItems.length > 0) return { items: groupItems, note: group.note };
+        if (!group.fallbackNoteItem) return null;
+        return {
+          items: [{ label: group.fallbackNoteItem.label, color: group.fallbackNoteItem.color, kind: 'note' as const, syncSource: null }],
+          note: null,
+        };
+      })
+      .filter((group): group is { items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null }>; note: string | null } => !!group)
       .slice(0, 4);
   }
 
-  const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null }> }> = [];
+  const groups: Array<{ key: string; items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null }>; note: string | null }> = [];
   const peerNames = items.filter((item) => item.kind === 'site').map((item) => item.label);
   for (const item of items) {
     if (item.kind === 'note') {
-      groups.push({ key: `note:${groups.length}`, items: [{ label: item.label, color: item.color, kind: item.kind, syncSource: null }] });
+      const noteText = item.legacyNoteText ?? normalizeScheduleCellNote(item.label);
+      const lastSiteGroup = [...groups].reverse().find((group) => group.items.some((groupItem) => groupItem.kind === 'site'));
+      if (lastSiteGroup && noteText && !lastSiteGroup.note) {
+        lastSiteGroup.note = noteText;
+        continue;
+      }
+      groups.push({ key: `note:${groups.length}`, items: [{ label: noteText ?? item.label, color: item.color, kind: item.kind, syncSource: null }], note: null });
       continue;
     }
 
@@ -178,11 +210,12 @@ function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: 
     const hit = groups.find((group) => group.key === key);
     if (hit) {
       hit.items.push({ label: item.label, color: item.color, kind: item.kind, syncSource: cloneScheduleSyncSource(item.syncSource) });
+      if (item.groupNote && !hit.note) hit.note = item.groupNote;
     } else {
-      groups.push({ key, items: [{ label: item.label, color: item.color, kind: item.kind, syncSource: cloneScheduleSyncSource(item.syncSource) }] });
+      groups.push({ key, items: [{ label: item.label, color: item.color, kind: item.kind, syncSource: cloneScheduleSyncSource(item.syncSource) }], note: item.groupNote ?? null });
     }
   }
-  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4) }));
+  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4), note: group.note }));
 }
 
 export async function GET(request: Request) {
@@ -234,14 +267,14 @@ export async function GET(request: Request) {
         slot2: string | null;
         color1: LabelColor;
         color2: LabelColor;
-        groups?: Array<{ items: Array<{ label: string; color: LabelColor; kind?: ScheduleCellEntryKind; syncSource?: ScheduleSyncSource | null }> }>;
+        groups?: Array<{ items: Array<{ label: string; color: LabelColor; kind?: ScheduleCellEntryKind; syncSource?: ScheduleSyncSource | null }>; note?: string | null }>;
       }
     >
   > = {};
 
   for (const u of users) grid[u.id] = {};
 
-  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null }>>> = {};
+  const cellItems: Record<string, Record<string, Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; groupIndex?: number | null; itemIndex?: number | null; syncSource?: ScheduleSyncSource | null; groupNote?: string | null; legacyNoteText?: string | null }>>> = {};
 
   for (const e of entries) {
     const day = toYmd(e.startAt);
@@ -261,7 +294,16 @@ export async function GET(request: Request) {
     const itemKind = isScheduleCellEntryKind(meta?.scheduleEntryKind)
       ? meta.scheduleEntryKind
       : entryKindForEntry(e.site, e.accountingMeta);
-    cellItems[e.userId]![day]!.push({ label, color, kind: itemKind, groupIndex, itemIndex, syncSource: syncSourceForEntry(e.accountingMeta) });
+    cellItems[e.userId]![day]!.push({
+      label,
+      color,
+      kind: itemKind,
+      groupIndex,
+      itemIndex,
+      syncSource: syncSourceForEntry(e.accountingMeta),
+      groupNote: extractGroupNote(e.accountingMeta),
+      legacyNoteText: itemKind === 'note' ? normalizeScheduleCellNote(extractManualText(e.accountingMeta) || label) : null,
+    });
   }
 
   for (const uid of Object.keys(cellItems)) {

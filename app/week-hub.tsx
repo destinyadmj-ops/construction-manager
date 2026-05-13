@@ -4542,38 +4542,37 @@ function MonthGrid({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
-
-  const monthTabsRef = useRef<HTMLDivElement | null>(null);
-  const [monthTabsH, setMonthTabsH] = useState(0);
-
-  useEffect(() => {
-    const el = monthTabsRef.current;
-    if (!el) return;
-
-    const apply = () => {
-      const h = Math.max(0, Math.round(el.getBoundingClientRect().height));
-      setMonthTabsH((prev) => (prev === h ? prev : h));
-    };
-
-    const raf = window.requestAnimationFrame(apply);
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(el);
-    window.addEventListener('resize', apply);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-    };
-  }, [monthKey]);
-
-  const headerTop = useMemo(() => {
-    return `calc(var(--app-header-h) + var(--mode-tabs-h) + ${monthTabsH}px)`;
-  }, [monthTabsH]);
+  const stickyStackRef = useRef<HTMLDivElement | null>(null);
+  const [bodyTopInset, setBodyTopInset] = useState(0);
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
+
+  useEffect(() => {
+    const stack = stickyStackRef.current;
+    const body = scrollRootRef.current;
+    if (!stack || !body) return;
+
+    const apply = () => {
+      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
+      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
+    };
+
+    const raf = window.requestAnimationFrame(apply);
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(stack);
+    ro.observe(body);
+    window.addEventListener('resize', apply);
+    window.addEventListener('scroll', apply, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('scroll', apply, true);
+    };
+  }, [monthKey]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4615,76 +4614,79 @@ function MonthGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="month-grid"
     >
-      {/* Month switch: sticky at the top (viewport) */}
       <div
-        ref={monthTabsRef}
-        className="sticky top-[calc(var(--app-header-h)+var(--mode-tabs-h))] z-40 border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90"
+        ref={stickyStackRef}
+        className="sticky z-40"
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        {/* Month switch: sticky stack top row */}
+        <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onPrevMonth}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="前の月"
+              >
+                ←
+              </button>
+              <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300">{monthKey}</div>
+              <button
+                type="button"
+                onClick={onNextMonth}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="次の月"
+              >
+                →
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={onPrevMonth}
+              onClick={onToday}
               className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              aria-label="前の月"
             >
-              ←
-            </button>
-            <div className="px-1 text-xs tabular-nums text-zinc-600 dark:text-zinc-300">{monthKey}</div>
-            <button
-              type="button"
-              onClick={onNextMonth}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              aria-label="次の月"
-            >
-              →
+              今月
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onToday}
-            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-          >
-            今月
-          </button>
         </div>
-      </div>
 
-      {/* Date header row: sticky (viewport) + horizontal-scroll synced */}
-      <div className="sticky z-30 border-b border-zinc-400 dark:border-zinc-600" style={{ top: headerTop }}>
-        <div
-          ref={headerScrollRef}
-          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-          onScroll={onHeaderScroll}
-          data-testid="month-grid-header-scroll"
-        >
+        {/* Date header row: sticky stack second row */}
+        <div className="border-b border-zinc-400 dark:border-zinc-600">
           <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
-            }}
+            ref={headerScrollRef}
+            className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+            onScroll={onHeaderScroll}
+            data-testid="month-grid-header-scroll"
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
-              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
-            </div>
-            {dayLabels.map((d) => (
-              <div
-                key={d.key}
-                className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
-                  d.isSun
-                    ? 'text-red-600 dark:text-red-400'
-                    : d.isSat
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-zinc-600 dark:text-zinc-300'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <span className="tabular-nums">{d.dayNum}</span>
-                  <span>{d.dow}</span>
-                </div>
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              }}
+            >
+              <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
+                <ColumnResizeHandle onPointerDown={onStartNameColResize} />
               </div>
-            ))}
+              {dayLabels.map((d) => (
+                <div
+                  key={d.key}
+                  className={`pointer-events-none border-l border-zinc-400 bg-white px-2 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-black ${
+                    d.isSun
+                      ? 'text-red-600 dark:text-red-400'
+                      : d.isSat
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-zinc-600 dark:text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="tabular-nums">{d.dayNum}</span>
+                    <span>{d.dow}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -4693,6 +4695,7 @@ function MonthGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="month-grid-body-scroll"
       >
@@ -4875,15 +4878,42 @@ function YearGrid({
   onDeleteUser: (userId: string) => void | Promise<void>;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
-  const months = data?.months ?? [];
+  const months = useMemo(() => data?.months ?? [], [data?.months]);
   const grid = data?.grid ?? {};
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
+  const monthsSignature = useMemo(() => months.join('|'), [months]);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
+  const stickyStackRef = useRef<HTMLDivElement | null>(null);
+  const [bodyTopInset, setBodyTopInset] = useState(0);
+
+  useEffect(() => {
+    const stack = stickyStackRef.current;
+    const body = scrollRootRef.current;
+    if (!stack || !body) return;
+
+    const apply = () => {
+      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
+      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
+    };
+
+    const raf = window.requestAnimationFrame(apply);
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(stack);
+    ro.observe(body);
+    window.addEventListener('resize', apply);
+    window.addEventListener('scroll', apply, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('scroll', apply, true);
+    };
+  }, [monthsSignature]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4925,41 +4955,44 @@ function YearGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="year-grid"
     >
-      {/* Month header row: sticky (viewport) + horizontal-scroll synced */}
       <div
-        className="sticky z-30 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
-        style={{ top: `calc(var(--app-header-h) + var(--mode-tabs-h))` }}
+        ref={stickyStackRef}
+        className="sticky z-40"
+        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h))' }}
       >
-        <div
-          ref={headerScrollRef}
-          className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-          onScroll={onHeaderScroll}
-          data-testid="year-grid-header-scroll"
-        >
+        {/* Month header row: sticky + horizontal-scroll synced */}
+        <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
           <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
-            }}
+            ref={headerScrollRef}
+            className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+            onScroll={onHeaderScroll}
+            data-testid="year-grid-header-scroll"
           >
-            <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative sm:px-3">
-              <ColumnResizeHandle onPointerDown={onStartNameColResize} />
-            </div>
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+              }}
+            >
+              <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative sm:px-3">
+                <ColumnResizeHandle onPointerDown={onStartNameColResize} />
+              </div>
 
-            {months.map((m) => {
-              const mm = Number(m.slice(-2));
-              return (
-                <div
-                  key={m}
-                  className="pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
-                >
-                  <div className="flex items-center gap-1">
-                    <span className="tabular-nums">{mm}</span>
-                    <span>月</span>
+              {months.map((m) => {
+                const mm = Number(m.slice(-2));
+                return (
+                  <div
+                    key={m}
+                    className="pointer-events-none border-l border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="tabular-nums">{mm}</span>
+                      <span>月</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -4968,6 +5001,7 @@ function YearGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="year-grid-body-scroll"
       >

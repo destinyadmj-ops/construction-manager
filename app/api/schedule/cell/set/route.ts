@@ -12,7 +12,9 @@ import {
   type ScheduleSyncSource,
 } from '@/shared/schedule-sync-source';
 import {
+  formatScheduleCellGroupDisplayValue,
   isScheduleCellEntryKind,
+  normalizeScheduleCellNote,
   normalizeScheduleCellEntryKind,
   type ScheduleCellEntryKind,
 } from '@/shared/schedule-cell-entry';
@@ -39,6 +41,7 @@ const CellGroupItemSchema = z
 const CellGroupSchema = z
   .object({
     items: z.array(CellGroupItemSchema).min(1).max(4),
+    note: z.string().trim().max(200).nullable().optional(),
   })
   .strict();
 
@@ -62,7 +65,11 @@ const BodySchema = z
     kind: ScheduleCellEntryKind;
     syncSource: ScheduleSyncSource | null;
   };
-  type NormalizedGroup = { items: NormalizedGroupItem[] };
+  type NormalizedGroup = { items: NormalizedGroupItem[]; note: string | null };
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
 
 function startOfDayLocal(ymd: string) {
   const d = new Date(`${ymd}T00:00:00`);
@@ -84,13 +91,13 @@ function addMinutes(d: Date, minutes: number) {
 
 function buildSnapshotFromGroups(groups: NormalizedGroup[]) {
   return createScheduleCellSnapshot({
-    slot1: groups[0] ? groups[0].items.map((item) => item.label).join(' / ') : null,
+    slot1: groups[0] ? formatScheduleCellGroupDisplayValue(groups[0].items.map((item) => item.label), groups[0].note) : null,
     slot1Color: groups[0]?.items[0]?.color ?? 'default',
-    slot2: groups[1] ? groups[1].items.map((item) => item.label).join(' / ') : null,
+    slot2: groups[1] ? formatScheduleCellGroupDisplayValue(groups[1].items.map((item) => item.label), groups[1].note) : null,
     slot2Color: groups[1]?.items[0]?.color ?? 'default',
-    slot3: groups[2] ? groups[2].items.map((item) => item.label).join(' / ') : null,
+    slot3: groups[2] ? formatScheduleCellGroupDisplayValue(groups[2].items.map((item) => item.label), groups[2].note) : null,
     slot3Color: groups[2]?.items[0]?.color ?? 'default',
-    slot4: groups[3] ? groups[3].items.map((item) => item.label).join(' / ') : null,
+    slot4: groups[3] ? formatScheduleCellGroupDisplayValue(groups[3].items.map((item) => item.label), groups[3].note) : null,
     slot4Color: groups[3]?.items[0]?.color ?? 'default',
   });
 }
@@ -112,9 +119,7 @@ function buildGroupsFromEntries(
             : '';
       if (!label) return null;
 
-      const meta = entry.accountingMeta && typeof entry.accountingMeta === 'object' && !Array.isArray(entry.accountingMeta)
-        ? (entry.accountingMeta as Record<string, unknown>)
-        : null;
+      const meta = asObject(entry.accountingMeta);
       const color = LabelColorSchema.safeParse(meta?.labelColor).success
         ? (meta?.labelColor as LabelColor)
         : 'default';
@@ -124,20 +129,36 @@ function buildGroupsFromEntries(
         : null;
       const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
       const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
-      return { label, color, kind, syncSource, groupIndex, itemIndex, entryOrder };
+      const groupNote = normalizeScheduleCellNote(meta?.scheduleGroupNote);
+      const legacyNoteText = kind === 'note'
+        ? normalizeScheduleCellNote(typeof meta?.scheduleText === 'string' ? meta.scheduleText : label)
+        : null;
+      return { label, color, kind, syncSource, groupIndex, itemIndex, entryOrder, groupNote, legacyNoteText };
     })
-    .filter((item): item is NormalizedGroupItem & { groupIndex: number | null; itemIndex: number | null; entryOrder: number } => !!item);
+    .filter((item): item is NormalizedGroupItem & { groupIndex: number | null; itemIndex: number | null; entryOrder: number; groupNote: string | null; legacyNoteText: string | null } => !!item);
 
   if (items.length > 0 && items.every((item) => typeof item.groupIndex === 'number')) {
     const grouped = new Map<
       number,
-      Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null; order: number }>
+      {
+        items: Array<{ label: string; color: LabelColor; kind: ScheduleCellEntryKind; syncSource: ScheduleSyncSource | null; order: number }>;
+        note: string | null;
+        fallbackNoteItem: { label: string; color: LabelColor } | null;
+      }
     >();
     for (const item of items) {
       const groupIndex = item.groupIndex as number;
       if (groupIndex < 0 || groupIndex > 3) continue;
-      const hit = grouped.get(groupIndex) ?? [];
-      hit.push({
+      const hit = grouped.get(groupIndex) ?? { items: [], note: null, fallbackNoteItem: null };
+      if (item.groupNote && !hit.note) hit.note = item.groupNote;
+      if (item.kind === 'note') {
+        const noteText = item.legacyNoteText ?? normalizeScheduleCellNote(item.label);
+        if (noteText && !hit.note) hit.note = noteText;
+        if (noteText && !hit.fallbackNoteItem) hit.fallbackNoteItem = { label: noteText, color: item.color };
+        grouped.set(groupIndex, hit);
+        continue;
+      }
+      hit.items.push({
         label: item.label,
         color: item.color,
         kind: item.kind,
@@ -149,20 +170,44 @@ function buildGroupsFromEntries(
 
     return Array.from(grouped.entries())
       .sort((left, right) => left[0] - right[0])
-      .map(([, groupItems]) => ({
-        items: [...groupItems]
+      .map(([, group]) => {
+        const groupItems = [...group.items]
           .sort((left, right) => left.order - right.order)
           .slice(0, 4)
-          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource })),
-      }))
+          .map(({ label, color, kind, syncSource }) => ({ label, color, kind, syncSource }));
+        if (groupItems.length > 0) {
+          return { items: groupItems, note: group.note };
+        }
+        if (!group.fallbackNoteItem) return null;
+        return {
+          items: [{
+            label: group.fallbackNoteItem.label,
+            color: group.fallbackNoteItem.color,
+            kind: 'note' as const,
+            syncSource: null,
+          }],
+          note: null,
+        };
+      })
+      .filter((group): group is NormalizedGroup => !!group)
       .slice(0, 4);
   }
 
-  const groups: Array<{ key: string; items: NormalizedGroupItem[] }> = [];
+  const groups: Array<{ key: string; items: NormalizedGroupItem[]; note: string | null }> = [];
   const peerNames = items.filter((item) => item.kind === 'site').map((item) => item.label);
   for (const item of items) {
     if (item.kind === 'note') {
-      groups.push({ key: `note:${item.entryOrder}`, items: [item] });
+      const noteText = item.legacyNoteText ?? normalizeScheduleCellNote(item.label);
+      const lastSiteGroup = [...groups].reverse().find((group) => group.items.some((groupItem) => groupItem.kind === 'site'));
+      if (lastSiteGroup && noteText && !lastSiteGroup.note) {
+        lastSiteGroup.note = noteText;
+        continue;
+      }
+      groups.push({
+        key: `note:${item.entryOrder}`,
+        items: [{ label: noteText ?? item.label, color: item.color, kind: 'note', syncSource: null }],
+        note: null,
+      });
       continue;
     }
 
@@ -174,11 +219,12 @@ function buildGroupsFromEntries(
     const hit = groups.find((group) => group.key === key);
     if (hit) {
       hit.items.push(item);
+      if (item.groupNote && !hit.note) hit.note = item.groupNote;
     } else {
-      groups.push({ key, items: [item] });
+      groups.push({ key, items: [item], note: item.groupNote });
     }
   }
-  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4) }));
+  return groups.slice(0, 4).map((group) => ({ items: group.items.slice(0, 4), note: group.note }));
 }
 
 function groupsFromLegacySlots(input: {
@@ -188,8 +234,8 @@ function groupsFromLegacySlots(input: {
   slot2Color: LabelColor;
 }): NormalizedGroup[] {
   const groups: NormalizedGroup[] = [];
-  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color, kind: 'site', syncSource: null }] });
-  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color, kind: 'site', syncSource: null }] });
+  if (input.slot1Name) groups.push({ items: [{ label: input.slot1Name, color: input.slot1Color, kind: 'site', syncSource: null }], note: null });
+  if (input.slot2Name) groups.push({ items: [{ label: input.slot2Name, color: input.slot2Color, kind: 'site', syncSource: null }], note: null });
   return groups;
 }
 
@@ -251,6 +297,7 @@ export async function POST(request: Request) {
                 syncSource: cloneScheduleSyncSource(item.syncSource),
               }))
               .filter((item) => item.label.length > 0),
+              note: normalizeScheduleCellNote(group.note),
           }))
           .filter((group) => group.items.length > 0)
       : groupsFromLegacySlots({ slot1Name, slot2Name, slot1Color, slot2Color });
@@ -263,33 +310,33 @@ export async function POST(request: Request) {
     }
 
     const resolvedGroups = await Promise.all(
-      normalizedGroups.map(async (group) => ({
-        items: await Promise.all(
+      normalizedGroups.map(async (group) => {
+        let groupNote = group.note;
+        const items = await Promise.all(
           group.items.map(async (item) => {
             if (item.kind === 'note') {
-              return { kind: 'note' as const, label: item.label, color: item.color, syncSource: null };
+              groupNote ||= normalizeScheduleCellNote(item.label);
+              return null;
             }
             const site = await resolveSiteByName(item.label, kind);
             return site ? { kind: 'site' as const, site, label: site.name, color: item.color, syncSource: item.syncSource } : null;
           }),
-        ),
-      })),
+        );
+        return { note: groupNote, items };
+      }),
     );
 
     const finalGroups: Array<{
-      items: Array<
-        | { kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }
-        | { kind: 'note'; label: string; color: LabelColor; syncSource: null }
-      >;
+      note: string | null;
+      items: Array<{ kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }>;
     }> = resolvedGroups.map((group) => ({
+      note: group.note,
       items: group.items.filter(
         (
           item,
-        ): item is
-          | { kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null }
-          | { kind: 'note'; label: string; color: LabelColor; syncSource: null } => !!item,
+        ): item is { kind: 'site'; site: { id: string; name: string }; label: string; color: LabelColor; syncSource: ScheduleSyncSource | null } => !!item,
       ),
-    }));
+    })).filter((group) => group.items.length > 0);
 
     await prisma.$transaction(async (tx) => {
       await tx.workEntry.deleteMany({ where: { userId, kind, startAt: { gte: startAt, lt: until } } });
@@ -303,13 +350,14 @@ export async function POST(request: Request) {
               kind,
               startAt: addMinutes(startAt, minuteOffset),
               summary: item.label,
-              note: item.kind === 'note' ? item.label : null,
-              siteId: item.kind === 'site' ? item.site.id : null,
+              note: null,
+              siteId: item.site.id,
               accountingMeta: {
-                ...(item.kind === 'site' ? { siteName: item.site.name } : { scheduleEntryKind: 'note', scheduleText: item.label }),
+                siteName: item.site.name,
                 labelColor: item.color,
                 scheduleGroupIndex: groupIndex,
                 scheduleItemIndex: itemIndex,
+                ...(group.note ? { scheduleGroupNote: group.note } : {}),
                 ...(item.syncSource ? { scheduleSyncSource: item.syncSource } : {}),
               },
             },
@@ -323,7 +371,6 @@ export async function POST(request: Request) {
     try {
       for (const group of finalGroups) {
         for (const item of group.items) {
-          if (item.kind !== 'site') continue;
           await ensureSiteDayFolders({ siteId: item.site.id, siteName: item.site.name, dayYmd: day });
         }
       }
@@ -342,6 +389,7 @@ export async function POST(request: Request) {
       after: buildSnapshotFromGroups(
         finalGroups.map((group) => ({
           items: group.items.map((item) => ({ label: item.label, color: item.color, kind: item.kind, syncSource: item.syncSource })),
+          note: group.note,
         })),
       ),
     });
