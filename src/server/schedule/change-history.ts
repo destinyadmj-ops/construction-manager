@@ -4,12 +4,28 @@ import { cookies } from 'next/headers';
 
 import { Prisma } from '@/generated/prisma';
 import { prisma } from '@/server/db/prisma';
+import {
+  normalizeScheduleCellEntryKind,
+  normalizeScheduleCellNote,
+  type ScheduleCellEntryKind,
+} from '@/shared/schedule-cell-entry';
 
 const COOKIE_NAME = 'masterHub.uid';
 export const SCHEDULE_CHANGE_HISTORY_RETENTION_DAYS = 21;
 export const SCHEDULE_CHANGE_HISTORY_DEFAULT_LIMIT = 5000;
 
 export type ScheduleLabelColor = 'default' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink';
+
+export type ScheduleHistoryGroupItem = {
+  label: string;
+  color: ScheduleLabelColor;
+  kind: ScheduleCellEntryKind;
+};
+
+export type ScheduleHistoryGroup = {
+  items: ScheduleHistoryGroupItem[];
+  note: string | null;
+};
 
 export type ScheduleCellSnapshot = {
   slot1: string | null;
@@ -30,6 +46,8 @@ export type ScheduleChangeHistoryListItem = {
   targetLabel: string;
   beforeValue: string;
   afterValue: string;
+  beforeGroups: ScheduleHistoryGroup[] | null;
+  afterGroups: ScheduleHistoryGroup[] | null;
   editorLabel: string;
   editorHost: string;
   editorPlatform: string;
@@ -82,6 +100,72 @@ function normalizeColor(value: unknown): ScheduleLabelColor {
     value === 'pink'
     ? value
     : 'default';
+}
+
+function normalizeScheduleHistoryGroupItem(value: unknown): ScheduleHistoryGroupItem | null {
+  const input = asObject(value);
+  if (!input) return null;
+
+  const label = normalize(typeof input.label === 'string' ? input.label : null);
+  if (!label) return null;
+
+  return {
+    label,
+    color: normalizeColor(input.color),
+    kind: normalizeScheduleCellEntryKind(input.kind),
+  };
+}
+
+function normalizeScheduleHistoryGroup(value: unknown): ScheduleHistoryGroup | null {
+  const input = asObject(value);
+  if (!input || !Array.isArray(input.items)) return null;
+
+  const items = input.items
+    .map((item) => normalizeScheduleHistoryGroupItem(item))
+    .filter((item): item is ScheduleHistoryGroupItem => !!item)
+    .slice(0, 4);
+
+  if (items.length === 0) return null;
+
+  return {
+    items,
+    note: normalizeScheduleCellNote(input.note),
+  };
+}
+
+export function normalizeScheduleHistoryGroups(value: unknown): ScheduleHistoryGroup[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const groups = value
+    .map((group) => normalizeScheduleHistoryGroup(group))
+    .filter((group): group is ScheduleHistoryGroup => !!group)
+    .slice(0, 4);
+
+  return groups;
+}
+
+function createScheduleHistoryGroupsFromSnapshot(snapshot: ScheduleCellSnapshot): ScheduleHistoryGroup[] {
+  const groups: ScheduleHistoryGroup[] = [];
+
+  const pushSlot = (label: string | null, color: ScheduleLabelColor) => {
+    const normalizedLabel = normalize(label);
+    if (!normalizedLabel) return;
+    groups.push({
+      items: [{ label: normalizedLabel, color, kind: 'site' }],
+      note: null,
+    });
+  };
+
+  pushSlot(snapshot.slot1, snapshot.slot1Color);
+  pushSlot(snapshot.slot2, snapshot.slot2Color);
+  pushSlot(snapshot.slot3, snapshot.slot3Color);
+  pushSlot(snapshot.slot4, snapshot.slot4Color);
+
+  return groups;
+}
+
+function scheduleHistoryGroupsEqual(a: ScheduleHistoryGroup[] | null | undefined, b: ScheduleHistoryGroup[] | null | undefined) {
+  return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
 }
 
 function extractEntryLabel(entry: { summary?: string | null; accountingMeta?: unknown }) {
@@ -225,6 +309,8 @@ export async function listScheduleChangeHistory(input: {
           targetLabel: true,
           beforeValue: true,
           afterValue: true,
+          beforeGroups: true,
+          afterGroups: true,
           editorLabel: true,
           editorHost: true,
           editorPlatform: true,
@@ -254,6 +340,8 @@ export async function listScheduleChangeHistory(input: {
         "targetLabel",
         "beforeValue",
         "afterValue",
+        "beforeGroups",
+        "afterGroups",
         "editorLabel",
         "editorHost",
         "editorPlatform",
@@ -275,7 +363,11 @@ export async function listScheduleChangeHistory(input: {
   ]);
 
   return {
-    items,
+    items: items.map((item) => ({
+      ...item,
+      beforeGroups: normalizeScheduleHistoryGroups(item.beforeGroups),
+      afterGroups: normalizeScheduleHistoryGroups(item.afterGroups),
+    })),
     total: Number(totalRows[0]?.total ?? 0),
   };
 }
@@ -358,8 +450,13 @@ export async function recordScheduleChangeHistory(input: {
   targetLabel: string;
   before: ScheduleCellSnapshot;
   after: ScheduleCellSnapshot;
+  beforeGroups?: ScheduleHistoryGroup[] | null;
+  afterGroups?: ScheduleHistoryGroup[] | null;
 }) {
-  if (scheduleCellSnapshotEquals(input.before, input.after)) return;
+  const beforeGroups = normalizeScheduleHistoryGroups(input.beforeGroups) ?? createScheduleHistoryGroupsFromSnapshot(input.before);
+  const afterGroups = normalizeScheduleHistoryGroups(input.afterGroups) ?? createScheduleHistoryGroupsFromSnapshot(input.after);
+
+  if (scheduleCellSnapshotEquals(input.before, input.after) && scheduleHistoryGroupsEqual(beforeGroups, afterGroups)) return;
 
   try {
     const editor = await resolveScheduleEditorContext(input.request);
@@ -375,6 +472,8 @@ export async function recordScheduleChangeHistory(input: {
       targetLabel: input.targetLabel,
       beforeValue: formatScheduleCellSnapshot(input.before),
       afterValue: formatScheduleCellSnapshot(input.after),
+      beforeGroups,
+      afterGroups,
       editorLabel: editor.editorLabel,
       editorIpHash: editor.editorIpHash,
       editorUserAgentHash: editor.editorUserAgentHash,
@@ -386,7 +485,11 @@ export async function recordScheduleChangeHistory(input: {
 
     if (delegate?.create) {
       await delegate.create({
-        data: payload,
+        data: {
+          ...payload,
+          beforeGroups: payload.beforeGroups as unknown as Prisma.InputJsonValue,
+          afterGroups: payload.afterGroups as unknown as Prisma.InputJsonValue,
+        },
       });
     } else {
       await prisma.$executeRaw(Prisma.sql`
@@ -402,6 +505,8 @@ export async function recordScheduleChangeHistory(input: {
           "targetLabel",
           "beforeValue",
           "afterValue",
+          "beforeGroups",
+          "afterGroups",
           "editorLabel",
           "editorIpHash",
           "editorUserAgentHash",
@@ -421,6 +526,8 @@ export async function recordScheduleChangeHistory(input: {
           ${payload.targetLabel},
           ${payload.beforeValue},
           ${payload.afterValue},
+          CAST(${JSON.stringify(payload.beforeGroups)} AS jsonb),
+          CAST(${JSON.stringify(payload.afterGroups)} AS jsonb),
           ${payload.editorLabel},
           ${payload.editorIpHash},
           ${payload.editorUserAgentHash},

@@ -279,7 +279,8 @@ export async function POST(request: Request) {
       orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
       select: { summary: true, accountingMeta: true, site: { select: { name: true, companyName: true } } },
     });
-    const beforeSnapshot = buildSnapshotFromGroups(buildGroupsFromEntries(beforeEntries));
+    const beforeGroups = buildGroupsFromEntries(beforeEntries);
+    const beforeSnapshot = buildSnapshotFromGroups(beforeGroups);
 
     const slot1Name = (parsed.data.slot1 ?? null)?.trim() || null;
     const slot2Name = (parsed.data.slot2 ?? null)?.trim() || null;
@@ -386,12 +387,17 @@ export async function POST(request: Request) {
       dayYmd: day,
       targetLabel: 'スケジュール',
       before: beforeSnapshot,
+      beforeGroups,
       after: buildSnapshotFromGroups(
         finalGroups.map((group) => ({
           items: group.items.map((item) => ({ label: item.label, color: item.color, kind: item.kind, syncSource: item.syncSource })),
           note: group.note,
         })),
       ),
+      afterGroups: finalGroups.map((group) => ({
+        items: group.items.map((item) => ({ label: item.label, color: item.color, kind: item.kind })),
+        note: group.note,
+      })),
     });
 
     return Response.json({ ok: true });
