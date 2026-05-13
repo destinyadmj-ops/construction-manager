@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   buildNameColumnTrack,
   defaultWeekGridPrefs,
@@ -42,6 +42,24 @@ type SiteItem = {
   id: string;
   companyName?: string | null;
   name: string;
+};
+
+type ScheduleEntryTarget = {
+  entry: string;
+  siteId: string | null;
+};
+
+type LinkedScheduleEntryTarget = {
+  entry: string;
+  siteId: string;
+};
+
+type CellEntryMenuState = {
+  title: string;
+  items: LinkedScheduleEntryTarget[];
+  top: number;
+  left: number;
+  width: number;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -97,6 +115,36 @@ function asObject(value: unknown): JsonObject | null {
   return value && typeof value === 'object' ? (value as JsonObject) : null;
 }
 
+function resolveScheduleEntryTargets(entries: string[], siteIdByScheduleEntry: Map<string, string>): ScheduleEntryTarget[] {
+  return entries.flatMap<ScheduleEntryTarget>((entry) => {
+    const tokenMatches = entry
+      .split('/')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+      .map((part) => ({ entry: part, siteId: siteIdByScheduleEntry.get(normalizeSiteLookupKey(part)) ?? null }))
+      .filter(isLinkedScheduleEntryTarget);
+
+    if (tokenMatches.length > 1) {
+      return tokenMatches;
+    }
+
+    const exactSiteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry)) ?? null;
+    if (exactSiteId) {
+      return [{ entry, siteId: exactSiteId }];
+    }
+
+    if (tokenMatches.length === 1) {
+      return [{ entry, siteId: tokenMatches[0].siteId }];
+    }
+
+    return [{ entry, siteId: null }];
+  });
+}
+
+function isLinkedScheduleEntryTarget(target: ScheduleEntryTarget): target is LinkedScheduleEntryTarget {
+  return typeof target.siteId === 'string' && target.siteId.length > 0;
+}
+
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
 
 export default function MobileWeekHub() {
@@ -118,6 +166,7 @@ function MobileWeekHubInner() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
+  const [cellEntryMenu, setCellEntryMenu] = useState<CellEntryMenuState | null>(null);
 
   const requestedScheduleKind = useMemo(() => readRequestedScheduleKind(searchParams), [searchParams]);
 
@@ -358,6 +407,52 @@ function MobileWeekHubInner() {
     handleSiteClick(siteId);
   }, [handleSiteClick, siteIdByScheduleEntry]);
 
+  const closeCellEntryMenu = useCallback(() => {
+    setCellEntryMenu(null);
+  }, []);
+
+  const openCellEntryMenu = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>, title: string, items: LinkedScheduleEntryTarget[]) => {
+      if (items.length <= 1) return;
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(Math.max(rect.width, 220), Math.max(220, viewportWidth - 16));
+      const estimatedHeight = Math.min(items.length * 48 + 56, 320);
+      const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+      const preferredTop = rect.bottom + 8;
+      const top = preferredTop + estimatedHeight <= viewportHeight - 8
+        ? preferredTop
+        : Math.max(8, rect.top - estimatedHeight - 8);
+
+      setCellEntryMenu({ title, items, top, left, width });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!cellEntryMenu) return;
+
+    const close = () => setCellEntryMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [cellEntryMenu]);
+
+  useEffect(() => {
+    setCellEntryMenu(null);
+  }, [activeTab, scheduleKind, weekStart]);
+
   const handleTabChange = useCallback((tab: MobileTab, nextKind?: ScheduleKind) => {
     const next = new URLSearchParams(searchParams.toString());
     next.set('tab', tab);
@@ -575,6 +670,8 @@ function MobileWeekHubInner() {
                         </div>
                         {dayLabels.map((day) => {
                           const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
+                          const entryTargets = resolveScheduleEntryTargets(entries, siteIdByScheduleEntry);
+                          const linkedTargets = entryTargets.filter(isLinkedScheduleEntryTarget);
                           return (
                             <div
                               key={`${user.id}:${day.key}`}
@@ -584,20 +681,61 @@ function MobileWeekHubInner() {
                               style={{ minHeight: `${weekGridCellMinH}px` }}
                             >
                               {entries.length > 0 ? (
-                                <div className="space-y-1">
-                                  {entries.map((entry) => (
-                                    <button
-                                      key={`${user.id}:${day.key}:${entry}`}
-                                      type="button"
-                                      onClick={() => handleScheduleEntryClick(entry)}
-                                      className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
-                                      style={{ fontSize: scheduleCellFontSize }}
-                                      title="現場詳細を開く"
-                                    >
-                                      {entry}
-                                    </button>
-                                  ))}
-                                </div>
+                                linkedTargets.length > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) =>
+                                      openCellEntryMenu(
+                                        event,
+                                        `${userLabel(user)} / ${day.key}`,
+                                        linkedTargets,
+                                      )
+                                    }
+                                    className="w-full rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-left leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                    style={{ fontSize: scheduleCellFontSize }}
+                                    title="現場一覧を開く"
+                                    aria-haspopup="menu"
+                                    aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
+                                    data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
+                                  >
+                                    <div className="space-y-1">
+                                      {linkedTargets.slice(0, 2).map((target) => (
+                                        <div key={`${user.id}:${day.key}:${target.entry}`} className="truncate">
+                                          {target.entry}
+                                        </div>
+                                      ))}
+                                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                        {linkedTargets.length}件の現場から選択
+                                      </div>
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {entryTargets.map((target) =>
+                                      target.siteId ? (
+                                        <button
+                                          key={`${user.id}:${day.key}:${target.entry}`}
+                                          type="button"
+                                          onClick={() => handleScheduleEntryClick(target.entry)}
+                                          className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug dark:border-zinc-700 dark:bg-zinc-900"
+                                          style={{ fontSize: scheduleCellFontSize }}
+                                          title="現場詳細を開く"
+                                        >
+                                          {target.entry}
+                                        </button>
+                                      ) : (
+                                        <div
+                                          key={`${user.id}:${day.key}:${target.entry}`}
+                                          className="rounded border border-dashed border-zinc-200 bg-zinc-50 px-2 py-1 leading-snug text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                                          style={{ fontSize: scheduleCellFontSize }}
+                                          title="台帳未紐付けの予定"
+                                        >
+                                          {target.entry}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                )
                               ) : (
                                 <div className="text-zinc-300 dark:text-zinc-700">-</div>
                               )}
@@ -699,6 +837,45 @@ function MobileWeekHubInner() {
           </>
         )}
       </div>
+
+      {cellEntryMenu ? (
+        <>
+          <button
+            type="button"
+            aria-label="現場一覧を閉じる"
+            onClick={closeCellEntryMenu}
+            className="fixed inset-0 z-40 bg-black/20"
+          />
+          <div
+            className="fixed z-50 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-black"
+            style={{ top: cellEntryMenu.top, left: cellEntryMenu.left, width: cellEntryMenu.width }}
+            data-testid="mobile-cell-entry-menu"
+          >
+            <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+              <div className="truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{cellEntryMenu.title}</div>
+              <div className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">現場を選択</div>
+            </div>
+
+            <div className="overflow-y-auto p-1" style={{ maxHeight: 'min(50vh, 22rem)' }}>
+              {cellEntryMenu.items.map((item) => (
+                <button
+                  key={`${cellEntryMenu.title}:${item.siteId}`}
+                  type="button"
+                  onClick={() => {
+                    closeCellEntryMenu();
+                    handleSiteClick(item.siteId);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  data-testid={`mobile-cell-entry-option-${item.siteId}`}
+                >
+                  <span className="truncate">{item.entry}</span>
+                  <span className="ml-3 shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">詳細へ</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

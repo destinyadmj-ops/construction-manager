@@ -6,6 +6,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  type ReactNode,
   type MouseEvent as ReactMouseEvent,
   useMemo,
   useRef,
@@ -6004,7 +6005,8 @@ function Row({
   const renderSiteLabel = useCallback(
     (
       input: {
-        displayValue: string;
+        displayValue: ReactNode;
+        displayText: string;
         tooltipValue: string;
         siteName: string | null;
         entryKind: ScheduleCellEntryKind;
@@ -6020,7 +6022,7 @@ function Row({
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
               day: contextInput.day,
-              siteName: input.siteName ?? input.displayValue,
+              siteName: input.siteName ?? input.displayText,
               color: contextInput.color,
               beforeCell: contextInput.beforeCell,
               groupIndex: contextInput.groupIndex,
@@ -6123,11 +6125,41 @@ function Row({
           ...renderedItems.map((item) => item.displayName),
           ...(groupNote ? [`追記: ${groupNote}`] : []),
         ].join('\n');
-        const displayValue =
+        const displayText =
           formatScheduleCellGroupDisplayValue(
             renderedItems.map((item) => item.displayName),
             groupNote,
           ) ?? '';
+        const displayValue = (
+          <>
+            {renderedItems.map((item, itemIndex) => {
+              const isNoteEntry = !isSiteCellEntry(item.entry);
+              return (
+                <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
+                  {itemIndex > 0 ? ' / ' : null}
+                  {isNoteEntry ? (
+                    <>
+                      <span className="text-red-600 dark:text-red-400">追記:</span>
+                      {' '}
+                      <span>{item.displayName.replace(/^追記:\s*/u, '')}</span>
+                    </>
+                  ) : (
+                    item.displayName
+                  )}
+                </Fragment>
+              );
+            })}
+            {groupNote ? (
+              <>
+                {renderedItems.length > 0 ? '（' : null}
+                <span className="text-red-600 dark:text-red-400">追記:</span>
+                {' '}
+                <span>{groupNote}</span>
+                {renderedItems.length > 0 ? '）' : null}
+              </>
+            ) : null}
+          </>
+        );
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
@@ -6136,6 +6168,7 @@ function Row({
           <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
             {renderSiteLabel({
               displayValue,
+              displayText,
               tooltipValue,
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
@@ -6367,6 +6400,59 @@ function Row({
     ],
   );
 
+  const applyDraggedGroup = useCallback(
+    async (input: { day: string; beforeCell: ApiCell; dragged: DraggedCellState }) => {
+      const beforeCell = cloneApiCell(input.beforeCell);
+      const beforeGroups = apiCellToGroups(beforeCell);
+      const draggedGroup = cloneCellGroups(apiCellToGroups(input.dragged.cell))[0];
+      if (!draggedGroup) {
+        onNotify?.('ドラッグ元の枠が見つかりません');
+        return;
+      }
+
+      const draggedSiteNames = new Set(
+        draggedGroup.items.filter((entry) => isSiteCellEntry(entry)).map((entry) => entry.label),
+      );
+      if (draggedSiteNames.size === 0) {
+        onNotify?.('ドラッグ元の現場が見つかりません');
+        return;
+      }
+
+      if (beforeGroups.length >= MAX_CELL_GROUPS) {
+        onNotify?.('満杯のため追加できません（4枠あり）');
+        return;
+      }
+
+      const hasDuplicate = beforeGroups.some((group) =>
+        group.items.some((entry) => isSiteCellEntry(entry) && draggedSiteNames.has(entry.label)),
+      );
+      if (hasDuplicate) {
+        onNotify?.('ドラッグ元の枠に含まれる現場がすでに登録済みです');
+        return;
+      }
+
+      const result = await persistCellSet({
+        targetUser: user,
+        day: input.day,
+        beforeCell,
+        nextCell: groupsToApiCell([...beforeGroups, draggedGroup]),
+      });
+      if (result.failed) {
+        onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+        return;
+      }
+      if (!result.changed) {
+        onNotify?.('変更はありません');
+        return;
+      }
+
+      onSetDraggedCell?.(null);
+      onNotify?.('枠を追加しました');
+      void Promise.resolve(onAssigned()).catch(() => undefined);
+    },
+    [onAssigned, onNotify, onSetDraggedCell, persistCellSet, user],
+  );
+
   const renderedDayCells = useMemo(
     () =>
       dayLabels.map((d) => {
@@ -6404,17 +6490,7 @@ function Row({
                   allowSiblingMerge: false,
                 });
               } else if (draggedCell && (draggedCell.userId !== user.id || draggedCell.day !== d.key)) {
-                const siteName = apiCellToSiteEntries(draggedCell.cell)[0]?.label;
-                if (siteName) {
-                  void runCellAction({
-                    day: d.key,
-                    action: 'add',
-                    color: cellTextColor,
-                    siteName,
-                    beforeCell,
-                    allowSiblingMerge: false,
-                  });
-                }
+                void applyDraggedGroup({ day: d.key, beforeCell, dragged: draggedCell });
               }
             }}
             onClick={(e) => {
@@ -6589,6 +6665,7 @@ function Row({
       onSetSelectedCell,
       paceTargetDays,
       paceTargetUserId,
+      applyDraggedGroup,
       renderCellLabels,
       rowCellClassName,
       runCellAction,
