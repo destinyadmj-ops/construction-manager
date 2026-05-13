@@ -676,7 +676,7 @@ function MobileWeekHubInner() {
                 表示できる従業員予定がありません。
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+              <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
                 <div
                   className="sticky z-20 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
                   style={{ top: `${toolbarHeight}px` }}
