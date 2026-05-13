@@ -6,6 +6,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  type ReactNode,
   type MouseEvent as ReactMouseEvent,
   useMemo,
   useRef,
@@ -131,6 +132,14 @@ type CellHistoryEntry = {
 };
 
 type DraggedCellState = { userId: string; day: string; cell: ApiCell };
+
+type CellHoverMenuItem = {
+  key: string;
+  kind: 'site' | 'note';
+  label: string;
+  siteName?: string | null;
+  className?: string;
+};
 
 type SlotContextMenuState = {
   day: string;
@@ -6004,13 +6013,15 @@ function Row({
   const renderSiteLabel = useCallback(
     (
       input: {
-        displayValue: string;
+        displayValue: ReactNode;
+        displayText: string;
         tooltipValue: string;
         siteName: string | null;
         entryKind: ScheduleCellEntryKind;
         className: string;
         fontSize: string;
         dragState?: DraggedCellState | null;
+        hoverMenuItems?: CellHoverMenuItem[];
         contextInput?: { day: string; beforeCell: ApiCell; color: LabelColor; groupIndex: number; groupNote?: string | null };
       },
     ) => {
@@ -6020,7 +6031,7 @@ function Row({
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
               day: contextInput.day,
-              siteName: input.siteName ?? input.displayValue,
+              siteName: input.siteName ?? input.displayText,
               color: contextInput.color,
               beforeCell: contextInput.beforeCell,
               groupIndex: contextInput.groupIndex,
@@ -6042,81 +6053,95 @@ function Row({
             onSetDraggedCell?.(null);
           }
         : undefined;
-      const renderDisplayValue = () => {
-        const notePrefix = '追記:';
-        const groupNotePrefix = '（追記: ';
-        if (input.entryKind === 'note' && input.displayValue.startsWith(notePrefix)) {
-          const noteText = input.displayValue.slice(notePrefix.length).trimStart();
-          return (
-            <>
-              <span className="text-red-600 dark:text-red-400">追記:</span>
-              {' '}
-              <span>{noteText}</span>
-            </>
-          );
-        }
-
-        const groupNoteIndex = input.displayValue.lastIndexOf(groupNotePrefix);
-        if (groupNoteIndex >= 0 && input.displayValue.endsWith('）')) {
-          const baseText = input.displayValue.slice(0, groupNoteIndex);
-          const noteText = input.displayValue.slice(groupNoteIndex + groupNotePrefix.length, -1);
-          return (
-            <>
-              {baseText}
-              {'（'}
-              <span className="text-red-600 dark:text-red-400">追記:</span>
-              {' '}
-              <span>{noteText}</span>
-              {'）'}
-            </>
-          );
-        }
-
-        return input.displayValue;
-      };
+      const hoverMenuItems = input.hoverMenuItems ?? [];
+      const hasHoverMenu = hoverMenuItems.length > 0;
+      const hoverMenu = hasHoverMenu ? (
+        <div
+          className="pointer-events-none invisible absolute left-0 top-full z-[80] min-w-[220px] max-w-[320px] overflow-hidden rounded-md border border-zinc-300 bg-white opacity-0 shadow-lg transition group-hover/slot:visible group-hover/slot:pointer-events-auto group-hover/slot:opacity-100 group-focus-within/slot:visible group-focus-within/slot:pointer-events-auto group-focus-within/slot:opacity-100 dark:border-zinc-700 dark:bg-zinc-950"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="max-h-56 overflow-auto py-1">
+            {hoverMenuItems.map((item) =>
+              item.kind === 'site' && item.siteName ? (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-50 dark:hover:bg-zinc-900 ${item.className ?? 'text-zinc-900 dark:text-zinc-100'}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenSiteFromCell?.(item.siteName ?? '');
+                  }}
+                >
+                  {item.label}
+                </button>
+              ) : (
+                <div key={item.key} className="px-3 py-1.5 text-left text-xs text-zinc-700 dark:text-zinc-200">
+                  <span className="text-red-600 dark:text-red-400">追記:</span>
+                  {' '}
+                  <span>{item.label}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      ) : null;
       if (input.entryKind !== 'site' || !input.siteName || !onOpenSiteFromCell) {
         return (
-          <div
-            data-color-edit-ignore-contextmenu
-            className={input.className}
-            style={{ fontSize: input.fontSize }}
-            draggable={Boolean(dragState)}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onContextMenu={handleContextMenu}
-            title={input.tooltipValue}
-          >
-            {renderDisplayValue()}
+          <div className="group/slot relative">
+            <div
+              data-color-edit-ignore-contextmenu
+              className={input.className}
+              style={{ fontSize: input.fontSize }}
+              draggable={Boolean(dragState)}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onContextMenu={handleContextMenu}
+              title={hasHoverMenu ? undefined : input.tooltipValue}
+            >
+              {input.displayValue}
+            </div>
+            {hoverMenu}
           </div>
         );
       }
       const siteName = input.siteName;
       return (
-        <div
-          role="button"
-          tabIndex={0}
-          data-color-edit-ignore-contextmenu
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onOpenSiteFromCell(siteName);
-          }}
-          onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            event.stopPropagation();
-            onOpenSiteFromCell(siteName);
-          }}
-          onContextMenu={handleContextMenu}
-          draggable={Boolean(dragState)}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          className={`${input.className} w-full cursor-pointer text-left hover:underline`}
-          style={{ fontSize: input.fontSize }}
-          title={input.tooltipValue}
-          aria-label={`${siteName} の詳細を開く`}
-        >
-          {renderDisplayValue()}
+        <div className="group/slot relative">
+          <div
+            role="button"
+            tabIndex={0}
+            data-color-edit-ignore-contextmenu
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenSiteFromCell(siteName);
+            }}
+            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenSiteFromCell(siteName);
+            }}
+            onContextMenu={handleContextMenu}
+            draggable={Boolean(dragState)}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            className={`${input.className} w-full cursor-pointer text-left hover:underline`}
+            style={{ fontSize: input.fontSize }}
+            title={hasHoverMenu ? undefined : input.tooltipValue}
+            aria-label={`${siteName} の詳細を開く`}
+          >
+            {input.displayValue}
+          </div>
+          {hoverMenu}
         </div>
       );
     },
@@ -6137,6 +6162,7 @@ function Row({
               entry,
               storedName: entry.label,
               displayName: `追記: ${entry.label}`,
+              fullDisplayName: entry.label,
             };
           }
           const site = resolveStoredSite(entry.label);
@@ -6144,6 +6170,7 @@ function Row({
           return {
             entry,
             storedName: entry.label,
+            fullDisplayName: fullName,
             displayName:
               familyLabel && itemIndex > 0
                 ? stripSiteFamilyLabel(fullName, familyLabel) || fullName
@@ -6155,11 +6182,71 @@ function Row({
           ...renderedItems.map((item) => item.displayName),
           ...(groupNote ? [`追記: ${groupNote}`] : []),
         ].join('\n');
-        const displayValue =
+        const displayText =
           formatScheduleCellGroupDisplayValue(
             renderedItems.map((item) => item.displayName),
             groupNote,
           ) ?? '';
+        const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
+        const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
+        const hoverMenuItems: CellHoverMenuItem[] =
+          siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
+            ? [
+                ...siteItems.map((item, itemIndex) => ({
+                  key: `hover-site:${day}:${groupIndex}:${itemIndex}`,
+                  kind: 'site' as const,
+                  label: item.fullDisplayName,
+                  siteName: item.storedName,
+                  className: labelTextClass(item.entry.color ?? 'default', 'primary'),
+                })),
+                ...noteItems.map((item, itemIndex) => ({
+                  key: `hover-note:${day}:${groupIndex}:${itemIndex}`,
+                  kind: 'note' as const,
+                  label: item.fullDisplayName,
+                })),
+                ...(groupNote
+                  ? [
+                      {
+                        key: `hover-group-note:${day}:${groupIndex}`,
+                        kind: 'note' as const,
+                        label: groupNote,
+                      },
+                    ]
+                  : []),
+              ]
+            : [];
+        const displayValue = (
+          <>
+            {renderedItems.map((item, itemIndex) => {
+              const isSiteItem = isSiteCellEntry(item.entry);
+              return (
+                <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
+                  {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
+                  {isSiteItem ? (
+                    <span className={labelTextClass(item.entry.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
+                      {item.displayName}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-red-600 dark:text-red-400">追記:</span>
+                      {' '}
+                      <span className="text-zinc-700 dark:text-zinc-200">{item.fullDisplayName}</span>
+                    </>
+                  )}
+                </Fragment>
+              );
+            })}
+            {groupNote ? (
+              <>
+                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
+                <span className="text-red-600 dark:text-red-400">追記:</span>
+                {' '}
+                <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
+                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
+              </>
+            ) : null}
+          </>
+        );
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
@@ -6168,15 +6255,17 @@ function Row({
           <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
             {renderSiteLabel({
               displayValue,
+              displayText,
               tooltipValue,
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
-              className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${labelTextClass(anchorEntry?.color ?? 'default', groupIndex === 0 ? 'primary' : 'secondary')} ${
+              className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
                   : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
               }`,
               fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
+              hoverMenuItems,
               dragState,
               contextInput: { day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
