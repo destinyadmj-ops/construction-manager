@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../header-actions';
 
 function scheduleLabelDotClass(color: string | null | undefined): string {
@@ -52,6 +52,8 @@ type AuthMeUser = {
   canGrantScheduleEdit: boolean;
 };
 
+type ScheduleKind = 'normal' | 'daily';
+
 function generateDateSearchTokens(dateYmd: string | null | undefined): string[] {
   if (!dateYmd) return [];
   const match = dateYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -97,9 +99,15 @@ function todayYmd(): string {
   return `${year}-${month}-${day}`;
 }
 
+function currentMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function SiteLedgerPage() {
   const { setAddAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -125,10 +133,24 @@ export default function SiteLedgerPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [deprMonth, setDeprMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const scheduleKind = useMemo<ScheduleKind>(() => {
+    const kindParam = (searchParams.get('kind') ?? '').trim().toLowerCase();
+    return kindParam === 'daily' ? 'daily' : 'normal';
+  }, [searchParams]);
+  const monthParam = useMemo(() => {
+    const value = (searchParams.get('month') ?? '').trim();
+    return /^\d{4}-\d{2}$/.test(value) ? value : null;
+  }, [searchParams]);
+  const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
+
+  const [deprMonthByKind, setDeprMonthByKind] = useState<{ normal: string; daily: string }>(() => {
+    const fallbackMonth = currentMonthKey();
+    const initialMonth = monthParam ?? fallbackMonth;
+    return scheduleKind === 'daily'
+      ? { normal: fallbackMonth, daily: initialMonth }
+      : { normal: initialMonth, daily: fallbackMonth };
   });
+  const deprMonth = deprMonthByKind[scheduleKind];
   const [deprMap, setDeprMap] = useState<Record<string, DeprItem>>({});
   const [deprStatus, setDeprStatus] = useState<string | null>(null);
 
@@ -136,6 +158,59 @@ export default function SiteLedgerPage() {
   const [newName, setNewName] = useState('');
   const [newThreshold, setNewThreshold] = useState('10');
   const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
+
+  useEffect(() => {
+    if (!monthParam) return;
+    setDeprMonthByKind((prev) => {
+      if (prev[scheduleKind] === monthParam) return prev;
+      return { ...prev, [scheduleKind]: monthParam };
+    });
+  }, [monthParam, scheduleKind]);
+
+  useEffect(() => {
+    setSelectedSites(new Set());
+  }, [scheduleKind]);
+
+  const replaceLedgerLocation = useCallback(
+    (nextKind: ScheduleKind, nextMonth: string) => {
+      const sp = new URLSearchParams();
+      sp.set('kind', nextKind);
+      if (nextMonth) sp.set('month', nextMonth);
+      router.replace(`/site-ledger?${sp.toString()}`);
+    },
+    [router],
+  );
+
+  const handleDeprMonthChange = useCallback(
+    (nextMonth: string) => {
+      setDeprMonthByKind((prev) => {
+        if (prev[scheduleKind] === nextMonth) return prev;
+        return { ...prev, [scheduleKind]: nextMonth };
+      });
+      replaceLedgerLocation(scheduleKind, nextMonth);
+    },
+    [replaceLedgerLocation, scheduleKind],
+  );
+
+  const buildSiteDetailHref = useCallback(
+    (siteId: string) => {
+      const sp = new URLSearchParams();
+      sp.set('kind', scheduleKind);
+      if (deprMonth) sp.set('month', deprMonth);
+      return `/site-ledger/${encodeURIComponent(siteId)}?${sp.toString()}`;
+    },
+    [deprMonth, scheduleKind],
+  );
+
+  const buildSitePhotoHref = useCallback(
+    (siteId: string, dateYmd?: string | null) => {
+      const sp = new URLSearchParams();
+      sp.set('kind', scheduleKind);
+      sp.set('date', dateYmd ?? todayYmd());
+      return `/site-ledger/${encodeURIComponent(siteId)}/photos?${sp.toString()}`;
+    },
+    [scheduleKind],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -167,7 +242,7 @@ export default function SiteLedgerPage() {
     setStatusMsg(null);
     setIsLoading(true);
     try {
-      const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}`);
+      const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${encodeURIComponent(scheduleKind)}`);
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -224,12 +299,14 @@ export default function SiteLedgerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [deprMonth]);
+  }, [deprMonth, scheduleKind]);
 
   const loadDeprCounts = useCallback(async () => {
     setDeprStatus(null);
     try {
-      const r = await fetch(`/api/sites/depreciation-counts?month=${encodeURIComponent(deprMonth)}`);
+      const r = await fetch(
+        `/api/sites/depreciation-counts?month=${encodeURIComponent(deprMonth)}&kind=${encodeURIComponent(scheduleKind)}`,
+      );
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -252,13 +329,13 @@ export default function SiteLedgerPage() {
       setDeprMap({});
       setDeprStatus(e instanceof Error ? `取得に失敗: ${e.message}` : '取得に失敗しました');
     }
-  }, [deprMonth]);
+  }, [deprMonth, scheduleKind]);
 
   const loadPhotoSites = useCallback(async () => {
     setPhotoStatusMsg(null);
     setPhotoLoading(true);
     try {
-      const r = await fetch('/api/sites/photos/summary');
+      const r = await fetch(`/api/sites/photos/summary?kind=${encodeURIComponent(scheduleKind)}`);
       const j = (await r.json().catch(() => null)) as unknown;
       const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
       if (!r.ok || obj?.ok !== true) {
@@ -301,16 +378,13 @@ export default function SiteLedgerPage() {
     } finally {
       setPhotoLoading(false);
     }
-  }, []);
+  }, [scheduleKind]);
 
   const openPhotoFolder = useCallback(
     (siteId: string, dateYmd?: string | null) => {
-      const target = dateYmd ?? todayYmd();
-      router.push(
-        `/site-ledger/${encodeURIComponent(siteId)}/photos?date=${encodeURIComponent(target)}`,
-      );
+      router.push(buildSitePhotoHref(siteId, dateYmd));
     },
-    [router],
+    [buildSitePhotoHref, router],
   );
 
   useEffect(() => {
@@ -375,9 +449,9 @@ export default function SiteLedgerPage() {
 
   useEffect(() => {
     for (const site of visibleSites.slice(0, 12)) {
-      router.prefetch(`/site-ledger/${encodeURIComponent(site.id)}?month=${encodeURIComponent(deprMonth)}`);
+      router.prefetch(buildSiteDetailHref(site.id));
     }
-  }, [deprMonth, router, visibleSites]);
+  }, [buildSiteDetailHref, router, visibleSites]);
 
       const filteredPhotoSites = useMemo(() => {
         const needle = photoQuery.trim().toLowerCase();
@@ -409,6 +483,7 @@ export default function SiteLedgerPage() {
           name,
           companyName,
           depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
+          kind: apiKind,
         }),
       });
       const j = (await r.json().catch(() => null)) as unknown;
@@ -421,7 +496,7 @@ export default function SiteLedgerPage() {
     } catch (e) {
       setStatusMsg(e instanceof Error ? `追加に失敗: ${e.message}` : '追加に失敗しました');
     }
-  }, [loadSites, newCompanyName, newName, newThreshold]);
+  }, [apiKind, loadSites, newCompanyName, newName, newThreshold]);
 
   const importSchedule = useCallback(
     async (file: File | null) => {
@@ -431,7 +506,10 @@ export default function SiteLedgerPage() {
       try {
         const fd = new FormData();
         fd.set('file', file);
-        const r = await fetch('/api/sites/import-schedule', { method: 'POST', body: fd });
+        const r = await fetch(`/api/sites/import-schedule?kind=${encodeURIComponent(scheduleKind)}`, {
+          method: 'POST',
+          body: fd,
+        });
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
         if (!r.ok || obj?.ok !== true) throw new Error((obj?.error as string) || `HTTP ${r.status}`);
@@ -451,7 +529,7 @@ export default function SiteLedgerPage() {
         setIsImporting(false);
       }
     },
-    [loadSites],
+      [loadSites, scheduleKind],
   );
 
   // 削除関連の関数
@@ -778,6 +856,34 @@ export default function SiteLedgerPage() {
           {canEditSite ? '一覧/追加/編集/削除が利用できます。' : '一覧と詳細参照が利用できます。'}
         </div>
 
+        <div className="mt-4 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
+          <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">日常/通常</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => replaceLedgerLocation('normal', deprMonthByKind.normal)}
+              className={`rounded-md border px-3 py-2 text-xs ${
+                scheduleKind === 'normal'
+                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+              }`}
+            >
+              通常
+            </button>
+            <button
+              type="button"
+              onClick={() => replaceLedgerLocation('daily', deprMonthByKind.daily)}
+              className={`rounded-md border px-3 py-2 text-xs ${
+                scheduleKind === 'daily'
+                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+              }`}
+            >
+              日常
+            </button>
+          </div>
+        </div>
+
         {statusMsg ? <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{statusMsg}</div> : null}
 
         <div className="mt-5 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
@@ -802,7 +908,7 @@ export default function SiteLedgerPage() {
             <input
               type="month"
               value={deprMonth}
-              onChange={(e) => setDeprMonth(e.target.value)}
+              onChange={(e) => handleDeprMonthChange(e.target.value)}
               className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
             />
           </div>
@@ -853,6 +959,7 @@ export default function SiteLedgerPage() {
                         name,
                         companyName,
                         depreciationThreshold: Number.isFinite(threshold) ? threshold : undefined,
+                        kind: apiKind,
                       }),
                     });
                     const j = (await r.json().catch(() => null)) as unknown;
@@ -947,9 +1054,7 @@ export default function SiteLedgerPage() {
                     ) : null}
                     <button
                       type="button"
-                      onClick={() =>
-                        router.push(`/site-ledger/${encodeURIComponent(s.id)}?month=${encodeURIComponent(deprMonth)}`)
-                      }
+                      onClick={() => router.push(buildSiteDetailHref(s.id))}
                       className="relative w-full rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-10 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
                         deprMap[s.id]

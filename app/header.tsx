@@ -101,7 +101,14 @@ export default function AppHeader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
+  const scheduleKind = useMemo(() => {
+    const kindParam = (searchParams.get('kind') ?? '').trim().toLowerCase();
+    return kindParam === 'daily' ? 'daily' : 'normal';
+  }, [searchParams]);
   const { actions } = useHeaderActions();
+
+  const managementHref = useMemo(() => `/management?kind=${scheduleKind}`, [scheduleKind]);
+  const siteLedgerHref = useMemo(() => `/site-ledger?kind=${scheduleKind}`, [scheduleKind]);
 
   // 現場リストの開閉状態
   const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
@@ -785,7 +792,7 @@ export default function AppHeader() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(`/api/sites?month=${encodeURIComponent(month)}`);
+        const r = await fetch(`/api/sites?month=${encodeURIComponent(month)}&kind=${encodeURIComponent(scheduleKind)}`);
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
         const rawSites = Array.isArray(obj?.sites) ? (obj?.sites as unknown[]) : [];
@@ -818,7 +825,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, scheduleKind]);
 
   const pageFontKey = useMemo(() => {
     return `fontSize:${pathname}`;
@@ -1988,7 +1995,7 @@ export default function AppHeader() {
                     請求書
                   </Link>
                   <Link
-                    href="/management"
+                    href={managementHref}
                     onClick={() => {
                       navIntentRef.current = 'push';
                       setIsOverflowMenuOpen(false);
@@ -2001,7 +2008,7 @@ export default function AppHeader() {
                     管理
                   </Link>
                   <Link
-                    href="/site-ledger"
+                    href={siteLedgerHref}
                     onClick={() => {
                       navIntentRef.current = 'push';
                       setIsOverflowMenuOpen(false);
@@ -2142,7 +2149,7 @@ export default function AppHeader() {
             請求書
           </Link>
           <Link
-            href="/management"
+            href={managementHref}
             data-color-edit-slot="button"
             data-color-edit-id="header:nav:management"
             onClick={() => {
@@ -2155,7 +2162,7 @@ export default function AppHeader() {
             管理
           </Link>
           <Link
-            href="/site-ledger"
+            href={siteLedgerHref}
             data-color-edit-slot="button"
             data-color-edit-id="header:nav:site-ledger"
             onClick={() => {
