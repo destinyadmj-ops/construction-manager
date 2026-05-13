@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   buildNameColumnTrack,
   defaultWeekGridPrefs,
@@ -158,6 +158,7 @@ export default function MobileWeekHub() {
 function MobileWeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
@@ -167,6 +168,7 @@ function MobileWeekHubInner() {
   const [error, setError] = useState<string | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [cellEntryMenu, setCellEntryMenu] = useState<CellEntryMenuState | null>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
 
   const requestedScheduleKind = useMemo(() => readRequestedScheduleKind(searchParams), [searchParams]);
 
@@ -500,9 +502,28 @@ function MobileWeekHubInner() {
 
   const scheduleCellFontSize = 'var(--weekhub-cell-font-size, 12px)';
 
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+
+    const apply = () => {
+      const next = Math.max(0, Math.round(toolbar.getBoundingClientRect().height));
+      setToolbarHeight((prev) => (prev === next ? prev : next));
+    };
+
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(toolbar);
+    window.addEventListener('resize', apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
+      <div ref={toolbarRef} className="sticky top-0 z-40 border-b border-zinc-200 bg-white px-4 py-4 shadow-sm dark:border-zinc-800 dark:bg-black">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -635,21 +656,21 @@ function MobileWeekHubInner() {
                 >
                   <div
                     className="sticky left-0 z-10 border-b border-r border-zinc-200 bg-white px-3 py-3 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-black dark:text-zinc-400"
-                    style={{ minHeight: `${weekGridCellMinH}px` }}
+                    style={{ minHeight: `${weekGridCellMinH}px`, top: `${toolbarHeight}px` }}
                   >
                     従業員
                   </div>
                   {dayLabels.map((day) => (
                     <div
                       key={`header:${day.key}`}
-                      className={`border-b border-l border-zinc-200 px-2 py-3 text-center text-xs dark:border-zinc-800 ${
+                      className={`sticky z-20 border-b border-l border-zinc-200 bg-white px-2 py-3 text-center text-xs dark:border-zinc-800 dark:bg-black ${
                         day.isSun
                           ? 'text-red-600 dark:text-red-400'
                           : day.isSat
                             ? 'text-blue-600 dark:text-blue-400'
                             : 'text-zinc-500 dark:text-zinc-400'
                       }`}
-                      style={{ minHeight: `${weekGridCellMinH}px` }}
+                      style={{ minHeight: `${weekGridCellMinH}px`, top: `${toolbarHeight}px` }}
                     >
                       <div>{day.dow}</div>
                       <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{day.dayNum}</div>
