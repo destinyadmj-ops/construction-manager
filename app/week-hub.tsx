@@ -6,7 +6,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  type ReactNode,
   type MouseEvent as ReactMouseEvent,
   useMemo,
   useRef,
@@ -6005,8 +6004,7 @@ function Row({
   const renderSiteLabel = useCallback(
     (
       input: {
-        displayValue: ReactNode;
-        displayText: string;
+        displayValue: string;
         tooltipValue: string;
         siteName: string | null;
         entryKind: ScheduleCellEntryKind;
@@ -6022,7 +6020,7 @@ function Row({
         ? (event: ReactMouseEvent<HTMLElement>) => {
             openSlotContextMenu(event, {
               day: contextInput.day,
-              siteName: input.siteName ?? input.displayText,
+              siteName: input.siteName ?? input.displayValue,
               color: contextInput.color,
               beforeCell: contextInput.beforeCell,
               groupIndex: contextInput.groupIndex,
@@ -6044,6 +6042,38 @@ function Row({
             onSetDraggedCell?.(null);
           }
         : undefined;
+      const renderDisplayValue = () => {
+        const notePrefix = '追記:';
+        const groupNotePrefix = '（追記: ';
+        if (input.entryKind === 'note' && input.displayValue.startsWith(notePrefix)) {
+          const noteText = input.displayValue.slice(notePrefix.length).trimStart();
+          return (
+            <>
+              <span className="text-red-600 dark:text-red-400">追記:</span>
+              {' '}
+              <span>{noteText}</span>
+            </>
+          );
+        }
+
+        const groupNoteIndex = input.displayValue.lastIndexOf(groupNotePrefix);
+        if (groupNoteIndex >= 0 && input.displayValue.endsWith('）')) {
+          const baseText = input.displayValue.slice(0, groupNoteIndex);
+          const noteText = input.displayValue.slice(groupNoteIndex + groupNotePrefix.length, -1);
+          return (
+            <>
+              {baseText}
+              {'（'}
+              <span className="text-red-600 dark:text-red-400">追記:</span>
+              {' '}
+              <span>{noteText}</span>
+              {'）'}
+            </>
+          );
+        }
+
+        return input.displayValue;
+      };
       if (input.entryKind !== 'site' || !input.siteName || !onOpenSiteFromCell) {
         return (
           <div
@@ -6056,7 +6086,7 @@ function Row({
             onContextMenu={handleContextMenu}
             title={input.tooltipValue}
           >
-            {input.displayValue}
+            {renderDisplayValue()}
           </div>
         );
       }
@@ -6086,7 +6116,7 @@ function Row({
           title={input.tooltipValue}
           aria-label={`${siteName} の詳細を開く`}
         >
-          {input.displayValue}
+          {renderDisplayValue()}
         </div>
       );
     },
@@ -6125,41 +6155,11 @@ function Row({
           ...renderedItems.map((item) => item.displayName),
           ...(groupNote ? [`追記: ${groupNote}`] : []),
         ].join('\n');
-        const displayText =
+        const displayValue =
           formatScheduleCellGroupDisplayValue(
             renderedItems.map((item) => item.displayName),
             groupNote,
           ) ?? '';
-        const displayValue = (
-          <>
-            {renderedItems.map((item, itemIndex) => {
-              const isNoteEntry = !isSiteCellEntry(item.entry);
-              return (
-                <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
-                  {itemIndex > 0 ? ' / ' : null}
-                  {isNoteEntry ? (
-                    <>
-                      <span className="text-red-600 dark:text-red-400">追記:</span>
-                      {' '}
-                      <span>{item.displayName.replace(/^追記:\s*/u, '')}</span>
-                    </>
-                  ) : (
-                    item.displayName
-                  )}
-                </Fragment>
-              );
-            })}
-            {groupNote ? (
-              <>
-                {renderedItems.length > 0 ? '（' : null}
-                <span className="text-red-600 dark:text-red-400">追記:</span>
-                {' '}
-                <span>{groupNote}</span>
-                {renderedItems.length > 0 ? '）' : null}
-              </>
-            ) : null}
-          </>
-        );
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
@@ -6168,7 +6168,6 @@ function Row({
           <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
             {renderSiteLabel({
               displayValue,
-              displayText,
               tooltipValue,
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
