@@ -156,6 +156,13 @@ export default function ManagementPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (scheduleKind !== 'daily') return;
+    if ((searchParams.get('open') ?? '').trim().toLowerCase() !== 'daily-site') return;
+    setDailySiteCreateMsg(null);
+    setDailySiteCreateOpen(true);
+  }, [scheduleKind, searchParams]);
+
+  useEffect(() => {
     // Close daily-site-create UI when leaving daily context.
     if (scheduleKind !== 'daily') {
       setDailySiteCreateOpen(false);
