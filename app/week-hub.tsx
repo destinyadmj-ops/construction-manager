@@ -1511,10 +1511,12 @@ function WeekHubInner() {
   const [isSavingContact, setIsSavingContact] = useState(false);
 
   const [siteDetailOpen, setSiteDetailOpen] = useState(false);
-  const [deprMonth, setDeprMonth] = useState<string>(() => {
+  const [deprMonthByKind, setDeprMonthByKind] = useState<Record<ScheduleKind, string>>(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    const initialMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    return { normal: initialMonth, daily: initialMonth };
   });
+  const deprMonth = deprMonthByKind[scheduleKind];
   const [deprState, setDeprState] = useState<
     | { status: 'idle' }
     | { status: 'loading' }
@@ -1537,6 +1539,16 @@ function WeekHubInner() {
     | { ok: false; error: string }
     | null
   >(null);
+
+  const setDeprMonthForCurrentKind = useCallback(
+    (nextMonth: string) => {
+      setDeprMonthByKind((prev) => {
+        if (prev[scheduleKind] === nextMonth) return prev;
+        return { ...prev, [scheduleKind]: nextMonth };
+      });
+    },
+    [scheduleKind],
+  );
 
   const weekStart = useMemo(() => {
     return startOfWeekMonday(cursorDate);
@@ -2870,7 +2882,7 @@ function WeekHubInner() {
                     <input
                       type="month"
                       value={deprMonth}
-                      onChange={(e) => setDeprMonth(e.target.value)}
+                      onChange={(e) => setDeprMonthForCurrentKind(e.target.value)}
                       className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
                     />
                   </div>
@@ -3545,7 +3557,7 @@ function WeekHubInner() {
                     <input
                       type="month"
                       value={deprMonth}
-                      onChange={(e) => setDeprMonth(e.target.value)}
+                      onChange={(e) => setDeprMonthForCurrentKind(e.target.value)}
                       className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
                     />
                   </div>
@@ -3770,7 +3782,7 @@ function WeekHubInner() {
                     <input
                       type="month"
                       value={deprMonth}
-                      onChange={(e) => setDeprMonth(e.target.value)}
+                      onChange={(e) => setDeprMonthForCurrentKind(e.target.value)}
                       className="w-36 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-800 dark:bg-black"
                     />
                   </div>
@@ -4080,7 +4092,7 @@ function WeekHubInner() {
                   <input
                     type="month"
                     value={deprMonth}
-                    onChange={(e) => setDeprMonth(e.target.value)}
+                    onChange={(e) => setDeprMonthForCurrentKind(e.target.value)}
                     className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                   />
                 </div>

@@ -190,6 +190,8 @@ type AuthMeUser = {
   canGrantScheduleEdit: boolean;
 };
 
+type ScheduleKind = 'normal' | 'daily';
+
 export default function SiteLedgerDetailPage() {
   const { setSaveAction } = useHeaderActions();
   const router = useRouter();
@@ -205,10 +207,15 @@ export default function SiteLedgerDetailPage() {
     const m = searchParams?.get('month');
     return m && /^\d{4}-\d{2}$/.test(m) ? m : null;
   }, [searchParams]);
+  const searchKind = useMemo<ScheduleKind>(() => {
+    const kindParam = (searchParams?.get('kind') ?? '').trim().toLowerCase();
+    return kindParam === 'daily' ? 'daily' : 'normal';
+  }, [searchParams]);
 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
+  const [siteKind, setSiteKind] = useState<ScheduleKind | null>(null);
   const [monthAlert, setMonthAlert] = useState<SiteMonthAlert | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
@@ -258,6 +265,32 @@ export default function SiteLedgerDetailPage() {
   const canUploadPhotos = isMobile || hasEditPermission;
   const canManageFolders = !isMobile && hasEditPermission;
   const showAmountField = !isMobile && hasEditPermission;
+  const effectiveKind = siteKind ?? searchKind;
+
+  const buildSitePath = useCallback(
+    (suffix = '', extra?: Record<string, string | null | undefined>) => {
+      const sp = new URLSearchParams();
+      sp.set('kind', effectiveKind);
+      if (month) sp.set('month', month);
+      if (extra) {
+        for (const [key, value] of Object.entries(extra)) {
+          if (!value) continue;
+          sp.set(key, value);
+        }
+      }
+      const basePath = suffix ? `/site-ledger/${encodeURIComponent(siteId)}/${suffix}` : `/site-ledger/${encodeURIComponent(siteId)}`;
+      const query = sp.toString();
+      return query ? `${basePath}?${query}` : basePath;
+    },
+    [effectiveKind, month, siteId],
+  );
+
+  const listHref = useMemo(() => {
+    const sp = new URLSearchParams();
+    sp.set('kind', effectiveKind);
+    if (month) sp.set('month', month);
+    return `/site-ledger?${sp.toString()}`;
+  }, [effectiveKind, month]);
 
   const updatePace = useCallback((nextValue: string) => {
     setPace(nextValue);
@@ -362,6 +395,7 @@ export default function SiteLedgerDetailPage() {
       setCompanyName(parsed.companyName ?? '');
       setName(parsed.name);
       setAddress(parsed.address ?? '');
+      setSiteKind(parsed.kind === 'DAILY' ? 'daily' : 'normal');
       setAmount(parsed.amount === null || parsed.amount === undefined ? '' : String(parsed.amount));
       setPace(formattedPace);
       setPeopleCount(parsed.peopleCount === null || parsed.peopleCount === undefined ? '' : String(parsed.peopleCount));
@@ -692,7 +726,7 @@ export default function SiteLedgerDetailPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push('/site-ledger')}
+              onClick={() => router.push(listHref)}
               className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
             >
               一覧へ戻る
@@ -1032,9 +1066,7 @@ export default function SiteLedgerDetailPage() {
                           type="button"
                           className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
                           onClick={() =>
-                            router.push(
-                              `/site-ledger/${encodeURIComponent(siteId)}/photos?date=${encodeURIComponent(d.dateYmd)}`,
-                            )
+                            router.push(buildSitePath('photos', { date: d.dateYmd }))
                           }
                         >
                           写真
@@ -1043,9 +1075,7 @@ export default function SiteLedgerDetailPage() {
                           type="button"
                           className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
                           onClick={() =>
-                            router.push(
-                              `/site-ledger/${encodeURIComponent(siteId)}/reports?date=${encodeURIComponent(d.dateYmd)}`,
-                            )
+                            router.push(buildSitePath('reports', { date: d.dateYmd }))
                           }
                         >
                           報告書
@@ -1145,7 +1175,7 @@ export default function SiteLedgerDetailPage() {
             <button
               type="button"
               className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-xs text-white hover:bg-blue-600"
-              onClick={() => router.push(`/site-ledger/${encodeURIComponent(siteId)}/folders`)}
+              onClick={() => router.push(buildSitePath('folders'))}
             >
               フォルダ管理
             </button>
