@@ -4309,37 +4309,11 @@ function WeekGrid({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
-  const stickyStackRef = useRef<HTMLDivElement | null>(null);
-  const [bodyTopInset, setBodyTopInset] = useState(0);
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
-
-  useEffect(() => {
-    const stack = stickyStackRef.current;
-    const body = scrollRootRef.current;
-    if (!stack || !body) return;
-
-    const apply = () => {
-      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
-      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
-    };
-
-    const raf = window.requestAnimationFrame(apply);
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(stack);
-    ro.observe(body);
-    window.addEventListener('resize', apply);
-    window.addEventListener('scroll', apply, true);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-      window.removeEventListener('scroll', apply, true);
-    };
-  }, [monthWeekTabs.monthKey]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -4381,11 +4355,7 @@ function WeekGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="week-grid"
     >
-      <div
-        ref={stickyStackRef}
-        className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
-      >
+      <div className="sticky z-40" style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}>
         {/* Week switch tabs: sticky stack top row */}
         <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
           <div className="flex items-center justify-between gap-2">
@@ -4486,7 +4456,6 @@ function WeekGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="week-grid-body-scroll"
       >
@@ -4654,38 +4623,12 @@ function MonthGrid({
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const topScrollbarRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
-  const stickyStackRef = useRef<HTMLDivElement | null>(null);
-  const [bodyTopInset, setBodyTopInset] = useState(0);
   const [topScrollbarMetrics, setTopScrollbarMetrics] = useState({ contentWidth: 0, viewportWidth: 0 });
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
-
-  useEffect(() => {
-    const stack = stickyStackRef.current;
-    const body = scrollRootRef.current;
-    if (!stack || !body) return;
-
-    const apply = () => {
-      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
-      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
-    };
-
-    const raf = window.requestAnimationFrame(apply);
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(stack);
-    ro.observe(body);
-    window.addEventListener('resize', apply);
-    window.addEventListener('scroll', apply, true);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-      window.removeEventListener('scroll', apply, true);
-    };
-  }, [monthKey]);
 
   useEffect(() => {
     const body = scrollRootRef.current;
@@ -4765,11 +4708,7 @@ function MonthGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="month-grid"
     >
-      <div
-        ref={stickyStackRef}
-        className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
-      >
+      <div className="sticky z-40" style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}>
         {/* Month switch: sticky stack top row */}
         <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
           <div className="flex items-center justify-between gap-2">
@@ -4807,7 +4746,7 @@ function MonthGrid({
           <div className="border-b border-zinc-400 bg-white/90 px-2 py-1 dark:border-zinc-600 dark:bg-black/90">
             <div
               ref={topScrollbarRef}
-              className="h-4 overflow-x-auto overflow-y-hidden"
+              className="mh-scrollbar-visible h-5 overflow-x-auto overflow-y-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800/80"
               onScroll={onTopScrollbarScroll}
               data-testid="month-grid-top-scrollbar"
             >
@@ -4859,7 +4798,6 @@ function MonthGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="month-grid-body-scroll"
       >
@@ -5052,32 +4990,6 @@ function YearGrid({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
-  const stickyStackRef = useRef<HTMLDivElement | null>(null);
-  const [bodyTopInset, setBodyTopInset] = useState(0);
-
-  useEffect(() => {
-    const stack = stickyStackRef.current;
-    const body = scrollRootRef.current;
-    if (!stack || !body) return;
-
-    const apply = () => {
-      const overlap = Math.max(0, Math.round(stack.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
-      setBodyTopInset((prev) => (prev === overlap ? prev : overlap));
-    };
-
-    const raf = window.requestAnimationFrame(apply);
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(stack);
-    ro.observe(body);
-    window.addEventListener('resize', apply);
-    window.addEventListener('scroll', apply, true);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-      window.removeEventListener('scroll', apply, true);
-    };
-  }, [monthsSignature]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -5119,11 +5031,7 @@ function YearGrid({
       className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black"
       data-testid="year-grid"
     >
-      <div
-        ref={stickyStackRef}
-        className="sticky z-40"
-        style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}
-      >
+      <div className="sticky z-40" style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}>
         {/* Month header row: sticky + horizontal-scroll synced */}
         <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
           <div
@@ -5165,7 +5073,6 @@ function YearGrid({
       <div
         ref={scrollRootRef}
         className="mh-scrollbar-hidden overflow-x-auto overflow-y-hidden"
-        style={{ paddingTop: bodyTopInset > 0 ? `${bodyTopInset}px` : undefined }}
         onScroll={onBodyScroll}
         data-testid="year-grid-body-scroll"
       >
