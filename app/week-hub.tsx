@@ -649,6 +649,19 @@ function formatHistoryDateTime(value: string) {
   return `${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
+function formatHistoryMonthDay(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  return `${Number(match[2])}/${Number(match[3])}`;
+}
+
+function formatHistorySurname(value: string) {
+  const normalized = value.replace(/[\s\u3000]+/g, ' ').trim();
+  if (!normalized) return value.trim();
+  if (normalized.includes('@')) return normalized.split('@')[0] ?? normalized;
+  return normalized.split(' ')[0] ?? normalized;
+}
+
 function formatHistoryCellValue(value: string) {
   return value === '（空）' ? '空欄' : value;
 }
@@ -1868,9 +1881,10 @@ function WeekHubInner() {
         ? scheduleHistoryItems.slice(0, 12).map((item) => ({
             key: item.id,
             at: Number.isNaN(Date.parse(item.createdAt)) ? Date.now() : Date.parse(item.createdAt),
+            targetLabel: `${formatHistoryMonthDay(item.dayYmd)} ${formatHistorySurname(item.targetUserLabel)}`,
             beforeLabel: formatHistoryGroupsValue(item.beforeGroups, item.beforeValue),
             afterLabel: formatHistoryGroupsValue(item.afterGroups, item.afterValue),
-            editorLabel: item.editorLabel,
+            editorLabel: formatHistorySurname(item.editorLabel),
             hover: { userId: item.targetUserId, day: item.dayYmd },
           }))
         : [],
@@ -2970,9 +2984,10 @@ function WeekHubInner() {
                 .map((h) => ({
                   key: `${h.at}:${h.userId}:${h.day}`,
                   at: h.at,
+                  targetLabel: `${formatHistoryMonthDay(h.day)} ${formatHistorySurname(userLabelById.get(h.userId) ?? h.userId)}`,
                   beforeLabel: formatCellSlotsValue(h.before),
                   afterLabel: formatCellSlotsValue(h.after),
-                  editorLabel: h.editorLabel,
+                  editorLabel: formatHistorySurname(h.editorLabel),
                   hover: { userId: h.userId, day: h.day },
                 })),
               loaded: true,

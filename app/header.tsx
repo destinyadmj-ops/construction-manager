@@ -1884,14 +1884,17 @@ export default function AppHeader() {
                               onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
                               onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
                             >
-                              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
+                              <div className="grid grid-cols-[84px_minmax(0,0.55fr)_minmax(0,0.55fr)_46px] items-center gap-2 text-[11px]">
+                                <div className="min-w-0 truncate text-zinc-500 dark:text-zinc-400" title={it.targetLabel ?? ''}>
+                                  {it.targetLabel ?? ''}
+                                </div>
                                 <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
                                   {it.beforeLabel}
                                 </div>
                                 <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.afterLabel}>
                                   {it.afterLabel}
                                 </div>
-                                <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
+                                <div className="truncate text-zinc-500 dark:text-zinc-400" title={it.editorLabel}>{it.editorLabel}</div>
                               </div>
                             </div>
                           ))}
