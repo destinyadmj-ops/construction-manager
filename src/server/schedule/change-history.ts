@@ -41,6 +41,7 @@ export type ScheduleCellSnapshot = {
 export type ScheduleChangeHistoryListItem = {
   id: string;
   dayYmd: string;
+  targetUserId: string;
   targetUserLabel: string;
   projectLabel: string;
   targetLabel: string;
@@ -304,6 +305,7 @@ export async function listScheduleChangeHistory(input: {
         select: {
           id: true,
           dayYmd: true,
+          targetUserId: true,
           targetUserLabel: true,
           projectLabel: true,
           targetLabel: true,
@@ -335,6 +337,7 @@ export async function listScheduleChangeHistory(input: {
       SELECT
         "id",
         "dayYmd",
+        "targetUserId",
         "targetUserLabel",
         "projectLabel",
         "targetLabel",

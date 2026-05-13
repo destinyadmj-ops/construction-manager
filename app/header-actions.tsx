@@ -22,6 +22,9 @@ export type HeaderHistoryItem = {
 
 export type HeaderHistoryMenu = {
   items: HeaderHistoryItem[];
+  loading?: boolean;
+  loaded?: boolean;
+  emptyLabel?: string;
   onHover?: (hover: HeaderHistoryHover | null) => void;
 };
 

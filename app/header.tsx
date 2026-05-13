@@ -502,7 +502,7 @@ export default function AppHeader() {
   const [navStack, setNavStack] = useState<string[]>([]);
   const [navIndex, setNavIndex] = useState(0);
   const [navLen, setNavLen] = useState(1);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyOpenMode, setHistoryOpenMode] = useState<'preview' | 'panel' | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -590,9 +590,25 @@ export default function AppHeader() {
     }
   }, [headerUserId]);
 
+  const isHistoryOpen = historyOpenMode !== null;
+  const isHistoryPanelOpen = historyOpenMode === 'panel';
+
+  const closeHistoryPopover = useCallback(() => {
+    actions.historyMenu?.onHover?.(null);
+    setHistoryOpenMode(null);
+  }, [actions.historyMenu]);
+
+  const openHistoryPreview = useCallback(() => {
+    if (!actions.historyMenu || historyOpenMode === 'panel') return;
+    if (!actions.historyMenu.loaded && !actions.historyMenu.loading) {
+      void actions.history?.onClick();
+    }
+    setHistoryOpenMode('preview');
+  }, [actions.history, actions.historyMenu, historyOpenMode]);
+
   useEffect(() => {
-    setIsHistoryOpen(false);
-  }, [routeKey]);
+    closeHistoryPopover();
+  }, [closeHistoryPopover, routeKey]);
 
   useEffect(() => {
     setIsOverflowMenuOpen(false);
@@ -605,7 +621,7 @@ export default function AppHeader() {
   useOutsidePointerDown({
     open: isHistoryOpen,
     refs: [historyButtonRef, historyMenuRef],
-    onOutside: () => setIsHistoryOpen(false),
+    onOutside: closeHistoryPopover,
     capture: true,
   });
 
@@ -1751,18 +1767,42 @@ export default function AppHeader() {
               編集
             </button>
 
-            <div className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}>
+            <div
+              className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}
+              onPointerEnter={() => {
+                if (!isHistoryButtonEnabled) return;
+                openHistoryPreview();
+              }}
+              onPointerLeave={() => {
+                if (historyOpenMode !== 'preview') return;
+                closeHistoryPopover();
+              }}
+            >
               <button
                 type="button"
                 ref={historyButtonRef}
                 data-color-edit-id="header-action-history"
                 data-testid="header-action-history"
                 onClick={() => {
+                  if (actions.historyPanel) {
+                    void actions.history?.onClick();
+                    if (isHistoryPanelOpen) {
+                      closeHistoryPopover();
+                      return;
+                    }
+                    setHistoryOpenMode('panel');
+                    return;
+                  }
+
                   const nextOpen = !isHistoryOpen;
-                  if (nextOpen && actions.historyPanel) {
+                  if (nextOpen && actions.historyMenu && !actions.historyMenu.loaded && !actions.historyMenu.loading) {
                     void actions.history?.onClick();
                   }
-                  setIsHistoryOpen(nextOpen);
+                  if (!nextOpen) {
+                    closeHistoryPopover();
+                    return;
+                  }
+                  setHistoryOpenMode('preview');
                 }}
                 disabled={!isHistoryButtonEnabled}
                 title="履歴"
@@ -1776,7 +1816,7 @@ export default function AppHeader() {
                   ref={historyMenuRef}
                   data-color-edit-slot="border"
                   className={`absolute left-0 top-full mt-1 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
-                    actions.historyPanel?.widthClassName ?? 'w-[480px]'
+                    isHistoryPanelOpen ? (actions.historyPanel?.widthClassName ?? 'w-[480px]') : 'w-[560px] max-w-[min(92vw,560px)]'
                   }`}
                 >
                   {actions.history && !actions.historyPanel ? (
@@ -1784,7 +1824,7 @@ export default function AppHeader() {
                       type="button"
                       onClick={() => {
                         void actions.history?.onClick();
-                        setIsHistoryOpen(false);
+                        closeHistoryPopover();
                       }}
                       disabled={actions.history.disabled}
                       className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
@@ -1794,20 +1834,23 @@ export default function AppHeader() {
                     </button>
                   ) : null}
 
-                  {actions.historyPanel ? (
+                  {isHistoryPanelOpen && actions.historyPanel ? (
                     actions.historyPanel.content
                   ) : (
                     <div className="max-h-[32rem] overflow-auto py-1">
                       {actions.historyMenu ? (
                         <div className="flex flex-col gap-1 px-2 pb-1">
-                          {actions.historyMenu.items.length === 0 ? (
-                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">編集履歴はありません。</div>
+                          {actions.historyMenu.loading || !actions.historyMenu.loaded ? (
+                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">履歴を読み込み中...</div>
                           ) : null}
-                          {actions.historyMenu.items.slice(0, 40).map((it) => (
+                          {actions.historyMenu.loaded && actions.historyMenu.items.length === 0 ? (
+                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">{actions.historyMenu.emptyLabel ?? '編集履歴はありません。'}</div>
+                          ) : null}
+                          {actions.historyMenu.items.slice(0, 12).map((it) => (
                             <div
                               key={it.key}
                               data-color-edit-slot="border"
-                              className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                              className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 hover:border-red-300 hover:bg-red-50/40 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:border-red-800 dark:hover:bg-red-950/20"
                               onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
                               onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
                             >

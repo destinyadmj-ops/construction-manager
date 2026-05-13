@@ -161,6 +161,7 @@ type SlotContextMenuState = {
 type ScheduleChangeHistoryItem = {
   id: string;
   dayYmd: string;
+  targetUserId: string;
   targetUserLabel: string;
   projectLabel: string;
   targetLabel: string;
@@ -823,6 +824,7 @@ function WeekHubInner() {
   const [scheduleHistoryTotal, setScheduleHistoryTotal] = useState(0);
   const [scheduleHistoryLoading, setScheduleHistoryLoading] = useState(false);
   const [scheduleHistoryError, setScheduleHistoryError] = useState<string | null>(null);
+  const [scheduleHistoryLoadedKind, setScheduleHistoryLoadedKind] = useState<'NORMAL' | 'DAILY' | null>(null);
   const [scheduleHistorySearch, setScheduleHistorySearch] = useState('');
   const [scheduleHistoryTargetFilter, setScheduleHistoryTargetFilter] = useState<'all' | 'スケジュール' | 'カラー'>('all');
 
@@ -1616,10 +1618,11 @@ function WeekHubInner() {
   }, [visibleWeekDays]);
 
   const loadScheduleHistory = useCallback(async () => {
+    const requestKind = apiKind;
     setScheduleHistoryLoading(true);
     setScheduleHistoryError(null);
     try {
-      const res = await fetch(`/api/schedule/history?kind=${encodeURIComponent(apiKind)}&limit=5000`, {
+      const res = await fetch(`/api/schedule/history?kind=${encodeURIComponent(requestKind)}&limit=5000`, {
         cache: 'no-store',
       });
       const json = (await res.json().catch(() => null)) as
@@ -1635,9 +1638,27 @@ function WeekHubInner() {
     } catch {
       setScheduleHistoryError('履歴の取得に失敗しました');
     } finally {
+      setScheduleHistoryLoadedKind(requestKind);
       setScheduleHistoryLoading(false);
     }
   }, [apiKind]);
+
+  const isScheduleHistoryLoaded = scheduleHistoryLoadedKind === apiKind;
+
+  const historyPreviewItems = useMemo(
+    () =>
+      isScheduleHistoryLoaded
+        ? scheduleHistoryItems.slice(0, 12).map((item) => ({
+            key: item.id,
+            at: Number.isNaN(Date.parse(item.createdAt)) ? Date.now() : Date.parse(item.createdAt),
+            beforeLabel: formatHistoryGroupsValue(item.beforeGroups, item.beforeValue),
+            afterLabel: formatHistoryGroupsValue(item.afterGroups, item.afterValue),
+            editorLabel: item.editorLabel,
+            hover: { userId: item.targetUserId, day: item.dayYmd },
+          }))
+        : [],
+    [isScheduleHistoryLoaded, scheduleHistoryItems],
+  );
 
   const filteredScheduleHistoryItems = useMemo(() => {
     const query = scheduleHistorySearch.trim().toLowerCase();
@@ -1676,6 +1697,7 @@ function WeekHubInner() {
                 onSearchChange={setScheduleHistorySearch}
                 targetFilter={scheduleHistoryTargetFilter}
                 onTargetFilterChange={setScheduleHistoryTargetFilter}
+                onItemHover={setHistoryHover}
                 onRefresh={() => void loadScheduleHistory()}
               />
             ),
@@ -2691,22 +2713,32 @@ function WeekHubInner() {
     );
 
     setHistoryMenu(
-      undoStack.length > 0
+      hasScheduleEditPermission
         ? {
-            items: [...undoStack]
-              .slice(-40)
-              .reverse()
-              .map((h) => ({
-                key: `${h.at}:${h.userId}:${h.day}`,
-                at: h.at,
-                beforeLabel: formatCellSlotsValue(h.before),
-                afterLabel: formatCellSlotsValue(h.after),
-                editorLabel: h.editorLabel,
-                hover: { userId: h.userId, day: h.day },
-              })),
+            items: historyPreviewItems,
+            loading: scheduleHistoryLoading,
+            loaded: isScheduleHistoryLoaded,
+            emptyLabel: scheduleHistoryError ?? '編集履歴はありません。',
             onHover: (hover) => setHistoryHover(hover),
           }
-        : undefined,
+        : undoStack.length > 0
+          ? {
+              items: [...undoStack]
+                .slice(-40)
+                .reverse()
+                .map((h) => ({
+                  key: `${h.at}:${h.userId}:${h.day}`,
+                  at: h.at,
+                  beforeLabel: formatCellSlotsValue(h.before),
+                  afterLabel: formatCellSlotsValue(h.after),
+                  editorLabel: h.editorLabel,
+                  hover: { userId: h.userId, day: h.day },
+                })),
+              loaded: true,
+              emptyLabel: '編集履歴はありません。',
+              onHover: (hover) => setHistoryHover(hover),
+            }
+          : undefined,
     );
 
     return () => {
@@ -2720,6 +2752,11 @@ function WeekHubInner() {
     editActive,
     editConfigured,
     editEnabled,
+      hasScheduleEditPermission,
+      historyPreviewItems,
+      isScheduleHistoryLoaded,
+      scheduleHistoryError,
+      scheduleHistoryLoading,
     hasScheduleEditPermission,
     setAddAction,
     setHistoryMenu,
@@ -7287,6 +7324,7 @@ function ScheduleHistoryPanel({
   onSearchChange,
   targetFilter,
   onTargetFilterChange,
+  onItemHover,
   onRefresh,
 }: {
   embedded?: boolean;
@@ -7298,6 +7336,7 @@ function ScheduleHistoryPanel({
   onSearchChange: (value: string) => void;
   targetFilter: 'all' | 'スケジュール' | 'カラー';
   onTargetFilterChange: (value: 'all' | 'スケジュール' | 'カラー') => void;
+  onItemHover?: (hover: { userId: string; day: string } | null) => void;
   onRefresh: () => void;
 }) {
   return (
@@ -7362,7 +7401,12 @@ function ScheduleHistoryPanel({
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-b border-zinc-100 align-top dark:border-zinc-900">
+                  <tr
+                    key={item.id}
+                    className="border-b border-zinc-100 align-top hover:bg-red-50/30 dark:border-zinc-900 dark:hover:bg-red-950/10"
+                    onPointerEnter={() => onItemHover?.({ userId: item.targetUserId, day: item.dayYmd })}
+                    onPointerLeave={() => onItemHover?.(null)}
+                  >
                     <td className="px-2 py-3">
                       <div className="text-zinc-800 dark:text-zinc-100">{formatHistoryDateTime(item.createdAt)}</div>
                     </td>
