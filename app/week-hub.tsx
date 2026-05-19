@@ -940,9 +940,12 @@ function WeekHubInner() {
   const [userOrder, setUserOrder] = useState<string[]>([]);
   const userOrderLoadedScopeRef = useRef<string | null>(null);
   const userOrderSavingRef = useRef(false);
+  const userOrderSavePromiseRef = useRef<Promise<void> | null>(null);
   const pendingUserOrderRef = useRef<string[] | null>(null);
   const userOrderLoadRequestRef = useRef(0);
   const userOrderLocalRevisionRef = useRef(0);
+  const effectiveUserIdRef = useRef<string | null>(null);
+  const userOrderRef = useRef<string[]>([]);
   const [reorderMode, setReorderMode] = useState(false);
 
   const [undoStack, setUndoStack] = useState<CellHistoryEntry[]>([]);
@@ -1097,23 +1100,34 @@ function WeekHubInner() {
   const currentUserOrderScope = effectiveUserId ? `${effectiveUserId}:${userOrderKey}` : null;
 
   const commitLocalUserOrder = useCallback((update: string[] | ((current: string[]) => string[])) => {
-    setUserOrder((current) => {
-      const next = typeof update === 'function' ? (update as (current: string[]) => string[])(current) : update;
-      if (arrayEqual(next, current)) return current;
-      userOrderLocalRevisionRef.current += 1;
-      return next;
-    });
+    const current = userOrderRef.current;
+    const next = typeof update === 'function' ? (update as (current: string[]) => string[])(current) : update;
+    if (arrayEqual(next, current)) return null;
+    userOrderLocalRevisionRef.current += 1;
+    userOrderRef.current = next;
+    setUserOrder(next);
+    return next;
   }, []);
+
+  useEffect(() => {
+    effectiveUserIdRef.current = effectiveUserId;
+  }, [effectiveUserId]);
+
+  useEffect(() => {
+    userOrderRef.current = userOrder;
+  }, [userOrder]);
 
   const resolveEffectiveUserId = useCallback(async () => {
     const viewerUserId = (authMeUser?.id ?? '').trim();
     if (viewerUserId) {
+      effectiveUserIdRef.current = viewerUserId;
       setEffectiveUserId(viewerUserId);
       return viewerUserId;
     }
 
     const q = (qsUserId ?? '').trim();
     if (q) {
+      effectiveUserIdRef.current = q;
       setEffectiveUserId(q);
       return q;
     }
@@ -1125,6 +1139,7 @@ function WeekHubInner() {
           ? monthData?.users?.[0]?.id
           : yearData?.users?.[0]?.id) ?? null;
 
+    effectiveUserIdRef.current = firstVisibleUserId;
     setEffectiveUserId(firstVisibleUserId);
     return firstVisibleUserId;
   }, [authMeUser?.id, data?.users, mode, monthData?.users, qsUserId, yearData?.users]);
@@ -1154,7 +1169,10 @@ function WeekHubInner() {
           .slice(0, 1000);
         if (userOrderLoadRequestRef.current !== requestId) return;
         if (userOrderLocalRevisionRef.current !== localRevisionAtStart) return;
-        setUserOrder((current) => (arrayEqual(current, parsed) ? current : parsed));
+        if (!arrayEqual(userOrderRef.current, parsed)) {
+          userOrderRef.current = parsed;
+          setUserOrder(parsed);
+        }
       } catch {
         // ignore
       } finally {
@@ -1274,24 +1292,47 @@ function WeekHubInner() {
     async (userId: string | null, next: string[]) => {
       if (!userId) return;
       pendingUserOrderRef.current = next;
-      if (userOrderSavingRef.current) return;
+      if (userOrderSavingRef.current) {
+        return userOrderSavePromiseRef.current ?? Promise.resolve();
+      }
 
       userOrderSavingRef.current = true;
-      try {
-        while (pendingUserOrderRef.current) {
-          const v = pendingUserOrderRef.current;
-          pendingUserOrderRef.current = null;
-          await fetch('/api/ui-settings', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId, key: userOrderKey, value: v }),
-          });
+      const task = (async () => {
+        try {
+          while (pendingUserOrderRef.current) {
+            const v = pendingUserOrderRef.current;
+            pendingUserOrderRef.current = null;
+            await fetch('/api/ui-settings', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ userId, key: userOrderKey, value: v }),
+            });
+          }
+        } finally {
+          userOrderSavingRef.current = false;
+          userOrderSavePromiseRef.current = null;
         }
-      } finally {
-        userOrderSavingRef.current = false;
-      }
+      })();
+
+      userOrderSavePromiseRef.current = task;
+      return task;
     },
     [userOrderKey],
+  );
+
+  const flushUserOrderSave = useCallback(async () => {
+    if (!reorderMode && !pendingUserOrderRef.current && !userOrderSavingRef.current) return;
+    await saveUserOrder(effectiveUserIdRef.current, userOrderRef.current);
+  }, [reorderMode, saveUserOrder]);
+
+  const persistUserOrderChange = useCallback(
+    (update: string[] | ((current: string[]) => string[])) => {
+      const next = commitLocalUserOrder(update);
+      if (!next) return null;
+      void saveUserOrder(effectiveUserIdRef.current, next);
+      return next;
+    },
+    [commitLocalUserOrder, saveUserOrder],
   );
 
   useEffect(() => {
@@ -2079,9 +2120,8 @@ function WeekHubInner() {
     if (userOrderLoadedScopeRef.current !== currentUserOrderScope) return;
     const next = normalizeUserOrder(userOrder, currentUsersForOrder);
     if (arrayEqual(next, userOrder)) return;
-    commitLocalUserOrder(next);
-    void saveUserOrder(effectiveUserId, next);
-  }, [commitLocalUserOrder, currentUserOrderScope, currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
+    persistUserOrderChange(next);
+  }, [currentUserOrderScope, currentUsersForOrder, persistUserOrderChange, userOrder]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -2198,11 +2238,9 @@ function WeekHubInner() {
         const userId = typeof user?.id === 'string' ? user.id : null;
         if (!userId) return { ok: false as const, error: 'Invalid response' };
 
-        commitLocalUserOrder((cur) => {
+        persistUserOrderChange((cur) => {
           const base = normalizeCurrentUserOrder(cur);
           const next = base.includes(userId) ? base : [...base, userId];
-          if (arrayEqual(next, cur)) return cur;
-          queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
           return next;
         });
 
@@ -2222,7 +2260,7 @@ function WeekHubInner() {
         return { ok: false as const, error: '作成に失敗しました' };
       }
     },
-    [apiKind, commitLocalUserOrder, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, scheduleKind],
+    [apiKind, normalizeCurrentUserOrder, persistUserOrderChange, refreshCurrentView, scheduleKind],
   );
 
   const deleteUser = useCallback(
@@ -2246,13 +2284,9 @@ function WeekHubInner() {
           setSelectedUserId(null);
         }
 
-        commitLocalUserOrder((cur) => {
+        persistUserOrderChange((cur) => {
           const next = normalizeCurrentUserOrder(cur).filter((id) => id !== userId);
-          if (arrayEqual(next, cur)) return cur;
-          if (effectiveUserId && effectiveUserId !== userId) {
-            queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
-          }
-          return next;
+          return effectiveUserIdRef.current === userId ? cur : next;
         });
 
         await refreshCurrentView();
@@ -2261,7 +2295,7 @@ function WeekHubInner() {
         showCellActionMsg('削除に失敗しました');
       }
     },
-    [commitLocalUserOrder, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
+    [normalizeCurrentUserOrder, persistUserOrderChange, refreshCurrentView, selectedUserId, showCellActionMsg, userLabelById],
   );
 
   const refreshSites = useCallback(async () => {
@@ -3039,7 +3073,8 @@ function WeekHubInner() {
     setSaveAction(
       editActive
         ? {
-            onClick: () => {
+            onClick: async () => {
+              await flushUserOrderSave();
               if (cellClickAction === 'recolor') {
                 setCellClickAction(lastNonColorCellActionRef.current);
               }
@@ -3093,6 +3128,7 @@ function WeekHubInner() {
     editActive,
     editConfigured,
     editEnabled,
+    flushUserOrderSave,
       hasScheduleEditPermission,
       historyPreviewItems,
       isScheduleHistoryLoaded,
@@ -3266,7 +3302,7 @@ function WeekHubInner() {
                   </div>
 
                   <div
-                    className="mt-2 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -3850,10 +3886,8 @@ function WeekHubInner() {
                   userOrder={userOrder}
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
-                    commitLocalUserOrder((cur) => {
+                    persistUserOrderChange((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
-                      if (arrayEqual(next, cur)) return cur;
-                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
                   }}
@@ -3937,7 +3971,7 @@ function WeekHubInner() {
                   </div>
 
                   <div
-                    className="mt-2 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4116,10 +4150,8 @@ function WeekHubInner() {
                   userOrder={userOrder}
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
-                    commitLocalUserOrder((cur) => {
+                    persistUserOrderChange((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
-                      if (arrayEqual(next, cur)) return cur;
-                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
                   }}
@@ -4165,7 +4197,7 @@ function WeekHubInner() {
                     />
                   </div>
 
-                  <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                  <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-zinc-200 pt-3 dark:border-zinc-800">
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
 
@@ -4197,7 +4229,7 @@ function WeekHubInner() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
+                  <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                         まだ候補がありません（過去データから自動で出ます）。
@@ -4331,10 +4363,8 @@ function WeekHubInner() {
                   cellBg={cellBg}
                   onStartNameColResize={startNameColResize}
                   onMoveUser={(userId, dir) => {
-                    commitLocalUserOrder((cur) => {
+                    persistUserOrderChange((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
-                      if (arrayEqual(next, cur)) return cur;
-                      queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
                       return next;
                     });
                   }}
