@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/prisma';
-import { canCurrentUserEditSchedule, isMobileRequest, requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { canCurrentUserEditSchedule, isMobileRequest } from '@/server/auth/schedule-edit';
+import { requireUserManager } from '@/server/auth/user-admin';
 import { expectedCountForMonth } from '@/shared/pace';
 
 export const runtime = 'nodejs';
@@ -132,7 +133,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const authError = await requireScheduleEditor(request);
+  const authError = await requireUserManager(request);
   if (authError) return authError;
 
   const { id } = await context.params;

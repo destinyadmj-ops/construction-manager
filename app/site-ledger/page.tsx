@@ -130,6 +130,7 @@ export default function SiteLedgerPage() {
 
   // 削除機能関連のstate
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -158,6 +159,7 @@ export default function SiteLedgerPage() {
   const [newName, setNewName] = useState('');
   const [newThreshold, setNewThreshold] = useState('10');
   const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
+  const canDeleteSite = useMemo(() => authMeUser?.canGrantScheduleEdit === true, [authMeUser]);
 
   useEffect(() => {
     if (!monthParam) return;
@@ -169,7 +171,16 @@ export default function SiteLedgerPage() {
 
   useEffect(() => {
     setSelectedSites(new Set());
+    setIsDeleteMode(false);
+    setShowDeleteDialog(false);
   }, [scheduleKind]);
+
+  useEffect(() => {
+    if (canDeleteSite) return;
+    setIsDeleteMode(false);
+    setSelectedSites(new Set());
+    setShowDeleteDialog(false);
+  }, [canDeleteSite]);
 
   const replaceLedgerLocation = useCallback(
     (nextKind: ScheduleKind, nextMonth: string) => {
@@ -534,6 +545,7 @@ export default function SiteLedgerPage() {
 
   // 削除関連の関数
   const handleSelectSite = useCallback((siteId: string, selected: boolean) => {
+    if (!canDeleteSite || !isDeleteMode) return;
     setSelectedSites(prev => {
       const next = new Set(prev);
       if (selected) {
@@ -543,17 +555,33 @@ export default function SiteLedgerPage() {
       }
       return next;
     });
+  }, [canDeleteSite, isDeleteMode]);
+
+  const handleEnterDeleteMode = useCallback(() => {
+    if (!canDeleteSite) return;
+    setSelectedSites(new Set());
+    setShowDeleteDialog(false);
+    setIsDeleteMode(true);
+  }, [canDeleteSite]);
+
+  const handleExitDeleteMode = useCallback(() => {
+    setSelectedSites(new Set());
+    setShowDeleteDialog(false);
+    setIsDeleteMode(false);
   }, []);
 
   const handleSelectAll = useCallback(() => {
+    if (!canDeleteSite || !isDeleteMode) return;
     setSelectedSites(new Set(visibleSites.map(s => s.id)));
-  }, [visibleSites]);
+  }, [canDeleteSite, isDeleteMode, visibleSites]);
 
   const handleDeselectAll = useCallback(() => {
+    if (!canDeleteSite || !isDeleteMode) return;
     setSelectedSites(new Set());
-  }, []);
+  }, [canDeleteSite, isDeleteMode]);
 
   const handleDeleteSelected = useCallback(async () => {
+    if (!canDeleteSite) return;
     const idsToDelete = Array.from(selectedSites);
     if (idsToDelete.length === 0) return;
 
@@ -574,42 +602,14 @@ export default function SiteLedgerPage() {
 
       setSelectedSites(new Set());
       setShowDeleteDialog(false);
+      setIsDeleteMode(false);
       await loadSites();
     } catch (e) {
       setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedSites, loadSites]);
-
-  const handleDeleteAll = useCallback(async () => {
-    const idsToDelete = visibleSites.map(s => s.id);
-    if (idsToDelete.length === 0) return;
-
-    setIsDeleting(true);
-    try {
-      const promises = idsToDelete.map(id =>
-        fetch(`/api/sites/${id}`, { method: 'DELETE' })
-      );
-      const results = await Promise.allSettled(promises);
-      const failed = results.filter(r => r.status === 'rejected').length;
-      const succeeded = results.length - failed;
-
-      if (failed > 0) {
-        setStatusMsg(`削除に失敗: ${succeeded}件成功 / ${failed}件失敗`);
-      } else {
-        setStatusMsg(`${succeeded}件の現場を削除しました`);
-      }
-
-      setSelectedSites(new Set());
-      setShowDeleteDialog(false);
-      await loadSites();
-    } catch (e) {
-      setStatusMsg(e instanceof Error ? `削除に失敗: ${e.message}` : '削除に失敗しました');
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [visibleSites, loadSites]);
+  }, [canDeleteSite, loadSites, selectedSites]);
 
   useEffect(() => {
     setAddAction(canEditSite ? { onClick: addSite, disabled: !newName.trim(), title: '追加（現場）' } : undefined);
@@ -742,7 +742,7 @@ export default function SiteLedgerPage() {
         </div>
         {!canEditSite ? (
           <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-            詳細の閲覧と打刻は利用できます。追加・予定取り込み・削除は編集権限保持者のみ利用できます。
+            詳細の閲覧と打刻は利用できます。追加・予定取り込みは編集権限保持者、削除は付与権限保持者のみ利用できます。
           </div>
         ) : null}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-black/40">
@@ -853,7 +853,11 @@ export default function SiteLedgerPage() {
         </div>
         <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">現場台帳</h1>
         <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {canEditSite ? '一覧/追加/編集/削除が利用できます。' : '一覧と詳細参照が利用できます。'}
+          {canDeleteSite
+            ? '一覧/追加/編集/削除が利用できます。'
+            : canEditSite
+              ? '一覧/追加/編集が利用できます。削除は付与権限保持者のみ利用できます。'
+              : '一覧と詳細参照が利用できます。'}
         </div>
 
         <div className="mt-4 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/40">
@@ -1011,12 +1015,50 @@ export default function SiteLedgerPage() {
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">全体を俯瞰して名前を確認できます。</div>
             </div>
             <div className="flex items-center gap-2">
-              {canEditSite && visibleSites.length > 0 && (
+              {visibleSites.length > 0 && (
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
+                    disabled={!canDeleteSite || isDeleting || (isDeleteMode && selectedSites.size === 0)}
+                    onClick={() => {
+                      if (!isDeleteMode) {
+                        handleEnterDeleteMode();
+                        return;
+                      }
+                      setShowDeleteDialog(true);
+                    }}
+                    className={`rounded-md border px-2 py-1 text-[10px] ${
+                      isDeleteMode
+                        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:bg-zinc-900'
+                    }`}
+                    title={
+                      !canDeleteSite
+                        ? '削除は付与権限保持者のみ利用できます'
+                        : isDeleteMode
+                          ? selectedSites.size > 0
+                            ? '選択した現場を削除'
+                            : '削除する現場を選択してください'
+                          : '削除モードを開始'
+                    }
+                  >
+                    {isDeleteMode ? `削除${selectedSites.size > 0 ? ` (${selectedSites.size})` : ''}` : '削除'}
+                  </button>
+                  {isDeleteMode ? (
+                    <button
+                      type="button"
+                      onClick={handleExitDeleteMode}
+                      disabled={isDeleting}
+                      className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] text-zinc-500 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:text-zinc-400 dark:hover:bg-zinc-900"
+                    >
+                      終了
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
                     onClick={handleSelectAll}
-                    className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    disabled={!isDeleteMode || isDeleting}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-200"
                   >
                     全選択
                   </button>
@@ -1024,7 +1066,8 @@ export default function SiteLedgerPage() {
                   <button
                     type="button"
                     onClick={handleDeselectAll}
-                    className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    disabled={!isDeleteMode || isDeleting}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-200"
                   >
                     全解除
                   </button>
@@ -1043,7 +1086,7 @@ export default function SiteLedgerPage() {
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-8">
                 {visibleSites.map((s) => (
                   <div key={`grid-${s.id}`} className="relative">
-                    {canEditSite ? (
+                    {canDeleteSite && isDeleteMode ? (
                       <input
                         type="checkbox"
                         checked={selectedSites.has(s.id)}
@@ -1055,20 +1098,20 @@ export default function SiteLedgerPage() {
                     <button
                       type="button"
                       onClick={() => router.push(buildSiteDetailHref(s.id))}
-                      className="relative min-h-[5.75rem] w-full rounded border border-zinc-200 bg-white/60 px-2.5 py-2.5 pr-14 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
+                      className="relative min-h-[5rem] w-full rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-12 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
                         deprMap[s.id]
                           ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
                           : ''
                       }`}
                     >
-                    <div className="absolute left-1.5 top-1.5">
+                    <div className="absolute left-1.25 top-1.25">
                       <span
                         className={`h-3.5 w-3.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
                         aria-hidden
                       />
                     </div>
-                    <div className="absolute right-1.5 top-1.5 flex flex-col items-end gap-1">
+                    <div className="absolute right-1.25 top-1.25 flex flex-col items-end gap-1">
                       <div className="flex items-center gap-1.5">
                         {s.alertsEnabled && s.invoiceIssuedThisMonth === false ? (
                           <span
@@ -1103,8 +1146,8 @@ export default function SiteLedgerPage() {
                       ) : null}
                     </div>
 
-                    <div className="flex h-full flex-col justify-between gap-2 pt-4">
-                      <div className="min-w-0 pr-2 text-left text-[11px] leading-[1.2rem] break-words whitespace-normal max-h-[3.6rem] overflow-hidden">
+                    <div className="flex h-full flex-col justify-between gap-1.5 pt-3">
+                      <div className="min-w-0 pr-1 text-left text-[11px] leading-[1.05rem] break-words whitespace-normal max-h-[3.15rem] overflow-hidden">
                         {s.name}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -1135,21 +1178,8 @@ export default function SiteLedgerPage() {
         </div>
       </div>
 
-      {/* 右下固定の削除ボタン */}
-      {canEditSite && selectedSites.size > 0 && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <button
-            type="button"
-            onClick={() => setShowDeleteDialog(true)}
-            className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
-          >
-            <span>削除 ({selectedSites.size}件)</span>
-          </button>
-        </div>
-      )}
-
       {/* 削除確認ダイアログ */}
-      {canEditSite && showDeleteDialog && (
+      {canDeleteSite && showDeleteDialog && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-black">
             <div className="text-center">
@@ -1165,7 +1195,7 @@ export default function SiteLedgerPage() {
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
-                onClick={() => setShowDeleteDialog(false)}
+                onClick={handleExitDeleteMode}
                 disabled={isDeleting}
                 className="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:bg-zinc-900"
               >
@@ -1178,14 +1208,6 @@ export default function SiteLedgerPage() {
                 className="flex-1 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
               >
                 {isDeleting ? '削除中...' : '選択削除'}
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAll}
-                disabled={isDeleting}
-                className="flex-1 rounded-lg border border-red-600 bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
-              >
-                {isDeleting ? '削除中...' : '一括削除'}
               </button>
             </div>
           </div>
