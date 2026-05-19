@@ -2712,14 +2712,17 @@ function WeekHubInner() {
   }, [effectiveAutoFillUserId, monthDayLabels, repeatRule, selectedSite?.id, selectedSiteCreatedAt]);
 
   const monthWeekTabs = useMemo(() => {
-    const monthStart = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
-    const monthEnd = new Date(cursorDate.getFullYear(), cursorDate.getMonth() + 1, 0);
-    // Include the week that contains the 1st (even if its Monday is in the previous month).
-    const first = startOfWeekMonday(monthStart);
+    // Always show 5 weeks centered on the current week
+    const centerWeek = startOfWeekMonday(new Date(cursorDate));
     const tabs: Date[] = [];
-    for (let d = new Date(first); d <= monthEnd; d.setDate(d.getDate() + 7)) {
+    
+    // Add 2 weeks before the center week
+    for (let i = -2; i <= 2; i++) {
+      const d = new Date(centerWeek);
+      d.setDate(d.getDate() + i * 7);
       tabs.push(new Date(d));
     }
+    
     return {
       monthKey: `${cursorDate.getFullYear()}-${pad2(cursorDate.getMonth() + 1)}`,
       tabs,
@@ -4692,7 +4695,7 @@ function WeekGrid({
                       onClick={() => onSelectWeekStart(t)}
                       className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
                         active
-                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                          ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30'
                           : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
                       }`}
                       aria-current={active ? 'true' : undefined}
