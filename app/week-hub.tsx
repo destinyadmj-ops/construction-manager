@@ -7456,7 +7456,7 @@ function Row({
                             siteName: siteStoredName(site) || site.label,
                           });
                         } else if (editingInput?.trim()) {
-                          const siteName = editingInput.trim();
+                          const siteName = (editingInput ?? '').trim();
                           setEditingCell?.(null);
                           setEditingInput?.('');
                           setSiteSuggestions?.([]);
@@ -7474,6 +7474,50 @@ function Row({
                     className="w-full rounded border border-blue-500 bg-white px-1 py-0.5 text-xs dark:bg-black"
                     placeholder="現場名を入力..."
                   />
+                  {editingCell.source === 'button' ? (
+                    <div className="mt-1 flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
+                        }}
+                        className="rounded border border-zinc-300 bg-white px-2 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                      >
+                        閉じる
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          const editingSlotIndex =
+                            editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.slotIndex : 0;
+                          const editingTargetItemIndex =
+                            editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.targetItemIndex : null;
+                          const siteName = (editingInput ?? '').trim();
+                          if (!siteName) return;
+                          setEditingCell?.(null);
+                          setEditingInput?.('');
+                          setSiteSuggestions?.([]);
+                          void commitInlineEdit({
+                            day: d.key,
+                            slotIndex: editingSlotIndex,
+                            targetItemIndex: editingTargetItemIndex,
+                            beforeCell,
+                            siteName,
+                          });
+                        }}
+                        disabled={!(editingInput ?? '').trim()}
+                        className="rounded border border-blue-600 bg-blue-600 px-2 py-0.5 text-[10px] text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-200 disabled:text-zinc-500 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+                      >
+                        反映
+                      </button>
+                    </div>
+                  ) : null}
                   {editingCell.source !== 'button' && siteSuggestions && siteSuggestions.length > 0 ? (
                     <div
                       data-suggestion-list
