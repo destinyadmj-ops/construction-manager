@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
 import {
   buildNameColumnTrack,
   defaultWeekGridPrefs,
@@ -29,6 +30,10 @@ type ApiUser = {
 type ApiCell = {
   slot1: string | null;
   slot2: string | null;
+  groups?: Array<{
+    items: Array<{ label: string; kind?: string | null }>;
+    note?: string | null;
+  }>;
 };
 
 type ApiResponse = {
@@ -110,13 +115,64 @@ function userLabel(user: ApiUser | AuthMeUser | null) {
 }
 
 function cellEntries(cell: ApiCell | null | undefined) {
+  return cellGroups(cell)
+    .map((group) => {
+      const labels = group.items.map((entry) => entry.label.trim()).filter((entry) => entry.length > 0);
+      const note = typeof group.note === 'string' ? group.note.trim() || null : null;
+      return formatScheduleCellGroupDisplayValue(labels, note) ?? '';
+    })
+    .filter((entry): entry is string => entry.length > 0);
+}
+
+function cellGroups(cell: ApiCell | null | undefined) {
+  if (Array.isArray(cell?.groups)) {
+    return cell.groups
+      .map((group) => {
+        if (!group || !Array.isArray(group.items)) return null;
+        const items = group.items
+          .map((entry) => {
+            const label = typeof entry?.label === 'string' ? entry.label.trim() : '';
+            if (!label) return null;
+            return {
+              label,
+              kind: typeof entry?.kind === 'string' ? entry.kind : null,
+            };
+          })
+          .filter((entry): entry is { label: string; kind: string | null } => !!entry)
+          .slice(0, 4);
+        if (items.length === 0) return null;
+        return {
+          items,
+          note: typeof group.note === 'string' ? group.note.trim() || null : null,
+        };
+      })
+      .filter((group): group is { items: Array<{ label: string; kind: string | null }>; note: string | null } => !!group)
+      .slice(0, 4);
+  }
+
   return [cell?.slot1 ?? null, cell?.slot2 ?? null]
     .map((entry) => (entry ?? '').trim())
+    .filter((entry): entry is string => entry.length > 0)
+    .map((entry) => ({ items: [{ label: entry, kind: 'site' as const }], note: null }));
+}
+
+function cellSiteNames(cell: ApiCell | null | undefined) {
+  return cellGroups(cell)
+    .flatMap((group) =>
+      group.items
+        .filter((entry) => normalizeScheduleCellEntryKind(entry.kind) === 'site')
+        .map((entry) => entry.label.trim()),
+    )
     .filter((entry): entry is string => entry.length > 0);
 }
 
 function normalizeSiteLookupKey(value: string) {
-  return value.replace(/\s\+\d+$/, '').trim();
+  return value
+    .replace(/（追記[:：].*?）$/u, '')
+    .replace(/\(追記[:：].*?\)$/u, '')
+    .replace(/^追記[:：]\s*/u, '')
+    .replace(/\s\+\d+$/, '')
+    .trim();
 }
 
 function asObject(value: unknown): JsonObject | null {
@@ -436,8 +492,8 @@ function MobileWeekHubInner() {
     const items: Array<{ id: string | null; label: string }> = [];
 
     for (const day of dayLabels) {
-      const entries = cellEntries(currentUserGrid[day.key]);
-      for (const entry of entries) {
+      const siteNames = cellSiteNames(currentUserGrid[day.key]);
+      for (const entry of siteNames) {
         const lookupKey = normalizeSiteLookupKey(entry);
         if (!lookupKey || seen.has(lookupKey)) continue;
         seen.add(lookupKey);
@@ -572,7 +628,9 @@ function MobileWeekHubInner() {
   }, [router, scheduleKind, writeMobileWeekHubHistorySnapshot]);
 
   const handleScheduleEntryClick = useCallback((entry: string) => {
-    const siteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry));
+    const siteId =
+      resolveScheduleEntryTargets([entry], siteIdByScheduleEntry).find(isLinkedScheduleEntryTarget)?.siteId ??
+      null;
     if (!siteId) return;
     handleSiteClick(siteId);
   }, [handleSiteClick, siteIdByScheduleEntry]);
