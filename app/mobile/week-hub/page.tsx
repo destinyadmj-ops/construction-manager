@@ -831,7 +831,7 @@ function MobileWeekHubInner() {
                     onClick={() => setWeekStartByDate(tab)}
                     className={`rounded-md border px-3 py-1.5 text-sm transition ${
                       active
-                        ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300'
+                        ? 'border-red-500 bg-red-100 font-semibold text-red-700 shadow-sm dark:border-red-500 dark:bg-red-900/40 dark:text-red-300'
                         : 'border-transparent text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-zinc-900'
                     }`}
                   >

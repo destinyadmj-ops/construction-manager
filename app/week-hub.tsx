@@ -4719,7 +4719,7 @@ function WeekGrid({
                       onClick={() => onSelectWeekStart(t)}
                       className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
                         active
-                          ? 'border-red-300 bg-red-50 font-medium text-red-600 dark:border-red-700 dark:bg-red-950/30 dark:text-red-400'
+                          ? 'border-red-500 bg-red-100 font-semibold text-red-700 shadow-sm dark:border-red-500 dark:bg-red-900/40 dark:text-red-300'
                           : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
                       }`}
                       aria-current={active ? 'true' : undefined}
