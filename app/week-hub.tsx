@@ -1773,7 +1773,6 @@ function WeekHubInner() {
   }, [pinSiteToTop, sites]);
 
   const normalizedSiteQuery = useMemo(() => siteQuery.trim().toLowerCase(), [siteQuery]);
-  const hasSiteQuery = normalizedSiteQuery.length > 0;
 
   const visibleSites = useMemo(() => {
     return sites.filter((s) => s.badgeMonthVisible !== false);
