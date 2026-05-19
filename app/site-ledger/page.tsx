@@ -19,7 +19,7 @@ function scheduleLabelDotClass(color: string | null | undefined): string {
 
 function scheduleLabelHighlightClass(color: string | null | undefined): string {
   const c = (color ?? 'default').toString();
-  if (c === 'default') return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
+  if (c === 'default') return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
   if (c === 'red') return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
   if (c === 'orange') return 'border-orange-200 bg-orange-50/80 dark:border-orange-800 dark:bg-orange-950/30';
   if (c === 'yellow') return 'border-amber-200 bg-amber-50/85 dark:border-amber-700 dark:bg-amber-950/30';
@@ -27,7 +27,7 @@ function scheduleLabelHighlightClass(color: string | null | undefined): string {
   if (c === 'blue') return 'border-blue-200 bg-blue-50/80 dark:border-blue-800 dark:bg-blue-950/30';
   if (c === 'purple') return 'border-violet-200 bg-violet-50/80 dark:border-violet-800 dark:bg-violet-950/30';
   if (c === 'pink') return 'border-pink-200 bg-pink-50/80 dark:border-pink-800 dark:bg-pink-950/30';
-  return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
+  return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
 }
 
 function scheduleLabelHighlightStyle(color: string | null | undefined): CSSProperties {
@@ -83,10 +83,10 @@ function scheduleLabelHighlightStyle(color: string | null | undefined): CSSPrope
                       darkBackground: 'rgba(80, 7, 36, 0.45)',
                     }
                   : {
-                      lightBorder: 'rgb(212 212 216)',
-                      lightBackground: 'rgba(244, 244, 245, 0.92)',
-                      darkBorder: 'rgb(82 82 91)',
-                      darkBackground: 'rgba(39, 39, 42, 0.7)',
+                      lightBorder: 'rgb(254 202 202)',
+                      lightBackground: 'rgba(254, 242, 242, 0.88)',
+                      darkBorder: 'rgb(127 29 29)',
+                      darkBackground: 'rgba(69, 10, 10, 0.45)',
                     };
 
   return {
