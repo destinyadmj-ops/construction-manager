@@ -92,6 +92,8 @@ export default function ManagementPage() {
   });
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [users, setUsers] = useState<ApiUser[]>([]);
+  const [authMeUser, setAuthMeUser] = useState<ApiUser | null>(null);
+  const [authMeLoaded, setAuthMeLoaded] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
 
@@ -149,6 +151,11 @@ export default function ManagementPage() {
     return Array.from({ length: 7 }, (_, i) => toYmd(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i)));
   }, []);
 
+  const hasScheduleEditPermission = useMemo(
+    () => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit),
+    [authMeUser],
+  );
+
   useEffect(() => {
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
     const next = k === 'daily' ? 'daily' : 'normal';
@@ -156,11 +163,52 @@ export default function ManagementPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    let mounted = true;
+    setAuthMeLoaded(false);
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(async (r) => {
+        const j = (await r.json().catch(() => null)) as unknown;
+        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!mounted || o?.ok !== true) return;
+        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
+        if (!raw || typeof raw.id !== 'string') {
+          setAuthMeUser(null);
+          return;
+        }
+        setAuthMeUser({
+          id: raw.id,
+          name: typeof raw.name === 'string' ? raw.name : null,
+          email: typeof raw.email === 'string' ? raw.email : null,
+          canEditSchedule: raw.canEditSchedule === true,
+          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
+          passwordConfigured: typeof raw.passwordConfigured === 'boolean' ? raw.passwordConfigured : undefined,
+          passwordSetAt: typeof raw.passwordSetAt === 'string' ? raw.passwordSetAt : null,
+        });
+      })
+      .catch(() => {
+        if (mounted) setAuthMeUser(null);
+      })
+      .finally(() => {
+        if (mounted) setAuthMeLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (scheduleKind !== 'daily') return;
     if ((searchParams.get('open') ?? '').trim().toLowerCase() !== 'daily-site') return;
+    if (!authMeLoaded) return;
+    if (!hasScheduleEditPermission) {
+      setDailySiteCreateOpen(false);
+      setStatusMsg('日常現場登録は編集権限が必要です');
+      return;
+    }
     setDailySiteCreateMsg(null);
+    setStatusMsg(null);
     setDailySiteCreateOpen(true);
-  }, [scheduleKind, searchParams]);
+  }, [authMeLoaded, hasScheduleEditPermission, scheduleKind, searchParams]);
 
   useEffect(() => {
     // Close daily-site-create UI when leaving daily context.
@@ -608,14 +656,27 @@ export default function ManagementPage() {
               type="button"
               ref={dailySiteCreateButtonRef}
               onClick={() => {
+                if (!hasScheduleEditPermission) {
+                  setDailySiteCreateOpen(false);
+                  setStatusMsg('日常現場登録は編集権限が必要です');
+                  return;
+                }
                 setDailySiteCreateMsg(null);
+                setStatusMsg(null);
                 if (scheduleKind !== 'daily') {
                   router.replace('/management?kind=daily');
                 }
                 setDailySiteCreateOpen((v) => !v);
               }}
+              disabled={!authMeLoaded || !hasScheduleEditPermission}
               className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-              title="日常（DAILY）の現場を新規登録"
+              title={
+                !authMeLoaded
+                  ? '権限を確認中です'
+                  : hasScheduleEditPermission
+                    ? '日常（DAILY）の現場を新規登録'
+                    : '編集権限が必要です'
+              }
             >
               日常現場登録
             </button>
