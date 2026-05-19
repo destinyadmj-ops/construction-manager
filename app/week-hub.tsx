@@ -1776,12 +1776,15 @@ function WeekHubInner() {
   const hasSiteQuery = normalizedSiteQuery.length > 0;
 
   const visibleSites = useMemo(() => {
-    return sites.filter((s) => {
-      if (s.badgeMonthVisible === false) return false;
-      if (!normalizedSiteQuery) return true;
-      return s.label.toLowerCase().includes(normalizedSiteQuery);
-    });
-  }, [normalizedSiteQuery, sites]);
+    return sites.filter((s) => s.badgeMonthVisible !== false);
+  }, [sites]);
+
+  const matchedSiteLabelSet = useMemo(() => {
+    if (!normalizedSiteQuery) return new Set<string>();
+    return new Set(
+      visibleSites.filter((s) => s.label.toLowerCase().includes(normalizedSiteQuery)).map((s) => s.label),
+    );
+  }, [normalizedSiteQuery, visibleSites]);
 
   const handleSiteQueryInput = useCallback((event: FormEvent<HTMLInputElement>) => {
     setSiteQuery(event.currentTarget.value);
@@ -3529,13 +3532,13 @@ function WeekHubInner() {
                         まだ候補がありません（過去データから自動で出ます）。
                       </div>
                     ) : visibleSites.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = hasSiteQuery;
+                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
                           const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
@@ -4205,13 +4208,13 @@ function WeekHubInner() {
                         まだ候補がありません（過去データから自動で出ます）。
                       </div>
                     ) : visibleSites.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = hasSiteQuery;
+                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
                           const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
@@ -4471,13 +4474,13 @@ function WeekHubInner() {
                         まだ候補がありません（過去データから自動で出ます）。
                       </div>
                     ) : visibleSites.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">該当する現場がありません。</div>
+                      <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = hasSiteQuery;
+                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
                           const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
