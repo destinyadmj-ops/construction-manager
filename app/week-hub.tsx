@@ -6401,6 +6401,92 @@ function Row({
     void Promise.resolve(onAssigned()).catch(() => undefined);
   }
 
+  const openInlineEditor = useCallback(
+    (input: { day: string; cell: ApiCell; preferredGroupIndex?: number }) => {
+      const groups = apiCellToGroups(input.cell);
+      const firstSiteGroupIndex = groups.findIndex((group) =>
+        group.items.some((entry) => isSiteCellEntry(entry)),
+      );
+      const rawGroupIndex =
+        typeof input.preferredGroupIndex === 'number'
+          ? Math.max(0, Math.trunc(input.preferredGroupIndex))
+          : firstSiteGroupIndex >= 0
+            ? firstSiteGroupIndex
+            : groups.length;
+      const groupIndex = Math.min(rawGroupIndex, groups.length);
+      const initialValue = groups[groupIndex]?.items.find((entry) => isSiteCellEntry(entry))?.label ?? '';
+      setEditingCell?.({ userId: user.id, day: input.day, slotIndex: groupIndex });
+      setEditingInput?.(initialValue);
+      setSiteSuggestions?.([]);
+    },
+    [setEditingCell, setEditingInput, setSiteSuggestions, user.id],
+  );
+
+  const commitInlineEdit = useCallback(
+    async (input: { day: string; beforeCell: ApiCell; slotIndex: number; siteId?: string | null; siteName?: string | null }) => {
+      const rawSiteName = input.siteName?.trim() ?? '';
+      const resolvedSite =
+        resolveSiteReference?.({ siteId: input.siteId ?? null, siteName: rawSiteName || null }) ??
+        resolveStoredSite(rawSiteName);
+      const nextSiteName =
+        siteStoredName(resolvedSite) || splitSiteLabel(rawSiteName).name.trim() || rawSiteName;
+      if (!nextSiteName) {
+        onNotify?.('現場名を入力してください');
+        return;
+      }
+
+      const beforeCell = cloneApiCell(input.beforeCell);
+      const beforeGroups = apiCellToGroups(beforeCell);
+      const targetGroupIndex = Math.max(0, Math.min(input.slotIndex, beforeGroups.length));
+      const duplicateGroupIndex = beforeGroups.findIndex(
+        (group, groupIndex) =>
+          groupIndex !== targetGroupIndex &&
+          group.items.some((entry) => isSiteCellEntry(entry) && entry.label === nextSiteName),
+      );
+      if (duplicateGroupIndex >= 0) {
+        onNotify?.('すでに登録済みです');
+        return;
+      }
+
+      const nextGroup: ApiCellGroup = {
+        items: [createCellEntry(nextSiteName, resolveSiteLabelColor(resolvedSite, cellTextColor), { kind: 'site' })],
+        note: beforeGroups[targetGroupIndex]?.note ?? null,
+      };
+
+      const nextGroups = (() => {
+        if (targetGroupIndex < beforeGroups.length) {
+          return beforeGroups.map((group, groupIndex) => (groupIndex === targetGroupIndex ? nextGroup : group));
+        }
+        if (beforeGroups.length >= MAX_CELL_GROUPS) return null;
+        return [...beforeGroups, nextGroup];
+      })();
+
+      if (!nextGroups) {
+        onNotify?.('満杯のため追加できません（4枠あり）');
+        return;
+      }
+
+      const result = await persistCellSet({
+        targetUser: user,
+        day: input.day,
+        beforeCell,
+        nextCell: groupsToApiCell(nextGroups),
+      });
+      if (result.failed) {
+        onNotify?.(result.message ? `操作に失敗しました: ${result.message}` : '通信に失敗しました');
+        return;
+      }
+      if (!result.changed) {
+        onNotify?.('変更はありません');
+        return;
+      }
+
+      onNotify?.(targetGroupIndex < beforeGroups.length ? '編集しました' : '追加しました');
+      void Promise.resolve(onAssigned()).catch(() => undefined);
+    },
+    [cellTextColor, onAssigned, onNotify, persistCellSet, resolveSiteReference, resolveStoredSite, user],
+  );
+
   const renderSiteLabel = useCallback(
     (
       input: {
@@ -6444,6 +6530,19 @@ function Row({
             onSetDraggedCell?.(null);
           }
         : undefined;
+      const handleInlineEdit =
+        contextInput && input.entryKind === 'site'
+          ? (event: ReactMouseEvent<HTMLElement>) => {
+              if (!isEditable) return;
+              event.preventDefault();
+              event.stopPropagation();
+              openInlineEditor({
+                day: contextInput.day,
+                cell: contextInput.beforeCell,
+                preferredGroupIndex: contextInput.groupIndex,
+              });
+            }
+          : undefined;
       const hoverMenuItems = input.hoverMenuItems ?? [];
       const hasHoverMenu = hoverMenuItems.length > 0;
       const hoverMenu = hasHoverMenu ? (
@@ -6540,6 +6639,7 @@ function Row({
             draggable={Boolean(dragState)}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDoubleClick={handleInlineEdit}
             className={`${input.className} w-full cursor-pointer text-left hover:underline`}
             style={{ fontSize: input.fontSize }}
             title={hasHoverMenu ? undefined : input.tooltipValue}
@@ -6551,7 +6651,7 @@ function Row({
         </div>
       );
     },
-    [onOpenSiteFromCell, onSetDraggedCell, openSlotContextMenu],
+    [isEditable, onOpenSiteFromCell, onSetDraggedCell, openInlineEditor, openSlotContextMenu],
   );
 
   const renderCellLabels = useCallback(
@@ -6960,8 +7060,8 @@ function Row({
       dayLabels.map((d) => {
         const cell = grid[d.key];
         const beforeCell = cloneApiCell(cell);
-        const hasAnyEntry = apiCellToGroups(beforeCell).length > 0;
-        const primarySiteEntry = apiCellToSiteEntries(beforeCell)[0] ?? null;
+        const beforeGroups = apiCellToGroups(beforeCell);
+        const hasAnyEntry = beforeGroups.length > 0;
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
@@ -7004,9 +7104,7 @@ function Row({
               e.preventDefault();
 
               if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
-                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(primarySiteEntry?.label ?? '');
-                setSiteSuggestions?.([]);
+                openInlineEditor({ day: d.key, cell: beforeCell });
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
                 void runCellAction({
@@ -7023,9 +7121,7 @@ function Row({
               if (!isEditable) return;
               e.preventDefault();
               e.stopPropagation();
-              setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-              setEditingInput?.(primarySiteEntry?.label ?? '');
-              setSiteSuggestions?.([]);
+              openInlineEditor({ day: d.key, cell: beforeCell });
             }}
             onKeyDown={(e) => {
               if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -7035,9 +7131,7 @@ function Row({
                 return;
               }
               if (selectedCell && selectedCell.userId === user.id && selectedCell.day === d.key) {
-                setEditingCell?.({ userId: user.id, day: d.key, slotIndex: 0 });
-                setEditingInput?.(primarySiteEntry?.label ?? '');
-                setSiteSuggestions?.([]);
+                openInlineEditor({ day: d.key, cell: beforeCell });
                 onSetSelectedCell?.(null);
               } else if (selectedSite || cellClickAction === 'swap') {
                 void runCellAction({
@@ -7070,6 +7164,8 @@ function Row({
                     value={editingInput ?? ''}
                     onChange={(e) => setEditingInput?.(e.target.value)}
                     onKeyDown={(e) => {
+                      const editingSlotIndex =
+                        editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.slotIndex : 0;
                       if (e.key === 'Escape') {
                         setEditingCell?.(null);
                         setEditingInput?.('');
@@ -7081,25 +7177,23 @@ function Row({
                           setEditingCell?.(null);
                           setEditingInput?.('');
                           setSiteSuggestions?.([]);
-                          void runCellAction({
+                          void commitInlineEdit({
                             day: d.key,
-                            action: 'toggle',
-                            color: cellTextColor,
+                            slotIndex: editingSlotIndex,
+                            beforeCell,
                             siteId: site.id,
                             siteName: siteStoredName(site) || site.label,
-                            beforeCell,
                           });
                         } else if (editingInput?.trim()) {
                           const siteName = editingInput.trim();
                           setEditingCell?.(null);
                           setEditingInput?.('');
                           setSiteSuggestions?.([]);
-                          void runCellAction({
+                          void commitInlineEdit({
                             day: d.key,
-                            action: 'toggle',
-                            color: cellTextColor,
-                            siteName,
+                            slotIndex: editingSlotIndex,
                             beforeCell,
+                            siteName,
                           });
                         }
                       }
@@ -7123,13 +7217,14 @@ function Row({
                             setEditingCell?.(null);
                             setEditingInput?.('');
                             setSiteSuggestions?.([]);
-                            void runCellAction({
+                            const editingSlotIndex =
+                              editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.slotIndex : 0;
+                            void commitInlineEdit({
                               day: d.key,
-                              action: 'toggle',
-                              color: cellTextColor,
+                              slotIndex: editingSlotIndex,
+                              beforeCell,
                               siteId: site.id,
                               siteName: siteStoredName(site) || site.label,
-                              beforeCell,
                             });
                           }}
                           className="w-full px-2 py-1 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -7168,8 +7263,10 @@ function Row({
       paceTargetDays,
       paceTargetUserId,
       applyDraggedGroup,
+      commitInlineEdit,
       renderCellLabels,
       rowCellClassName,
+      openInlineEditor,
       runCellAction,
       selectedCell,
       selectedSite,
