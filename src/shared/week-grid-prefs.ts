@@ -15,6 +15,8 @@ export type WeekGridPrefs = {
   cellMinHComfortable: number;
 };
 
+export type WeekGridPrefsTarget = 'desktop' | 'mobile';
+
 export const DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
   gridLayout: 'compact',
   cellTextColor: 'default',
@@ -89,7 +91,14 @@ export function buildWeekGridPrefsLocalStorageKey(key: string, userId: string | 
   return `masterHub.ui:${scope}:${key}`;
 }
 
-export function defaultWeekGridPrefs(target: 'desktop' | 'mobile' = 'desktop'): WeekGridPrefs {
+export function buildWeekGridPrefsSettingsKey(scheduleKind: string, mode: string, target: WeekGridPrefsTarget) {
+  const normalizedKind = scheduleKind === 'daily' ? 'daily' : 'normal';
+  const normalizedMode = mode === 'month' || mode === 'year' ? mode : 'week';
+  const normalizedTarget = target === 'mobile' ? 'mobile' : 'desktop';
+  return `week-hub:${normalizedKind}:${normalizedMode}:gridPrefs:${normalizedTarget}`;
+}
+
+export function defaultWeekGridPrefs(target: WeekGridPrefsTarget = 'desktop'): WeekGridPrefs {
   return target === 'mobile' ? { ...MOBILE_DEFAULT_WEEK_GRID_PREFS } : { ...DEFAULT_WEEK_GRID_PREFS };
 }
 

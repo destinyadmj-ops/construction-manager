@@ -7,6 +7,7 @@ import {
   buildDayColumnTrack,
   buildNameColumnTrack,
   buildWeekGridPrefsLocalStorageKey,
+  buildWeekGridPrefsSettingsKey,
   defaultWeekGridPrefs,
   normalizeWeekGridPrefs,
   type WeekGridPrefs,
@@ -366,7 +367,7 @@ function MobileWeekHubInner() {
     });
   }, [cursorDate]);
 
-  const weekGridPrefsKey = useMemo(() => `week-hub:${scheduleKind}:week:gridPrefs`, [scheduleKind]);
+  const weekGridPrefsKey = useMemo(() => buildWeekGridPrefsSettingsKey(scheduleKind, 'week', 'mobile'), [scheduleKind]);
   const weekGridPrefsLocalStorageKey = useMemo(
     () => buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, authUser?.id ?? null),
     [authUser?.id, weekGridPrefsKey],
