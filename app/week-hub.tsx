@@ -6366,14 +6366,22 @@ function Row({
 
     const noteText = current.noteDraft.trim();
     if (!noteText) {
-      onNotify?.('追加記入を入力してください');
+      onNotify?.(current.entryKind === 'site' ? '追加記入を入力してください' : '追記を入力してください');
       return;
     }
 
     const beforeCell = cloneApiCell(current.beforeCell);
     const beforeGroups = apiCellToGroups(beforeCell);
     const targetGroup = beforeGroups[current.groupIndex];
-    if (!targetGroup || !targetGroup.items.some((entry) => isSiteCellEntry(entry))) {
+    if (!targetGroup) {
+      closeSlotContextMenu();
+      onNotify?.('対象の枠が見つかりません');
+      return;
+    }
+
+    const hasSiteEntry = targetGroup.items.some((entry) => isSiteCellEntry(entry));
+    const hasNoteEntry = targetGroup.items.some((entry) => normalizeScheduleCellEntryKind(entry.kind) === 'note');
+    if (!hasSiteEntry && !hasNoteEntry) {
       closeSlotContextMenu();
       onNotify?.('対象の枠が見つかりません');
       return;
@@ -6385,7 +6393,19 @@ function Row({
       beforeCell,
       nextCell: groupsToApiCell(
         beforeGroups.map((group, groupIndex) =>
-          groupIndex !== current.groupIndex ? group : { ...group, note: noteText },
+          groupIndex !== current.groupIndex
+            ? group
+            : hasSiteEntry
+              ? { ...group, note: noteText }
+              : {
+                  ...group,
+                  items: [
+                    createCellEntry(noteText, group.items[0]?.color ?? 'default', {
+                      kind: 'note',
+                      syncSource: group.items[0]?.syncSource ?? null,
+                    }),
+                  ],
+                },
         ),
       ),
     });
@@ -6399,9 +6419,53 @@ function Row({
     }
 
     closeSlotContextMenu();
-    onNotify?.('追加記入を更新しました');
+    onNotify?.(hasSiteEntry ? '追加記入を更新しました' : '追記を更新しました');
     void Promise.resolve(onAssigned()).catch(() => undefined);
   }
+
+  const getNoteGroupEditorDraft = useCallback((cell: ApiCell, groupIndex: number) => {
+    const targetGroup = apiCellToGroups(cell)[groupIndex];
+    if (!targetGroup) return '';
+    const noteLabels = targetGroup.items
+      .filter((entry) => normalizeScheduleCellEntryKind(entry.kind) === 'note')
+      .map((entry) => entry.label.trim())
+      .filter(Boolean);
+    return noteLabels.join(' / ') || targetGroup.note || '';
+  }, []);
+
+  const openNoteGroupEditor = useCallback(
+    (
+      event: ReactMouseEvent<HTMLElement>,
+      input: { day: string; cell: ApiCell; groupIndex: number; displayText: string },
+    ) => {
+      if (!isEditable) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const groups = apiCellToGroups(input.cell);
+      const targetGroup = groups[input.groupIndex];
+      if (!targetGroup) {
+        onNotify?.('対象の追記が見つかりません');
+        return;
+      }
+      setSlotContextMenu({
+        day: input.day,
+        siteName: input.displayText,
+        color: targetGroup.items[0]?.color ?? 'default',
+        beforeCell: cloneApiCell(input.cell),
+        x: event.clientX,
+        y: event.clientY,
+        companyName: null,
+        entryKind: 'note',
+        groupIndex: input.groupIndex,
+        groupNote: normalizeScheduleCellNote(targetGroup.note),
+        mode: 'append-note',
+        selectedUserIds: [],
+        selectedSiblingNames: [],
+        noteDraft: getNoteGroupEditorDraft(input.cell, input.groupIndex),
+      });
+    },
+    [getNoteGroupEditorDraft, isEditable, onNotify],
+  );
 
   const openInlineEditor = useCallback(
     (input: { day: string; cell: ApiCell; preferredGroupIndex?: number }) => {
@@ -6698,7 +6762,7 @@ function Row({
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
         const hasMultipleSitesInGroup = siteItems.length > 1;
-        const canInlineEditGroup = isEditable && siteItems.length > 0;
+        const canEditGroup = isEditable && (siteItems.length > 0 || isNoteGroup);
         const hoverMenuItems: CellHoverMenuItem[] =
           siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
             ? [
@@ -6756,7 +6820,7 @@ function Row({
               </>
             ) : null}
             {hasMultipleSitesInGroup ? (
-              <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400 ${canInlineEditGroup ? 'right-10' : 'right-1'}`}>
+              <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400 ${canEditGroup ? 'right-10' : 'right-1'}`}>
                 +
               </span>
             ) : null}
@@ -6775,7 +6839,7 @@ function Row({
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
               className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                canInlineEditGroup ? 'relative pr-16' : hasMultipleSitesInGroup ? 'relative pr-4' : ''
+                canEditGroup ? 'relative pr-16' : hasMultipleSitesInGroup ? 'relative pr-4' : ''
               } ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
@@ -6786,16 +6850,20 @@ function Row({
               dragState,
               contextInput: { userId: user.id, day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
-            {canInlineEditGroup ? (
+            {canEditGroup ? (
               <button
                 type="button"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  if (isNoteGroup) {
+                    openNoteGroupEditor(event, { day, cell: beforeCell, groupIndex, displayText });
+                    return;
+                  }
                   openInlineEditor({ day, cell: beforeCell, preferredGroupIndex: groupIndex });
                 }}
                 className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded border border-zinc-200 bg-white/90 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-white dark:border-zinc-700 dark:bg-zinc-950/90 dark:text-zinc-300 dark:hover:bg-zinc-950"
-                title="この枠を編集"
+                title={isNoteGroup ? 'この追記を編集' : 'この枠を編集'}
                 aria-label={`${displayText || anchorEntry?.label || 'この枠'} を編集`}
               >
                 編集
@@ -6805,7 +6873,7 @@ function Row({
         );
       });
     },
-    [gridLayout, isEditable, openInlineEditor, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName, user.id],
+    [gridLayout, isEditable, openInlineEditor, openNoteGroupEditor, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName, user.id],
   );
 
   const formatCellActionReason = useCallback((
@@ -7410,19 +7478,26 @@ function Row({
               >
                 {slotContextMenu.entryKind === 'site' ? '当該現場の色変更' : '当該追記の色変更'}
               </button>
-              {slotContextMenu.entryKind === 'site' ? (
               <button
                 type="button"
                 onClick={() => {
                   setSlotContextMenu((current) =>
-                    current ? { ...current, mode: 'append-note', noteDraft: current.groupNote ?? '' } : current,
+                    current
+                      ? {
+                          ...current,
+                          mode: 'append-note',
+                          noteDraft:
+                            current.entryKind === 'site'
+                              ? current.groupNote ?? ''
+                              : getNoteGroupEditorDraft(current.beforeCell, current.groupIndex),
+                        }
+                      : current,
                   );
                 }}
                 className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
               >
-                追加記入
+                {slotContextMenu.entryKind === 'site' ? '追加記入' : '追記を編集'}
               </button>
-              ) : null}
               {slotContextMenu.entryKind === 'site' ? (
               <button
                 type="button"
@@ -7614,7 +7689,9 @@ function Row({
             </div>
           ) : slotContextMenu.mode === 'append-note' ? (
             <div className="mt-2 space-y-2">
-              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">この枠の表示名へ追記します</div>
+              <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                {slotContextMenu.entryKind === 'site' ? 'この枠の表示名へ追記します' : 'この追記を編集します'}
+              </div>
               <input
                 type="text"
                 value={slotContextMenu.noteDraft}
@@ -7636,7 +7713,7 @@ function Row({
                 autoFocus
                 maxLength={200}
                 className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                placeholder="例: 午後は資材待ち"
+                placeholder={slotContextMenu.entryKind === 'site' ? '例: 午後は資材待ち' : '例: 資材待ち'}
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -7655,7 +7732,7 @@ function Row({
                   }}
                   className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                 >
-                  保存
+                  {slotContextMenu.entryKind === 'site' ? '保存' : '更新'}
                 </button>
               </div>
             </div>
