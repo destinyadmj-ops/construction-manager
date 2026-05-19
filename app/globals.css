@@ -3205,6 +3205,18 @@ body {
     color: var(--mh-button-text-dark) !important;
   }
 
+  /* Keep active week-switch tab highlight visible even when global button theme override is enabled. */
+  button[data-week-switch-tab='true'][aria-current='true'] {
+    background-color: rgb(254 226 226) !important;
+    border-color: rgb(239 68 68) !important;
+    color: rgb(185 28 28) !important;
+  }
+  .dark button[data-week-switch-tab='true'][aria-current='true'] {
+    background-color: rgb(127 29 29 / 0.4) !important;
+    border-color: rgb(239 68 68) !important;
+    color: rgb(252 165 165) !important;
+  }
+
   [data-color-edit-slot='cellBg'] {
     background-color: var(--mh-cell-bg-light) !important;
   }

@@ -828,7 +828,9 @@ function MobileWeekHubInner() {
                   <button
                     key={toYmd(tab)}
                     type="button"
+                    data-week-switch-tab="true"
                     onClick={() => setWeekStartByDate(tab)}
+                    aria-current={active ? 'true' : undefined}
                     className={`rounded-md border px-3 py-1.5 text-sm transition ${
                       active
                         ? 'border-red-500 bg-red-100 font-semibold text-red-700 shadow-sm dark:border-red-500 dark:bg-red-900/40 dark:text-red-300'
