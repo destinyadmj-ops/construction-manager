@@ -52,7 +52,14 @@ type ViewMode = 'week' | 'month' | 'year';
 
 type ScheduleKind = 'normal' | 'daily';
 type WeekHubSelectedCellState = { userId: string; day: string };
-type WeekHubEditingCellState = { userId: string; day: string; slotIndex: number };
+type WeekHubEditSource = 'direct' | 'button';
+type WeekHubEditingCellState = {
+  userId: string;
+  day: string;
+  slotIndex: number;
+  source: WeekHubEditSource;
+  targetItemIndex: number | null;
+};
 type WeekHubHistoryState = {
   v: 1;
   mode: ViewMode;
@@ -633,7 +640,13 @@ function normalizeWeekHubEditingCellState(value: unknown): WeekHubEditingCellSta
     typeof slotIndexRaw === 'number' && Number.isFinite(slotIndexRaw)
       ? Math.max(0, Math.trunc(slotIndexRaw))
       : 0;
-  return { ...base, slotIndex };
+  const targetItemIndexRaw = obj.targetItemIndex;
+  const targetItemIndex =
+    typeof targetItemIndexRaw === 'number' && Number.isFinite(targetItemIndexRaw)
+      ? Math.max(0, Math.trunc(targetItemIndexRaw))
+      : null;
+  const source: WeekHubEditSource = obj.source === 'button' ? 'button' : 'direct';
+  return { ...base, slotIndex, source, targetItemIndex };
 }
 
 function normalizeWeekHubHistoryState(raw: unknown): WeekHubHistoryState | null {
@@ -2479,11 +2492,16 @@ function WeekHubInner() {
   }, []);
 
   useEffect(() => {
+    if (!editingCell || editingCell.source === 'button') {
+      setSiteSuggestions([]);
+      setSuggestionLoading(false);
+      return;
+    }
     const timer = window.setTimeout(() => {
       void searchSites(editingInput);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [editingInput, searchSites]);
+  }, [editingCell, editingInput, searchSites]);
 
   useEffect(() => {
     if (!editingCell) return;
@@ -4716,6 +4734,7 @@ function WeekGrid({
                     <button
                       key={k}
                       type="button"
+                      data-week-switch-tab="true"
                       onClick={() => onSelectWeekStart(t)}
                       className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
                         active
@@ -6504,7 +6523,7 @@ function Row({
   );
 
   const openInlineEditor = useCallback(
-    (input: { day: string; cell: ApiCell; preferredGroupIndex?: number }) => {
+    (input: { day: string; cell: ApiCell; preferredGroupIndex?: number; source?: WeekHubEditSource }) => {
       const groups = apiCellToGroups(input.cell);
       const firstSiteGroupIndex = groups.findIndex((group) =>
         group.items.some((entry) => isSiteCellEntry(entry)),
@@ -6516,8 +6535,22 @@ function Row({
             ? firstSiteGroupIndex
             : groups.length;
       const groupIndex = Math.min(rawGroupIndex, groups.length);
-      const initialValue = groups[groupIndex]?.items.find((entry) => isSiteCellEntry(entry))?.label ?? '';
-      setEditingCell?.({ userId: user.id, day: input.day, slotIndex: groupIndex });
+      const targetGroup = groups[groupIndex];
+      const initialTargetItemIndex = targetGroup
+        ? targetGroup.items.findIndex((entry) => isSiteCellEntry(entry))
+        : -1;
+      const normalizedTargetItemIndex = initialTargetItemIndex >= 0 ? initialTargetItemIndex : null;
+      const initialValue =
+        normalizedTargetItemIndex !== null && targetGroup
+          ? targetGroup.items[normalizedTargetItemIndex]?.label ?? ''
+          : '';
+      setEditingCell?.({
+        userId: user.id,
+        day: input.day,
+        slotIndex: groupIndex,
+        source: input.source ?? 'direct',
+        targetItemIndex: normalizedTargetItemIndex,
+      });
       setEditingInput?.(initialValue);
       setSiteSuggestions?.([]);
     },
@@ -6525,7 +6558,7 @@ function Row({
   );
 
   const commitInlineEdit = useCallback(
-    async (input: { day: string; beforeCell: ApiCell; slotIndex: number; siteId?: string | null; siteName?: string | null }) => {
+    async (input: { day: string; beforeCell: ApiCell; slotIndex: number; targetItemIndex?: number | null; siteId?: string | null; siteName?: string | null }) => {
       const rawSiteName = input.siteName?.trim() ?? '';
       const resolvedSite =
         resolveSiteReference?.({ siteId: input.siteId ?? null, siteName: rawSiteName || null }) ??
@@ -6540,27 +6573,63 @@ function Row({
       const beforeCell = cloneApiCell(input.beforeCell);
       const beforeGroups = apiCellToGroups(beforeCell);
       const targetGroupIndex = Math.max(0, Math.min(input.slotIndex, beforeGroups.length));
-      const duplicateGroupIndex = beforeGroups.findIndex(
-        (group, groupIndex) =>
-          groupIndex !== targetGroupIndex &&
-          group.items.some((entry) => isSiteCellEntry(entry) && entry.label === nextSiteName),
+      const targetGroup = beforeGroups[targetGroupIndex] ?? null;
+      const targetItemIndex =
+        targetGroup &&
+        typeof input.targetItemIndex === 'number' &&
+        input.targetItemIndex >= 0 &&
+        input.targetItemIndex < targetGroup.items.length &&
+        isSiteCellEntry(targetGroup.items[input.targetItemIndex])
+          ? input.targetItemIndex
+          : targetGroup?.items.findIndex((entry) => isSiteCellEntry(entry)) ?? -1;
+      const hasDuplicateSite = beforeGroups.some((group, groupIndex) =>
+        group.items.some(
+          (entry, itemIndex) =>
+            isSiteCellEntry(entry) &&
+            entry.label === nextSiteName &&
+            !(groupIndex === targetGroupIndex && itemIndex === targetItemIndex),
+        ),
       );
-      if (duplicateGroupIndex >= 0) {
+      if (hasDuplicateSite) {
         onNotify?.('すでに登録済みです');
         return;
       }
 
-      const nextGroup: ApiCellGroup = {
-        items: [createCellEntry(nextSiteName, resolveSiteLabelColor(resolvedSite, cellTextColor), { kind: 'site' })],
-        note: beforeGroups[targetGroupIndex]?.note ?? null,
-      };
-
       const nextGroups = (() => {
         if (targetGroupIndex < beforeGroups.length) {
+          if (!targetGroup) return beforeGroups;
+          if (targetItemIndex >= 0) {
+            return beforeGroups.map((group, groupIndex) =>
+              groupIndex !== targetGroupIndex
+                ? group
+                : {
+                    ...group,
+                    items: group.items.map((entry, itemIndex) =>
+                      itemIndex !== targetItemIndex
+                        ? entry
+                        : createCellEntry(
+                            nextSiteName,
+                            resolveSiteLabelColor(resolvedSite, entry.color ?? cellTextColor),
+                            { kind: 'site' },
+                          ),
+                    ),
+                  },
+            );
+          }
+          const nextGroup: ApiCellGroup = {
+            items: [createCellEntry(nextSiteName, resolveSiteLabelColor(resolvedSite, cellTextColor), { kind: 'site' })],
+            note: targetGroup.note ?? null,
+          };
           return beforeGroups.map((group, groupIndex) => (groupIndex === targetGroupIndex ? nextGroup : group));
         }
         if (beforeGroups.length >= MAX_CELL_GROUPS) return null;
-        return [...beforeGroups, nextGroup];
+        return [
+          ...beforeGroups,
+          {
+            items: [createCellEntry(nextSiteName, resolveSiteLabelColor(resolvedSite, cellTextColor), { kind: 'site' })],
+            note: null,
+          },
+        ];
       })();
 
       if (!nextGroups) {
@@ -6672,7 +6741,13 @@ function Row({
                     onOpenSiteFromCell?.(
                       item.siteName ?? '',
                       contextInput
-                        ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                        ? {
+                            userId: contextInput.userId,
+                            day: contextInput.day,
+                            slotIndex: contextInput.groupIndex,
+                            source: 'direct',
+                            targetItemIndex: null,
+                          }
                         : undefined,
                     );
                   }}
@@ -6722,7 +6797,13 @@ function Row({
               onOpenSiteFromCell(
                 siteName,
                 contextInput
-                  ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                  ? {
+                      userId: contextInput.userId,
+                      day: contextInput.day,
+                      slotIndex: contextInput.groupIndex,
+                      source: 'direct',
+                      targetItemIndex: null,
+                    }
                   : undefined,
               );
             }}
@@ -6733,7 +6814,13 @@ function Row({
               onOpenSiteFromCell(
                 siteName,
                 contextInput
-                  ? { userId: contextInput.userId, day: contextInput.day, slotIndex: contextInput.groupIndex }
+                  ? {
+                      userId: contextInput.userId,
+                      day: contextInput.day,
+                      slotIndex: contextInput.groupIndex,
+                      source: 'direct',
+                      targetItemIndex: null,
+                    }
                   : undefined,
               );
             }}
@@ -6896,7 +6983,7 @@ function Row({
                     openNoteGroupEditor(event, { day, cell: beforeCell, groupIndex, displayText });
                     return;
                   }
-                  openInlineEditor({ day, cell: beforeCell, preferredGroupIndex: groupIndex });
+                  openInlineEditor({ day, cell: beforeCell, preferredGroupIndex: groupIndex, source: 'button' });
                 }}
                 className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded border border-zinc-200 bg-white/90 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-white dark:border-zinc-700 dark:bg-zinc-950/90 dark:text-zinc-300 dark:hover:bg-zinc-950"
                 title={isNoteGroup ? 'この追記を編集' : 'この枠を編集'}
@@ -7281,6 +7368,47 @@ function Row({
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {editingCell?.userId === user.id && editingCell?.day === d.key ? (
                 <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  {(() => {
+                    const editingGroup = apiCellToGroups(beforeCell)[editingCell.slotIndex] ?? null;
+                    const editableSiteTargets = (editingGroup?.items ?? [])
+                      .map((entry, itemIndex) => {
+                        if (!isSiteCellEntry(entry)) return null;
+                        const site = resolveStoredSite(entry.label);
+                        return {
+                          itemIndex,
+                          label: entry.label,
+                          displayLabel: siteFamilyDisplayName(siteStoredName(site) || entry.label),
+                        };
+                      })
+                      .filter((item): item is { itemIndex: number; label: string; displayLabel: string } => !!item);
+                    const selectedTargetItemIndex =
+                      typeof editingCell.targetItemIndex === 'number'
+                        ? editingCell.targetItemIndex
+                        : editableSiteTargets[0]?.itemIndex ?? 0;
+                    return editingCell.source === 'button' && editableSiteTargets.length > 1 ? (
+                      <label className="mb-1 block text-[10px] text-zinc-500 dark:text-zinc-400">
+                        <span className="mb-0.5 block">編集する現場</span>
+                        <select
+                          value={String(selectedTargetItemIndex)}
+                          onChange={(event) => {
+                            const nextTargetItemIndex = Number.parseInt(event.target.value, 10);
+                            const nextTarget = editableSiteTargets.find((item) => item.itemIndex === nextTargetItemIndex) ?? null;
+                            if (!nextTarget) return;
+                            setEditingCell?.({ ...editingCell, targetItemIndex: nextTarget.itemIndex });
+                            setEditingInput?.(nextTarget.label);
+                            setSiteSuggestions?.([]);
+                          }}
+                          className="w-full rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        >
+                          {editableSiteTargets.map((item) => (
+                            <option key={`edit-target:${user.id}:${d.key}:${item.itemIndex}`} value={item.itemIndex}>
+                              {item.displayLabel}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null;
+                  })()}
                   <input
                     type="text"
                     value={editingInput ?? ''}
@@ -7288,6 +7416,8 @@ function Row({
                     onKeyDown={(e) => {
                       const editingSlotIndex =
                         editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.slotIndex : 0;
+                      const editingTargetItemIndex =
+                        editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.targetItemIndex : null;
                       if (e.key === 'Escape') {
                         setEditingCell?.(null);
                         setEditingInput?.('');
@@ -7302,6 +7432,7 @@ function Row({
                           void commitInlineEdit({
                             day: d.key,
                             slotIndex: editingSlotIndex,
+                            targetItemIndex: editingTargetItemIndex,
                             beforeCell,
                             siteId: site.id,
                             siteName: siteStoredName(site) || site.label,
@@ -7314,6 +7445,7 @@ function Row({
                           void commitInlineEdit({
                             day: d.key,
                             slotIndex: editingSlotIndex,
+                            targetItemIndex: editingTargetItemIndex,
                             beforeCell,
                             siteName,
                           });
@@ -7324,7 +7456,7 @@ function Row({
                     className="w-full rounded border border-blue-500 bg-white px-1 py-0.5 text-xs dark:bg-black"
                     placeholder="現場名を入力..."
                   />
-                  {siteSuggestions && siteSuggestions.length > 0 ? (
+                  {editingCell.source !== 'button' && siteSuggestions && siteSuggestions.length > 0 ? (
                     <div
                       data-suggestion-list
                       className="absolute left-0 top-full z-50 mt-1 max-h-48 w-full min-w-[200px] overflow-auto rounded border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
@@ -7344,6 +7476,7 @@ function Row({
                             void commitInlineEdit({
                               day: d.key,
                               slotIndex: editingSlotIndex,
+                              targetItemIndex: editingCell?.userId === user.id && editingCell?.day === d.key ? editingCell.targetItemIndex : null,
                               beforeCell,
                               siteId: site.id,
                               siteName: siteStoredName(site) || site.label,
@@ -7394,6 +7527,7 @@ function Row({
       selectedSite,
       setEditingCell,
       setEditingInput,
+      resolveStoredSite,
       setSiteSuggestions,
       siteSuggestions,
       suggestionLoading,
