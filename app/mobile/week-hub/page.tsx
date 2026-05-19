@@ -4,7 +4,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
 import {
+  buildDayColumnTrack,
   buildNameColumnTrack,
+  buildWeekGridPrefsLocalStorageKey,
   defaultWeekGridPrefs,
   normalizeWeekGridPrefs,
   type WeekGridPrefs,
@@ -365,6 +367,10 @@ function MobileWeekHubInner() {
   }, [cursorDate]);
 
   const weekGridPrefsKey = useMemo(() => `week-hub:${scheduleKind}:week:gridPrefs`, [scheduleKind]);
+  const weekGridPrefsLocalStorageKey = useMemo(
+    () => buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, authUser?.id ?? null),
+    [authUser?.id, weekGridPrefsKey],
+  );
   const weekViewLabel = useMemo(() => (scheduleKind === 'daily' ? '日常予定' : '週予定'), [scheduleKind]);
 
   const viewMonth = useMemo(() => `${weekStart.getFullYear()}-${pad2(weekStart.getMonth() + 1)}`, [weekStart]);
@@ -383,10 +389,10 @@ function MobileWeekHubInner() {
     }));
   }, [days]);
 
-  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
+  const readWeekGridPrefs = useCallback((localStorageKey: string | null): WeekGridPrefs => {
     try {
-      const localKey = `masterHub.ui:${key}`;
-      const txt = window.localStorage.getItem(localKey);
+      if (!localStorageKey) return defaultWeekGridPrefs('mobile');
+      const txt = window.localStorage.getItem(localStorageKey);
       if (!txt) return defaultWeekGridPrefs('mobile');
       return normalizeWeekGridPrefs(JSON.parse(txt) as unknown, defaultWeekGridPrefs('mobile'));
     } catch {
@@ -396,23 +402,27 @@ function MobileWeekHubInner() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
-  }, [readWeekGridPrefs, weekGridPrefsKey]);
+    setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
+  }, [readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const apply = (event?: Event) => {
       if (event instanceof StorageEvent) {
-        if (event.key && event.key !== `masterHub.ui:${weekGridPrefsKey}`) return;
+        if (event.key && event.key !== weekGridPrefsLocalStorageKey) return;
       }
 
       if (event instanceof CustomEvent) {
         const detail = asObject(event.detail);
-        if (typeof detail?.key === 'string' && detail.key !== weekGridPrefsKey) return;
+        if (typeof detail?.storageKey === 'string' && detail.storageKey !== weekGridPrefsLocalStorageKey) return;
+        if (detail?.value) {
+          setWeekGridPrefs(normalizeWeekGridPrefs(detail.value, defaultWeekGridPrefs('mobile')));
+          return;
+        }
       }
 
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
     };
 
     window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
@@ -421,12 +431,12 @@ function MobileWeekHubInner() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [readWeekGridPrefs, weekGridPrefsKey]);
+  }, [readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (!authUser?.id) {
       if (typeof window !== 'undefined') {
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
       }
       return;
     }
@@ -449,21 +459,22 @@ function MobileWeekHubInner() {
         setWeekGridPrefs(next);
 
         try {
-          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+          const localKey = weekGridPrefsLocalStorageKey;
+          if (!localKey) return;
           window.localStorage.setItem(localKey, JSON.stringify({ ...(vObj ?? {}), ...next }));
         } catch {
           // ignore
         }
       } catch {
         if (cancelled || typeof window === 'undefined') return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [authUser?.id, readWeekGridPrefs, weekGridPrefsKey]);
+  }, [authUser?.id, readWeekGridPrefs, weekGridPrefsKey, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -700,7 +711,7 @@ function MobileWeekHubInner() {
   }, [weekGridPrefs.cellMinHComfortable, weekGridPrefs.cellMinHCompact, weekGridPrefs.gridLayout]);
 
   const weekGridTemplateColumns = useMemo(() => {
-    return `${buildNameColumnTrack(weekGridPrefs.nameColW)} repeat(7, minmax(${Math.max(60, Math.round(weekGridPrefs.cellMinW))}px, 1fr))`;
+    return `${buildNameColumnTrack(weekGridPrefs.nameColW)} repeat(7, ${buildDayColumnTrack(weekGridPrefs.cellMinW)})`;
   }, [weekGridPrefs.cellMinW, weekGridPrefs.nameColW]);
 
   const weekGridMinWidth = useMemo(() => {

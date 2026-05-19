@@ -79,6 +79,16 @@ export function buildNameColumnTrack(width: number) {
   return `minmax(${clamped}px, ${clamped}px)`;
 }
 
+export function buildDayColumnTrack(width: number) {
+  const clamped = clampInt(width, 60, 240, DEFAULT_WEEK_GRID_PREFS.cellMinW);
+  return `minmax(${clamped}px, ${clamped}px)`;
+}
+
+export function buildWeekGridPrefsLocalStorageKey(key: string, userId: string | null | undefined) {
+  const scope = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : 'anon';
+  return `masterHub.ui:${scope}:${key}`;
+}
+
 export function defaultWeekGridPrefs(target: 'desktop' | 'mobile' = 'desktop'): WeekGridPrefs {
   return target === 'mobile' ? { ...MOBILE_DEFAULT_WEEK_GRID_PREFS } : { ...DEFAULT_WEEK_GRID_PREFS };
 }

@@ -34,7 +34,9 @@ import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/s
 import {
   DEFAULT_WEEK_GRID_PREFS,
   WEEK_GRID_PREFS_VERSION,
+  buildDayColumnTrack,
   buildNameColumnTrack,
+  buildWeekGridPrefsLocalStorageKey,
   clampNameColumnWidth,
   normalizeWeekGridPrefs,
   type WeekGridCellBg as CellBg,
@@ -1347,11 +1349,17 @@ function WeekHubInner() {
 
   const gridPrefsLoadedRef = useRef<Record<string, true>>({});
   const gridPrefsSaveTimerRef = useRef<number | null>(null);
+  const gridPrefsLocalStorageKey = useMemo(
+    () => buildWeekGridPrefsLocalStorageKey(gridPrefsKey, effectiveUserId),
+    [effectiveUserId, gridPrefsKey],
+  );
+  const gridPrefsLoadedScopeKey = useMemo(() => `${effectiveUserId ?? 'anon'}:${gridPrefsKey}`, [effectiveUserId, gridPrefsKey]);
 
-  const readLocalGridPrefs = useCallback((key: string) => {
+  const readLocalGridPrefs = useCallback((localStorageKey: string | null) => {
     if (typeof window === 'undefined') return null;
     try {
-      const txt = window.localStorage.getItem(`masterHub.ui:${key}`);
+      if (!localStorageKey) return null;
+      const txt = window.localStorage.getItem(localStorageKey);
       if (!txt) return null;
       return JSON.parse(txt) as unknown;
     } catch {
@@ -1371,10 +1379,12 @@ function WeekHubInner() {
   }, []);
 
   const loadGridPrefs = useCallback(async (userId: string | null, key: string) => {
-    if (gridPrefsLoadedRef.current[key]) return;
-    gridPrefsLoadedRef.current[key] = true;
+    const scopeKey = `${userId ?? 'anon'}:${key}`;
+    if (gridPrefsLoadedRef.current[scopeKey]) return;
+    gridPrefsLoadedRef.current[scopeKey] = true;
+    const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, userId);
 
-    const localRaw = readLocalGridPrefs(key);
+    const localRaw = readLocalGridPrefs(localStorageKey);
     if (localRaw) applyGridPrefs(localRaw);
 
     if (!userId) return;
@@ -1406,7 +1416,7 @@ function WeekHubInner() {
         try {
           const normalized = normalizeWeekGridPrefs(o);
           window.localStorage.setItem(
-            `masterHub.ui:${key}`,
+            localStorageKey,
             JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
           );
         } catch {
@@ -1422,16 +1432,16 @@ function WeekHubInner() {
     const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
     const normalized = normalizeWeekGridPrefs(value);
     const payload = { ...raw, ...normalized, v: WEEK_GRID_PREFS_VERSION };
+    const localKey = buildWeekGridPrefsLocalStorageKey(key, userId);
 
     if (typeof window !== 'undefined') {
       try {
-        const localKey = `masterHub.ui:${key}`;
         const nextTxt = JSON.stringify(payload);
         const prevTxt = window.localStorage.getItem(localKey);
         if (prevTxt !== nextTxt) {
           window.localStorage.setItem(localKey, nextTxt);
-          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key } }));
         }
+        window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key, storageKey: localKey, value: payload } }));
       } catch {
         // ignore
       }
@@ -1573,15 +1583,19 @@ function WeekHubInner() {
 
     const apply = (event?: Event) => {
       if (event instanceof StorageEvent) {
-        if (event.key && event.key !== `masterHub.ui:${gridPrefsKey}`) return;
+        if (event.key && event.key !== gridPrefsLocalStorageKey) return;
       }
 
       if (event instanceof CustomEvent) {
         const detail = event.detail && typeof event.detail === 'object' ? (event.detail as Record<string, unknown>) : null;
-        if (typeof detail?.key === 'string' && detail.key !== gridPrefsKey) return;
+        if (typeof detail?.storageKey === 'string' && detail.storageKey !== gridPrefsLocalStorageKey) return;
+        if (detail?.value) {
+          applyGridPrefs(detail.value);
+          return;
+        }
       }
 
-      const raw = readLocalGridPrefs(gridPrefsKey);
+      const raw = readLocalGridPrefs(gridPrefsLocalStorageKey);
       if (raw) applyGridPrefs(raw);
     };
 
@@ -1591,10 +1605,10 @@ function WeekHubInner() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [applyGridPrefs, gridPrefsKey, readLocalGridPrefs]);
+  }, [applyGridPrefs, gridPrefsLocalStorageKey, readLocalGridPrefs]);
 
   useEffect(() => {
-    if (!gridPrefsLoadedRef.current[gridPrefsKey]) return;
+    if (!gridPrefsLoadedRef.current[gridPrefsLoadedScopeKey]) return;
     if (typeof window === 'undefined') return;
 
     if (gridPrefsSaveTimerRef.current) {
@@ -1634,6 +1648,7 @@ function WeekHubInner() {
     effectiveUserId,
     gridLayout,
     gridPrefsKey,
+    gridPrefsLoadedScopeKey,
     nameColW,
     saveGridPrefs,
   ]);
@@ -1747,22 +1762,15 @@ function WeekHubInner() {
   }, [pinSiteToTop, sites]);
 
   const normalizedSiteQuery = useMemo(() => siteQuery.trim().toLowerCase(), [siteQuery]);
-  const normalizedQuickSiteFilterQuery = useMemo(() => {
-    const quick = siteQuickInput.trim().toLowerCase();
-    const selectedLabel = (selectedSite?.label ?? '').trim().toLowerCase();
-    if (!quick) return '';
-    return quick === selectedLabel ? '' : quick;
-  }, [selectedSite?.label, siteQuickInput]);
-  const effectiveSiteFilterQuery = normalizedSiteQuery || normalizedQuickSiteFilterQuery;
-  const hasSiteQuery = effectiveSiteFilterQuery.length > 0;
+  const hasSiteQuery = normalizedSiteQuery.length > 0;
 
   const visibleSites = useMemo(() => {
     return sites.filter((s) => {
       if (s.badgeMonthVisible === false) return false;
-      if (!effectiveSiteFilterQuery) return true;
-      return s.label.toLowerCase().includes(effectiveSiteFilterQuery);
+      if (!normalizedSiteQuery) return true;
+      return s.label.toLowerCase().includes(normalizedSiteQuery);
     });
-  }, [effectiveSiteFilterQuery, sites]);
+  }, [normalizedSiteQuery, sites]);
 
   const handleSiteQueryInput = useCallback((event: FormEvent<HTMLInputElement>) => {
     setSiteQuery(event.currentTarget.value);
@@ -5046,7 +5054,7 @@ function WeekGrid({
             <div
               className="grid"
               style={{
-                gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+                gridTemplateColumns: `${nameColumnTrack} repeat(7, ${buildDayColumnTrack(cellMinW)})`,
               }}
             >
               <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
@@ -5084,7 +5092,7 @@ function WeekGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `${nameColumnTrack} repeat(7, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(7, ${buildDayColumnTrack(cellMinW)})`,
           }}
         >
           {users.length === 0 ? (
@@ -5388,7 +5396,7 @@ function MonthGrid({
             <div
               className="grid"
               style={{
-                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, ${buildDayColumnTrack(cellMinW)})`,
               }}
             >
               <div className="sticky left-0 z-40 border-r border-zinc-400 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-600 dark:bg-black dark:text-zinc-300 relative sm:px-3">
@@ -5426,7 +5434,7 @@ function MonthGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(dayLabels.length, 1)}, ${buildDayColumnTrack(cellMinW)})`,
           }}
         >
           {users.length === 0 ? (
@@ -5664,7 +5672,7 @@ function YearGrid({
             <div
               className="grid"
               style={{
-                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+                gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, ${buildDayColumnTrack(cellMinW)})`,
               }}
             >
               <div className="sticky left-0 z-40 border-r border-zinc-200 bg-white px-2 py-2 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 relative sm:px-3">
@@ -5700,7 +5708,7 @@ function YearGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, minmax(${Math.max(60, Math.round(cellMinW))}px, 1fr))`,
+            gridTemplateColumns: `${nameColumnTrack} repeat(${Math.max(months.length, 1)}, ${buildDayColumnTrack(cellMinW)})`,
           }}
         >
           {users.length === 0 ? (
