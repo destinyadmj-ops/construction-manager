@@ -3492,7 +3492,7 @@ function WeekHubInner() {
                   </div>
 
                   <div
-                    className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none"
+                    className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:flex-1 lg:max-h-none"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
