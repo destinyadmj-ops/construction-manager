@@ -638,7 +638,7 @@ export default function AppHeader() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [defaultWeekGridPrefsForPage, readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
+  }, [defaultWeekGridPrefsForPage, readWeekGridPrefs, weekGridPrefsKey, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
