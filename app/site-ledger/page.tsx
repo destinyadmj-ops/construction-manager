@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../header-actions';
 
@@ -30,16 +30,72 @@ function scheduleLabelHighlightClass(color: string | null | undefined): string {
   return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
 }
 
-function scheduleLabelHighlightStyle(color: string | null | undefined): { borderColor: string; backgroundColor: string } {
+function scheduleLabelHighlightStyle(color: string | null | undefined): CSSProperties {
   const c = (color ?? 'default').toString();
-  if (c === 'red') return { borderColor: 'rgb(254 202 202)', backgroundColor: 'rgb(254 242 242 / 0.88)' };
-  if (c === 'orange') return { borderColor: 'rgb(254 215 170)', backgroundColor: 'rgb(255 247 237 / 0.88)' };
-  if (c === 'yellow') return { borderColor: 'rgb(253 230 138)', backgroundColor: 'rgb(254 252 232 / 0.92)' };
-  if (c === 'green') return { borderColor: 'rgb(187 247 208)', backgroundColor: 'rgb(240 253 244 / 0.88)' };
-  if (c === 'blue') return { borderColor: 'rgb(191 219 254)', backgroundColor: 'rgb(239 246 255 / 0.88)' };
-  if (c === 'purple') return { borderColor: 'rgb(221 214 254)', backgroundColor: 'rgb(245 243 255 / 0.88)' };
-  if (c === 'pink') return { borderColor: 'rgb(251 207 232)', backgroundColor: 'rgb(253 242 248 / 0.88)' };
-  return { borderColor: 'rgb(212 212 216)', backgroundColor: 'rgb(244 244 245 / 0.92)' };
+  const vars =
+    c === 'red'
+      ? {
+          lightBorder: 'rgb(254 202 202)',
+          lightBackground: 'rgba(254, 242, 242, 0.88)',
+          darkBorder: 'rgb(127 29 29)',
+          darkBackground: 'rgba(69, 10, 10, 0.45)',
+        }
+      : c === 'orange'
+        ? {
+            lightBorder: 'rgb(254 215 170)',
+            lightBackground: 'rgba(255, 247, 237, 0.9)',
+            darkBorder: 'rgb(154 52 18)',
+            darkBackground: 'rgba(67, 20, 7, 0.45)',
+          }
+        : c === 'yellow'
+          ? {
+              lightBorder: 'rgb(253 230 138)',
+              lightBackground: 'rgba(254, 252, 232, 0.92)',
+              darkBorder: 'rgb(133 77 14)',
+              darkBackground: 'rgba(66, 32, 6, 0.5)',
+            }
+          : c === 'green'
+            ? {
+                lightBorder: 'rgb(187 247 208)',
+                lightBackground: 'rgba(240, 253, 244, 0.9)',
+                darkBorder: 'rgb(22 101 52)',
+                darkBackground: 'rgba(5, 46, 22, 0.45)',
+              }
+            : c === 'blue'
+              ? {
+                  lightBorder: 'rgb(191 219 254)',
+                  lightBackground: 'rgba(239, 246, 255, 0.9)',
+                  darkBorder: 'rgb(30 64 175)',
+                  darkBackground: 'rgba(23, 37, 84, 0.45)',
+                }
+              : c === 'purple'
+                ? {
+                    lightBorder: 'rgb(221 214 254)',
+                    lightBackground: 'rgba(245, 243, 255, 0.9)',
+                    darkBorder: 'rgb(91 33 182)',
+                    darkBackground: 'rgba(46, 16, 101, 0.45)',
+                  }
+                : c === 'pink'
+                  ? {
+                      lightBorder: 'rgb(251 207 232)',
+                      lightBackground: 'rgba(253, 242, 248, 0.9)',
+                      darkBorder: 'rgb(157 23 77)',
+                      darkBackground: 'rgba(80, 7, 36, 0.45)',
+                    }
+                  : {
+                      lightBorder: 'rgb(212 212 216)',
+                      lightBackground: 'rgba(244, 244, 245, 0.92)',
+                      darkBorder: 'rgb(82 82 91)',
+                      darkBackground: 'rgba(39, 39, 42, 0.7)',
+                    };
+
+  return {
+    '--mh-button-border-light': vars.lightBorder,
+    '--mh-button-bg-light': vars.lightBackground,
+    '--mh-button-border-dark': vars.darkBorder,
+    '--mh-button-bg-dark': vars.darkBackground,
+    boxShadow: `inset 0 0 0 1px ${vars.lightBorder}`,
+  } as CSSProperties;
 }
 
 type ApiSite = {
