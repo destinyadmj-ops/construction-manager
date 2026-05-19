@@ -43,14 +43,14 @@ export async function GET(request: Request) {
   try {
     const hit = await prisma.userUiSetting.findUnique({
       where: { userId_key: { userId: parsed.data.userId, key: parsed.data.key } },
-      select: { value: true },
+      select: { value: true, updatedAt: true },
     });
 
     if (!hit) {
-      return Response.json({ ok: true, value: null });
+      return Response.json({ ok: true, value: null, updatedAt: null });
     }
 
-    return Response.json({ ok: true, value: hit.value });
+    return Response.json({ ok: true, value: hit.value, updatedAt: hit.updatedAt.toISOString() });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
