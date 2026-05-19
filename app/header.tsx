@@ -1092,8 +1092,8 @@ export default function AppHeader() {
 
   const canBack = useMemo(() => {
     if (actions.undo) return !actions.undo.disabled;
-    return navIndex > 0 || Boolean(storedScheduleBackHref);
-  }, [actions.undo, navIndex, storedScheduleBackHref]);
+    return navIndex > 0 || pathname !== '/' || Boolean(storedScheduleBackHref);
+  }, [actions.undo, navIndex, pathname, storedScheduleBackHref]);
 
   const canForward = useMemo(() => {
     if (actions.redo) return !actions.redo.disabled;
@@ -1743,6 +1743,12 @@ export default function AppHeader() {
                 if (storedScheduleBackHref) {
                   navIntentRef.current = 'push';
                   router.push(storedScheduleBackHref);
+                  return;
+                }
+
+                if (pathname !== '/') {
+                  navIntentRef.current = 'back';
+                  router.back();
                 }
               }}
               disabled={!canBack}

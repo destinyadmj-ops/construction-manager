@@ -926,7 +926,6 @@ function WeekHubInner() {
   const [scheduleHistoryLoadedKind, setScheduleHistoryLoadedKind] = useState<'NORMAL' | 'DAILY' | null>(null);
   const [scheduleHistorySearch, setScheduleHistorySearch] = useState('');
   const [scheduleHistoryTargetFilter, setScheduleHistoryTargetFilter] = useState<'all' | 'スケジュール' | 'カラー'>('all');
-
   const skipInitialModeSyncRef = useRef(false);
   const skipInitialKindSyncRef = useRef(false);
   const skipInitialUserSyncRef = useRef(false);
@@ -1769,9 +1768,13 @@ function WeekHubInner() {
   );
 
   const openDailySiteRegistration = useCallback(() => {
+    if (!hasScheduleEditPermission) {
+      showCellActionMsg('日常現場登録は編集権限が必要です');
+      return;
+    }
     writeWeekHubHistorySnapshot();
     router.push('/management?kind=daily&open=daily-site');
-  }, [router, writeWeekHubHistorySnapshot]);
+  }, [hasScheduleEditPermission, router, showCellActionMsg, writeWeekHubHistorySnapshot]);
 
   useEffect(() => {
     // Keep Undo/Redo local to the current view scope.
@@ -3146,8 +3149,6 @@ function WeekHubInner() {
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                     現場を選択 → 週表のセルをクリックで入力
                   </div>
-
-  const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
                   <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
@@ -3292,7 +3293,6 @@ function WeekHubInner() {
                     )}
                   </div>
                   <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    選択中: {selectedSite?.label ?? '（なし）'}
                   </div>
 
                   {selectedSite?.id ? (
@@ -3743,6 +3743,7 @@ function WeekHubInner() {
                   weekStart={weekStart}
                   monthWeekTabs={monthWeekTabs}
                   apiKind={apiKind}
+                  hasScheduleEditPermission={hasScheduleEditPermission}
                   onOpenDailySiteRegistration={openDailySiteRegistration}
                   gridLayout={gridLayout}
                   nameColW={nameColW}
@@ -4506,6 +4507,7 @@ function WeekGrid({
   weekStart,
   monthWeekTabs,
   apiKind,
+  hasScheduleEditPermission,
   onOpenDailySiteRegistration,
   gridLayout,
   nameColW,
@@ -4560,6 +4562,7 @@ function WeekGrid({
   weekStart: Date;
   monthWeekTabs: { monthKey: string; tabs: Date[] };
   apiKind: 'NORMAL' | 'DAILY';
+  hasScheduleEditPermission: boolean;
   onOpenDailySiteRegistration: () => void;
   gridLayout: GridLayout;
   nameColW: number;
@@ -4716,8 +4719,9 @@ function WeekGrid({
                 <button
                   type="button"
                   onClick={onOpenDailySiteRegistration}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  title="日常現場を管理画面で登録"
+                  disabled={!hasScheduleEditPermission}
+                  className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  title={hasScheduleEditPermission ? '日常現場を管理画面で登録' : '編集権限が必要です'}
                 >
                   日常現場登録
                 </button>
