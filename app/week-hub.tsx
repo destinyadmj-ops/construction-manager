@@ -2526,8 +2526,8 @@ function WeekHubInner() {
     
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // 入力フィールドまたは候補リスト内のクリックは無視
-      if (target.closest('input') || target.closest('[data-suggestion-list]')) return;
+      // インライン編集UI内の操作は閉じない
+      if (target.closest('[data-inline-editor]') || target.closest('[data-suggestion-list]')) return;
       setEditingCell(null);
       setEditingInput('');
       setSiteSuggestions([]);
@@ -3213,15 +3213,7 @@ function WeekHubInner() {
                     現場を選択 → 週表のセルをクリックで入力
                   </div>
                   <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
-                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
-                    <input
-                      value={siteQuery}
-                      onChange={(e) => setSiteQuery(e.target.value)}
-                      placeholder="現場名で絞り込み"
-                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                    />
-
-                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
                     <div className="mt-1 flex gap-2">
                       <input
                         ref={siteQuickInputRef}
@@ -3251,7 +3243,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto lg:overscroll-contain"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -3263,8 +3255,18 @@ function WeekHubInner() {
                     />
                   </div>
 
+                  <div className="mt-2 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                    <input
+                      value={siteQuery}
+                      onChange={(e) => setSiteQuery(e.target.value)}
+                      placeholder="現場名で絞り込み"
+                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </div>
+
                   <div
-                    className="mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -3882,15 +3884,7 @@ function WeekHubInner() {
                   </div>
 
                   <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
-                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
-                    <input
-                      value={siteQuery}
-                      onChange={(e) => setSiteQuery(e.target.value)}
-                      placeholder="現場名で絞り込み"
-                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
-                    />
-
-                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
                     <div className="mt-1 flex gap-2">
                       <input
                         ref={siteQuickInputRef}
@@ -3920,7 +3914,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -3932,8 +3926,18 @@ function WeekHubInner() {
                     />
                   </div>
 
+                  <div className="mt-2 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
+                    <input
+                      value={siteQuery}
+                      onChange={(e) => setSiteQuery(e.target.value)}
+                      placeholder="現場名で絞り込み"
+                      className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
+                    />
+                  </div>
+
                   <div
-                    className="mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4139,7 +4143,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -4151,11 +4155,7 @@ function WeekHubInner() {
                     />
                   </div>
 
-                  <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
-                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
-
-                  <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                  <div className="mt-2 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
                       value={siteQuery}
@@ -4163,8 +4163,14 @@ function WeekHubInner() {
                       placeholder="現場名で絞り込み"
                       className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                     />
+                  </div>
 
-                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
+                  <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
+
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">現場（既存/新規）</div>
                     <div className="mt-1 flex gap-2">
                       <input
                         ref={siteQuickInputRef}
@@ -4191,7 +4197,7 @@ function WeekHubInner() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
+                  <div className="mt-3 rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                         まだ候補がありません（過去データから自動で出ます）。
@@ -7385,7 +7391,7 @@ function Row({
             ) : null}
             <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
               {editingCell?.userId === user.id && editingCell?.day === d.key ? (
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <div data-inline-editor className="relative" onClick={(e) => e.stopPropagation()}>
                   {(() => {
                     const editingGroup = apiCellToGroups(beforeCell)[editingCell.slotIndex] ?? null;
                     const editableSiteTargets = (editingGroup?.items ?? [])
