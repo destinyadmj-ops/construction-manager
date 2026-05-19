@@ -5,6 +5,7 @@ import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, 
 import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
 import {
   buildDayColumnTrack,
+  buildLegacyWeekGridPrefsSettingsKey,
   buildNameColumnTrack,
   buildWeekGridPrefsLocalStorageKey,
   buildWeekGridPrefsSettingsKey,
@@ -368,9 +369,14 @@ function MobileWeekHubInner() {
   }, [cursorDate]);
 
   const weekGridPrefsKey = useMemo(() => buildWeekGridPrefsSettingsKey(scheduleKind, 'week', 'mobile'), [scheduleKind]);
+  const legacyWeekGridPrefsKey = useMemo(() => buildLegacyWeekGridPrefsSettingsKey(scheduleKind, 'week'), [scheduleKind]);
   const weekGridPrefsLocalStorageKey = useMemo(
     () => buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, authUser?.id ?? null),
     [authUser?.id, weekGridPrefsKey],
+  );
+  const legacyWeekGridPrefsLocalStorageKey = useMemo(
+    () => buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, authUser?.id ?? null),
+    [authUser?.id, legacyWeekGridPrefsKey],
   );
   const weekViewLabel = useMemo(() => (scheduleKind === 'daily' ? '日常予定' : '週予定'), [scheduleKind]);
 
@@ -390,12 +396,15 @@ function MobileWeekHubInner() {
     }));
   }, [days]);
 
-  const readWeekGridPrefs = useCallback((localStorageKey: string | null): WeekGridPrefs => {
+  const readWeekGridPrefs = useCallback((localStorageKey: string | null, fallbackLocalStorageKey: string | null = null): WeekGridPrefs => {
     try {
-      if (!localStorageKey) return defaultWeekGridPrefs('mobile');
-      const txt = window.localStorage.getItem(localStorageKey);
-      if (!txt) return defaultWeekGridPrefs('mobile');
-      return normalizeWeekGridPrefs(JSON.parse(txt) as unknown, defaultWeekGridPrefs('mobile'));
+      for (const key of [localStorageKey, fallbackLocalStorageKey]) {
+        if (!key) continue;
+        const txt = window.localStorage.getItem(key);
+        if (!txt) continue;
+        return normalizeWeekGridPrefs(JSON.parse(txt) as unknown, defaultWeekGridPrefs('mobile'));
+      }
+      return defaultWeekGridPrefs('mobile');
     } catch {
       return defaultWeekGridPrefs('mobile');
     }
@@ -403,8 +412,8 @@ function MobileWeekHubInner() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
-  }, [readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
+    setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
+  }, [legacyWeekGridPrefsLocalStorageKey, readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -423,7 +432,7 @@ function MobileWeekHubInner() {
         }
       }
 
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
     };
 
     window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
@@ -432,12 +441,12 @@ function MobileWeekHubInner() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
+  }, [legacyWeekGridPrefsLocalStorageKey, readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (!authUser?.id) {
       if (typeof window !== 'undefined') {
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
       }
       return;
     }
@@ -445,37 +454,51 @@ function MobileWeekHubInner() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(
-          `/api/ui-settings?userId=${encodeURIComponent(authUser.id)}&key=${encodeURIComponent(weekGridPrefsKey)}`,
-          { cache: 'no-store' },
-        );
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) throw new Error('not ok');
+        let loaded = false;
+        for (const key of [weekGridPrefsKey, legacyWeekGridPrefsKey]) {
+          const r = await fetch(
+            `/api/ui-settings?userId=${encodeURIComponent(authUser.id)}&key=${encodeURIComponent(key)}`,
+            { cache: 'no-store' },
+          );
+          const j = (await r.json().catch(() => null)) as unknown;
+          const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+          if (!r.ok || obj?.ok !== true) continue;
 
-        const raw = (obj as { value?: unknown }).value;
-        const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw, defaultWeekGridPrefs('mobile'));
-        if (cancelled) return;
-        setWeekGridPrefs(next);
+          const raw = (obj as { value?: unknown }).value;
+          const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+          const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw, defaultWeekGridPrefs('mobile'));
+          if (cancelled) return;
+          setWeekGridPrefs(next);
+          loaded = true;
 
-        try {
-          const localKey = weekGridPrefsLocalStorageKey;
-          if (!localKey) return;
-          window.localStorage.setItem(localKey, JSON.stringify({ ...(vObj ?? {}), ...next }));
-        } catch {
-          // ignore
+          try {
+            const localKey = weekGridPrefsLocalStorageKey;
+            if (!localKey) return;
+            window.localStorage.setItem(localKey, JSON.stringify({ ...(vObj ?? {}), ...next }));
+          } catch {
+            // ignore
+          }
+          break;
         }
+
+        if (!loaded) throw new Error('not ok');
       } catch {
         if (cancelled || typeof window === 'undefined') return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [authUser?.id, readWeekGridPrefs, weekGridPrefsKey, weekGridPrefsLocalStorageKey]);
+  }, [
+    authUser?.id,
+    legacyWeekGridPrefsKey,
+    legacyWeekGridPrefsLocalStorageKey,
+    readWeekGridPrefs,
+    weekGridPrefsKey,
+    weekGridPrefsLocalStorageKey,
+  ]);
 
   useEffect(() => {
     const controller = new AbortController();
