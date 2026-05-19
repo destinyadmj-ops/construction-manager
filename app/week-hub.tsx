@@ -2734,10 +2734,12 @@ function WeekHubInner() {
   };
 
   const goPrevMonth = () => {
-    setCursorDate(new Date(cursorDate.getFullYear(), cursorDate.getMonth() - 1, 1));
+    const ws = startOfWeekMonday(cursorDate);
+    setCursorDate(new Date(ws.getFullYear(), ws.getMonth() - 1, 15));
   };
   const goNextMonth = () => {
-    setCursorDate(new Date(cursorDate.getFullYear(), cursorDate.getMonth() + 1, 1));
+    const ws = startOfWeekMonday(cursorDate);
+    setCursorDate(new Date(ws.getFullYear(), ws.getMonth() + 1, 15));
   };
 
   const goPrevYear = () => {
@@ -4695,7 +4697,7 @@ function WeekGrid({
                       onClick={() => onSelectWeekStart(t)}
                       className={`rounded-md border px-2 py-1 text-[11px] tabular-nums ${
                         active
-                          ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30'
+                          ? 'border-red-300 bg-red-50 font-medium text-red-600 dark:border-red-700 dark:bg-red-950/30 dark:text-red-400'
                           : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
                       }`}
                       aria-current={active ? 'true' : undefined}
@@ -6696,6 +6698,7 @@ function Row({
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
         const hasMultipleSitesInGroup = siteItems.length > 1;
+        const canInlineEditGroup = isEditable && siteItems.length > 0;
         const hoverMenuItems: CellHoverMenuItem[] =
           siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
             ? [
@@ -6753,7 +6756,7 @@ function Row({
               </>
             ) : null}
             {hasMultipleSitesInGroup ? (
-              <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
+              <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400 ${canInlineEditGroup ? 'right-10' : 'right-1'}`}>
                 +
               </span>
             ) : null}
@@ -6764,7 +6767,7 @@ function Row({
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
           : null;
         return (
-          <div key={`group:${day}:${groupIndex}`} className={groupIndex > 0 ? 'mt-1' : ''}>
+          <div key={`group:${day}:${groupIndex}`} className={`relative ${groupIndex > 0 ? 'mt-1' : ''}`}>
             {renderSiteLabel({
               displayValue,
               displayText,
@@ -6772,7 +6775,7 @@ function Row({
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
               className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                hasMultipleSitesInGroup ? 'relative pr-4' : ''
+                canInlineEditGroup ? 'relative pr-16' : hasMultipleSitesInGroup ? 'relative pr-4' : ''
               } ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
@@ -6783,11 +6786,26 @@ function Row({
               dragState,
               contextInput: { userId: user.id, day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
             })}
+            {canInlineEditGroup ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openInlineEditor({ day, cell: beforeCell, preferredGroupIndex: groupIndex });
+                }}
+                className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded border border-zinc-200 bg-white/90 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-white dark:border-zinc-700 dark:bg-zinc-950/90 dark:text-zinc-300 dark:hover:bg-zinc-950"
+                title="この枠を編集"
+                aria-label={`${displayText || anchorEntry?.label || 'この枠'} を編集`}
+              >
+                編集
+              </button>
+            ) : null}
           </div>
         );
       });
     },
-    [gridLayout, isEditable, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName, user.id],
+    [gridLayout, isEditable, openInlineEditor, renderSiteLabel, resolveStoredSite, siteFamilyLabelForName, user.id],
   );
 
   const formatCellActionReason = useCallback((
