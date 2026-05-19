@@ -37,6 +37,7 @@ import {
   buildDayColumnTrack,
   buildNameColumnTrack,
   buildWeekGridPrefsLocalStorageKey,
+  buildWeekGridPrefsSettingsKey,
   clampNameColumnWidth,
   normalizeWeekGridPrefs,
   type WeekGridCellBg as CellBg,
@@ -1174,7 +1175,7 @@ function WeekHubInner() {
   const currentEditorLabel = authMeUser?.name ?? authMeUser?.email ?? '管理者';
 
   const gridPrefsKey = useMemo(() => {
-    return `week-hub:${scheduleKind}:${mode}:gridPrefs`;
+    return buildWeekGridPrefsSettingsKey(scheduleKind, mode, 'desktop');
   }, [mode, scheduleKind]);
 
   const userOrderKey = useMemo(() => {

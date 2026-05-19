@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  buildWeekGridPrefsSettingsKey,
   buildWeekGridPrefsLocalStorageKey,
   WEEK_GRID_BG_OPTIONS,
   WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS,
@@ -337,11 +338,12 @@ export default function AppHeader() {
 
   const isDailyWeek = isWeek && weekScheduleKindKey === 'daily';
   const isNormalWeek = isWeek && weekScheduleKindKey !== 'daily';
+  const weekGridPrefsTarget = useMemo(() => (isMobileWeekHub ? 'mobile' : 'desktop'), [isMobileWeekHub]);
 
   const weekGridPrefsKey = useMemo(() => {
     if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
-    return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
-  }, [isWeekHubPage, weekModeKey, weekScheduleKindKey]);
+    return buildWeekGridPrefsSettingsKey(weekScheduleKindKey, weekModeKey, weekGridPrefsTarget);
+  }, [isWeekHubPage, weekGridPrefsTarget, weekModeKey, weekScheduleKindKey]);
   const weekGridPrefsLocalStorageKey = useMemo(
     () => (weekGridPrefsKey ? buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId) : null),
     [headerUserId, weekGridPrefsKey],
