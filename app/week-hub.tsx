@@ -941,6 +941,8 @@ function WeekHubInner() {
   const userOrderLoadedScopeRef = useRef<string | null>(null);
   const userOrderSavingRef = useRef(false);
   const pendingUserOrderRef = useRef<string[] | null>(null);
+  const userOrderLoadRequestRef = useRef(0);
+  const userOrderLocalRevisionRef = useRef(0);
   const [reorderMode, setReorderMode] = useState(false);
 
   const [undoStack, setUndoStack] = useState<CellHistoryEntry[]>([]);
@@ -1094,6 +1096,15 @@ function WeekHubInner() {
 
   const currentUserOrderScope = effectiveUserId ? `${effectiveUserId}:${userOrderKey}` : null;
 
+  const commitLocalUserOrder = useCallback((update: string[] | ((current: string[]) => string[])) => {
+    setUserOrder((current) => {
+      const next = typeof update === 'function' ? (update as (current: string[]) => string[])(current) : update;
+      if (arrayEqual(next, current)) return current;
+      userOrderLocalRevisionRef.current += 1;
+      return next;
+    });
+  }, []);
+
   const resolveEffectiveUserId = useCallback(async () => {
     const viewerUserId = (authMeUser?.id ?? '').trim();
     if (viewerUserId) {
@@ -1123,6 +1134,8 @@ function WeekHubInner() {
       if (!userId) return;
       const scope = `${userId}:${userOrderKey}`;
       if (userOrderLoadedScopeRef.current === scope) return;
+      const requestId = ++userOrderLoadRequestRef.current;
+      const localRevisionAtStart = userOrderLocalRevisionRef.current;
 
       try {
         const r = await fetch(
@@ -1139,11 +1152,15 @@ function WeekHubInner() {
           .map((x) => (typeof x === 'string' ? x.trim() : ''))
           .filter((x) => x.length > 0)
           .slice(0, 1000);
-        setUserOrder(parsed);
+        if (userOrderLoadRequestRef.current !== requestId) return;
+        if (userOrderLocalRevisionRef.current !== localRevisionAtStart) return;
+        setUserOrder((current) => (arrayEqual(current, parsed) ? current : parsed));
       } catch {
         // ignore
       } finally {
-        userOrderLoadedScopeRef.current = scope;
+        if (userOrderLoadRequestRef.current === requestId) {
+          userOrderLoadedScopeRef.current = scope;
+        }
       }
     },
     [userOrderKey],
@@ -1279,6 +1296,7 @@ function WeekHubInner() {
 
   useEffect(() => {
     userOrderLoadedScopeRef.current = null;
+    userOrderLoadRequestRef.current += 1;
   }, [userOrderKey]);
 
   useEffect(() => {
@@ -2061,9 +2079,9 @@ function WeekHubInner() {
     if (userOrderLoadedScopeRef.current !== currentUserOrderScope) return;
     const next = normalizeUserOrder(userOrder, currentUsersForOrder);
     if (arrayEqual(next, userOrder)) return;
-    setUserOrder(next);
+    commitLocalUserOrder(next);
     void saveUserOrder(effectiveUserId, next);
-  }, [currentUserOrderScope, currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
+  }, [commitLocalUserOrder, currentUserOrderScope, currentUsersForOrder, effectiveUserId, saveUserOrder, userOrder]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -2180,7 +2198,7 @@ function WeekHubInner() {
         const userId = typeof user?.id === 'string' ? user.id : null;
         if (!userId) return { ok: false as const, error: 'Invalid response' };
 
-        setUserOrder((cur) => {
+        commitLocalUserOrder((cur) => {
           const base = normalizeCurrentUserOrder(cur);
           const next = base.includes(userId) ? base : [...base, userId];
           if (arrayEqual(next, cur)) return cur;
@@ -2204,7 +2222,7 @@ function WeekHubInner() {
         return { ok: false as const, error: '作成に失敗しました' };
       }
     },
-    [apiKind, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, scheduleKind],
+    [apiKind, commitLocalUserOrder, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, scheduleKind],
   );
 
   const deleteUser = useCallback(
@@ -2228,7 +2246,7 @@ function WeekHubInner() {
           setSelectedUserId(null);
         }
 
-        setUserOrder((cur) => {
+        commitLocalUserOrder((cur) => {
           const next = normalizeCurrentUserOrder(cur).filter((id) => id !== userId);
           if (arrayEqual(next, cur)) return cur;
           if (effectiveUserId && effectiveUserId !== userId) {
@@ -2243,7 +2261,7 @@ function WeekHubInner() {
         showCellActionMsg('削除に失敗しました');
       }
     },
-    [effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
+    [commitLocalUserOrder, effectiveUserId, normalizeCurrentUserOrder, refreshCurrentView, saveUserOrder, selectedUserId, showCellActionMsg, userLabelById],
   );
 
   const refreshSites = useCallback(async () => {
@@ -3830,7 +3848,7 @@ function WeekHubInner() {
                   userOrder={userOrder}
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
-                    setUserOrder((cur) => {
+                    commitLocalUserOrder((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
                       if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
@@ -4094,7 +4112,7 @@ function WeekHubInner() {
                   userOrder={userOrder}
                   reorderMode={reorderMode}
                   onMoveUser={(userId, dir) => {
-                    setUserOrder((cur) => {
+                    commitLocalUserOrder((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
                       if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
@@ -4307,7 +4325,7 @@ function WeekHubInner() {
                   cellBg={cellBg}
                   onStartNameColResize={startNameColResize}
                   onMoveUser={(userId, dir) => {
-                    setUserOrder((cur) => {
+                    commitLocalUserOrder((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
                       if (arrayEqual(next, cur)) return cur;
                       queueMicrotask(() => void saveUserOrder(effectiveUserId, next));
