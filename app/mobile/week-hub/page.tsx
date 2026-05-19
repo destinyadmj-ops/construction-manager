@@ -634,7 +634,7 @@ function MobileWeekHubInner() {
     // Navigate based on the month of the center tab (current displayed week)
     setCursorDate((current) => {
       const center = startOfWeekMonday(new Date(current));
-      return new Date(center.getFullYear(), center.getMonth() - 1, 1);
+      return new Date(center.getFullYear(), center.getMonth() - 1, 15);
     });
   }, []);
 
@@ -642,7 +642,7 @@ function MobileWeekHubInner() {
     // Navigate based on the month of the center tab (current displayed week)
     setCursorDate((current) => {
       const center = startOfWeekMonday(new Date(current));
-      return new Date(center.getFullYear(), center.getMonth() + 1, 1);
+      return new Date(center.getFullYear(), center.getMonth() + 1, 15);
     });
   }, []);
 
