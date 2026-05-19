@@ -1369,12 +1369,12 @@ export default function AppHeader() {
                         <div className="p-2 space-y-2">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               if (actions.save) {
-                                void actions.save.onClick();
+                                await actions.save.onClick();
                                 return;
                               }
-                              void actions.add?.onClick();
+                              await actions.add?.onClick();
                             }}
                             disabled={scheduleEditButtonDisabled}
                             className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
@@ -1762,8 +1762,8 @@ export default function AppHeader() {
               type="button"
               data-color-edit-id="header-action-add"
               data-testid="header-action-save"
-              onClick={() => {
-                void actions.save?.onClick();
+              onClick={async () => {
+                await actions.save?.onClick();
               }}
               disabled={!actions.save || actions.save.disabled}
               title={actions.save?.title ?? '作業や入力'}
