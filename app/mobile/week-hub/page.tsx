@@ -8,7 +8,7 @@ import {
   normalizeWeekGridPrefs,
   type WeekGridPrefs,
 } from '@/shared/week-grid-prefs';
-import { getCurrentPathWithSearch, readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
+import { readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -199,24 +199,11 @@ function MobileWeekHubInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toolbarRef = useRef<HTMLDivElement | null>(null);
-  const currentMobileHref = typeof window === 'undefined' ? '/mobile/week-hub' : getCurrentPathWithSearch();
-  const initialStoredMobileState =
-    typeof window === 'undefined'
-      ? null
-      : (() => {
-          const stored = readStoredScheduleReturn();
-          if (stored?.target !== 'mobile-week-hub' || stored.href !== currentMobileHref) return null;
-          return normalizeMobileWeekHubHistoryState(stored.state);
-        })();
-  const initialHistoryStateRef = useRef<MobileWeekHubHistoryState | null>(
-    typeof window === 'undefined' ? null : readMobileWeekHubHistoryState() ?? initialStoredMobileState,
-  );
-  const initialHistoryState = initialHistoryStateRef.current;
-  const [cursorDate, setCursorDate] = useState<Date>(() => {
-    const restored = initialHistoryState?.cursorDate ? new Date(`${initialHistoryState.cursorDate}T00:00:00`) : null;
-    if (restored && !Number.isNaN(restored.getTime())) return restored;
-    return new Date();
-  });
+  const currentMobileHref = useMemo(() => {
+    const qs = searchParams.toString();
+    return qs ? `/mobile/week-hub?${qs}` : '/mobile/week-hub';
+  }, [searchParams]);
+  const [cursorDate, setCursorDate] = useState<Date>(() => new Date());
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
@@ -226,6 +213,22 @@ function MobileWeekHubInner() {
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [cellEntryMenu, setCellEntryMenu] = useState<CellEntryMenuState | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  const didInitialHistoryRestoreRef = useRef(false);
+
+  useEffect(() => {
+    if (didInitialHistoryRestoreRef.current) return;
+    didInitialHistoryRestoreRef.current = true;
+    const storedMobileState = (() => {
+      const stored = readStoredScheduleReturn();
+      if (!stored || stored.target !== 'mobile-week-hub' || stored.href !== currentMobileHref) return null;
+      return normalizeMobileWeekHubHistoryState(stored.state);
+    })();
+    const restoredState = readMobileWeekHubHistoryState() ?? storedMobileState;
+    if (!restoredState?.cursorDate) return;
+    const restoredDate = new Date(`${restoredState.cursorDate}T00:00:00`);
+    if (Number.isNaN(restoredDate.getTime())) return;
+    setCursorDate(restoredDate);
+  }, [currentMobileHref]);
 
   const requestedScheduleKind = useMemo(() => readRequestedScheduleKind(searchParams), [searchParams]);
 
