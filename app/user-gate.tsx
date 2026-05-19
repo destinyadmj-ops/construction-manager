@@ -676,23 +676,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div
-        className="min-h-screen"
-        onPointerDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          try {
-            if (pathname === '/') {
-              window.scrollTo({ top: 0, left: 0 });
-              return;
-            }
-            if (storedScheduleBackHref) {
-              router.push(storedScheduleBackHref);
-            }
-          } catch {
-            // ignore
-          }
-        }}
-      >
+      <div className="min-h-screen">
         {children}
       </div>
 
