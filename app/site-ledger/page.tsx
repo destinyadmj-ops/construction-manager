@@ -115,6 +115,7 @@ export default function SiteLedgerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [q, setQ] = useState('');
+  const [compactHighlightQuery, setCompactHighlightQuery] = useState('');
 
   const [photoSites, setPhotoSites] = useState<PhotoFolderSummary[]>([]);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -457,6 +458,16 @@ export default function SiteLedgerPage() {
           return a.includes(v);
         });
   }, [q, sites]);
+
+  const compactHighlightedSiteIds = useMemo(() => {
+    const needle = compactHighlightQuery.trim().toLowerCase();
+    if (!needle) return new Set<string>();
+    return new Set(
+      visibleSites
+        .filter((site) => `${site.companyName ?? ''} ${site.name}`.toLowerCase().includes(needle))
+        .map((site) => site.id),
+    );
+  }, [compactHighlightQuery, visibleSites]);
 
   useEffect(() => {
     for (const site of visibleSites.slice(0, 12)) {
@@ -1015,6 +1026,12 @@ export default function SiteLedgerPage() {
               <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">全体を俯瞰して名前を確認できます。</div>
             </div>
             <div className="flex items-center gap-2">
+              <input
+                value={compactHighlightQuery}
+                onChange={(e) => setCompactHighlightQuery(e.target.value)}
+                placeholder="現場検索"
+                className="w-32 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] dark:border-zinc-800 dark:bg-black sm:w-40"
+              />
               {visibleSites.length > 0 && (
                 <div className="flex items-center gap-1">
                   <button
@@ -1074,7 +1091,9 @@ export default function SiteLedgerPage() {
                 </div>
               )}
               <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {visibleSites.length}件 {selectedSites.size > 0 && `(${selectedSites.size}選択中)`}
+                {visibleSites.length}件
+                {compactHighlightedSiteIds.size > 0 ? ` / ${compactHighlightedSiteIds.size}件一致` : ''}
+                {selectedSites.size > 0 ? ` (${selectedSites.size}選択中)` : ''}
               </div>
             </div>
           </div>
@@ -1084,7 +1103,9 @@ export default function SiteLedgerPage() {
           ) : (
             <div className="mt-2 max-h-[36rem] overflow-auto lg:max-h-[42rem]">
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-8">
-                {visibleSites.map((s) => (
+                {visibleSites.map((s) => {
+                  const isCompactHighlighted = compactHighlightedSiteIds.has(s.id);
+                  return (
                   <div key={`grid-${s.id}`} className="relative">
                     {canDeleteSite && isDeleteMode ? (
                       <input
@@ -1098,20 +1119,24 @@ export default function SiteLedgerPage() {
                     <button
                       type="button"
                       onClick={() => router.push(buildSiteDetailHref(s.id))}
-                      className="relative min-h-[5rem] w-full rounded border border-zinc-200 bg-white/60 px-2 py-2 pr-12 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-black/40 dark:text-zinc-300"
+                      className={`relative min-h-[4.5rem] w-full rounded border px-2 py-1.5 pr-12 text-[11px] text-zinc-700 dark:text-zinc-300 ${
+                        isCompactHighlighted
+                          ? 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30'
+                          : 'border-zinc-200 bg-white/60 dark:border-zinc-800 dark:bg-black/40'
+                      }`}
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
                         deprMap[s.id]
                           ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
                           : ''
                       }`}
                     >
-                    <div className="absolute left-1.25 top-1.25">
+                    <div className="absolute left-1 top-1">
                       <span
                         className={`h-3.5 w-3.5 rounded-full ${scheduleLabelDotClass(s.scheduleLabelColor)}`}
                         aria-hidden
                       />
                     </div>
-                    <div className="absolute right-1.25 top-1.25 flex flex-col items-end gap-1">
+                    <div className="absolute right-1 top-1 flex flex-col items-end gap-0.5">
                       <div className="flex items-center gap-1.5">
                         {s.alertsEnabled && s.invoiceIssuedThisMonth === false ? (
                           <span
@@ -1146,8 +1171,8 @@ export default function SiteLedgerPage() {
                       ) : null}
                     </div>
 
-                    <div className="flex h-full flex-col justify-between gap-1.5 pt-3">
-                      <div className="min-w-0 pr-1 text-left text-[11px] leading-[1.05rem] break-words whitespace-normal max-h-[3.15rem] overflow-hidden">
+                    <div className="flex h-full flex-col justify-between gap-1 pt-2.5">
+                      <div className="min-w-0 pr-1 text-left text-[11px] leading-[0.98rem] break-words whitespace-normal max-h-[2.95rem] overflow-hidden">
                         {s.name}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -1166,7 +1191,7 @@ export default function SiteLedgerPage() {
                     </div>
                   </button>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
           )}
