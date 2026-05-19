@@ -6592,6 +6592,7 @@ function Row({
           ) ?? '';
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
+        const hasMultipleSitesInGroup = siteItems.length > 1;
         const hoverMenuItems: CellHoverMenuItem[] =
           siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
             ? [
@@ -6648,6 +6649,11 @@ function Row({
                 {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
               </>
             ) : null}
+            {hasMultipleSitesInGroup ? (
+              <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
+                +
+              </span>
+            ) : null}
           </>
         );
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
@@ -6663,6 +6669,8 @@ function Row({
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
               className: `block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                hasMultipleSitesInGroup ? 'relative pr-4' : ''
+              } ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
                   : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
