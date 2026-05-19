@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../header-actions';
 
@@ -28,6 +28,18 @@ function scheduleLabelHighlightClass(color: string | null | undefined): string {
   if (c === 'purple') return 'border-violet-200 bg-violet-50/80 dark:border-violet-800 dark:bg-violet-950/30';
   if (c === 'pink') return 'border-pink-200 bg-pink-50/80 dark:border-pink-800 dark:bg-pink-950/30';
   return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
+}
+
+function scheduleLabelHighlightStyle(color: string | null | undefined): { borderColor: string; backgroundColor: string } {
+  const c = (color ?? 'default').toString();
+  if (c === 'red') return { borderColor: 'rgb(254 202 202)', backgroundColor: 'rgb(254 242 242 / 0.88)' };
+  if (c === 'orange') return { borderColor: 'rgb(254 215 170)', backgroundColor: 'rgb(255 247 237 / 0.88)' };
+  if (c === 'yellow') return { borderColor: 'rgb(253 230 138)', backgroundColor: 'rgb(254 252 232 / 0.92)' };
+  if (c === 'green') return { borderColor: 'rgb(187 247 208)', backgroundColor: 'rgb(240 253 244 / 0.88)' };
+  if (c === 'blue') return { borderColor: 'rgb(191 219 254)', backgroundColor: 'rgb(239 246 255 / 0.88)' };
+  if (c === 'purple') return { borderColor: 'rgb(221 214 254)', backgroundColor: 'rgb(245 243 255 / 0.88)' };
+  if (c === 'pink') return { borderColor: 'rgb(251 207 232)', backgroundColor: 'rgb(253 242 248 / 0.88)' };
+  return { borderColor: 'rgb(212 212 216)', backgroundColor: 'rgb(244 244 245 / 0.92)' };
 }
 
 type ApiSite = {
@@ -174,6 +186,10 @@ export default function SiteLedgerPage() {
   const [newThreshold, setNewThreshold] = useState('10');
   const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
   const canDeleteSite = useMemo(() => authMeUser?.canGrantScheduleEdit === true, [authMeUser]);
+
+  const handleCompactHighlightInput = useCallback((event: FormEvent<HTMLInputElement>) => {
+    setCompactHighlightQuery(event.currentTarget.value);
+  }, []);
 
   useEffect(() => {
     if (!monthParam) return;
@@ -1041,7 +1057,7 @@ export default function SiteLedgerPage() {
             <div className="flex items-center gap-2">
               <input
                 value={compactHighlightQuery}
-                onChange={(e) => setCompactHighlightQuery(e.target.value)}
+                onInput={handleCompactHighlightInput}
                 placeholder="現場検索"
                 className="w-32 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] dark:border-zinc-800 dark:bg-black sm:w-40"
               />
@@ -1137,6 +1153,7 @@ export default function SiteLedgerPage() {
                           ? scheduleLabelHighlightClass(s.scheduleLabelColor)
                           : 'border-zinc-200 bg-white/60 dark:border-zinc-800 dark:bg-black/40'
                       }`}
+                      style={isCompactHighlighted ? scheduleLabelHighlightStyle(s.scheduleLabelColor) : undefined}
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
                         deprMap[s.id]
                           ? `\n償却カウント(${deprMonth}): ${deprMap[s.id].count}件 / 閾値 ${deprMap[s.id].threshold}`
