@@ -53,11 +53,13 @@ type SiteItem = {
 type ScheduleEntryTarget = {
   entry: string;
   siteId: string | null;
+  noteOnly: boolean;
 };
 
 type LinkedScheduleEntryTarget = {
   entry: string;
   siteId: string;
+  noteOnly: boolean;
 };
 
 type CellEntryMenuState = {
@@ -122,6 +124,51 @@ function cellEntries(cell: ApiCell | null | undefined) {
       return formatScheduleCellGroupDisplayValue(labels, note) ?? '';
     })
     .filter((entry): entry is string => entry.length > 0);
+}
+
+function describeScheduleEntry(entry: string) {
+  const trimmed = entry.trim();
+  const noteOnlyMatch = trimmed.match(/^追記[:：]\s*(.+)$/u);
+  if (noteOnlyMatch) {
+    return {
+      mainText: '',
+      noteText: noteOnlyMatch[1]?.trim() ?? '',
+      noteOnly: true,
+    };
+  }
+
+  const appendedNoteMatch = trimmed.match(/^(.*?)[（(]追記[:：]\s*(.*?)[）)]$/u);
+  if (appendedNoteMatch) {
+    const mainText = appendedNoteMatch[1]?.trim() ?? '';
+    const noteText = appendedNoteMatch[2]?.trim() ?? '';
+    if (mainText && noteText) {
+      return {
+        mainText,
+        noteText,
+        noteOnly: false,
+      };
+    }
+  }
+
+  return {
+    mainText: trimmed,
+    noteText: null,
+    noteOnly: false,
+  };
+}
+
+function renderScheduleEntryLabel(entry: string) {
+  const described = describeScheduleEntry(entry);
+  if (!described.noteText) return entry;
+  if (described.noteOnly || !described.mainText) {
+    return <span className="text-red-600 dark:text-red-400">{`追記: ${described.noteText}`}</span>;
+  }
+  return (
+    <>
+      <span>{described.mainText}</span>
+      <span className="text-red-600 dark:text-red-400">{`（追記: ${described.noteText}）`}</span>
+    </>
+  );
 }
 
 function cellGroups(cell: ApiCell | null | undefined) {
@@ -200,7 +247,11 @@ function resolveScheduleEntryTargets(entries: string[], siteIdByScheduleEntry: M
       .split('/')
       .map((part) => part.trim())
       .filter((part) => part.length > 0)
-      .map((part) => ({ entry: part, siteId: siteIdByScheduleEntry.get(normalizeSiteLookupKey(part)) ?? null }))
+      .map((part) => ({
+        entry: part,
+        siteId: siteIdByScheduleEntry.get(normalizeSiteLookupKey(part)) ?? null,
+        noteOnly: describeScheduleEntry(part).noteOnly,
+      }))
       .filter(isLinkedScheduleEntryTarget);
 
     if (tokenMatches.length > 1) {
@@ -209,14 +260,14 @@ function resolveScheduleEntryTargets(entries: string[], siteIdByScheduleEntry: M
 
     const exactSiteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry)) ?? null;
     if (exactSiteId) {
-      return [{ entry, siteId: exactSiteId }];
+      return [{ entry, siteId: exactSiteId, noteOnly: false }];
     }
 
     if (tokenMatches.length === 1) {
-      return [{ entry, siteId: tokenMatches[0].siteId }];
+      return [{ entry, siteId: tokenMatches[0].siteId, noteOnly: false }];
     }
 
-    return [{ entry, siteId: null }];
+    return [{ entry, siteId: null, noteOnly: describeScheduleEntry(entry).noteOnly }];
   });
 }
 
@@ -304,14 +355,13 @@ function MobileWeekHubInner() {
   }, [cursorDate]);
 
   const monthWeekTabs = useMemo(() => {
-    const monthStart = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
-    const monthEnd = new Date(cursorDate.getFullYear(), cursorDate.getMonth() + 1, 0);
-    const first = startOfWeekMonday(monthStart);
-    const tabs: Date[] = [];
-    for (let d = new Date(first); d <= monthEnd; d.setDate(d.getDate() + 7)) {
-      tabs.push(new Date(d));
-    }
-    return tabs;
+    // Always show 5 weeks centered on the current week
+    const center = startOfWeekMonday(new Date(cursorDate));
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(center);
+      d.setDate(d.getDate() + (i - 2) * 7);
+      return d;
+    });
   }, [cursorDate]);
 
   const weekGridPrefsKey = useMemo(() => `week-hub:${scheduleKind}:week:gridPrefs`, [scheduleKind]);
@@ -581,11 +631,19 @@ function MobileWeekHubInner() {
   }, []);
 
   const goPrevMonth = useCallback(() => {
-    setCursorDate((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
+    // Navigate based on the month of the center tab (current displayed week)
+    setCursorDate((current) => {
+      const center = startOfWeekMonday(new Date(current));
+      return new Date(center.getFullYear(), center.getMonth() - 1, 1);
+    });
   }, []);
 
   const goNextMonth = useCallback(() => {
-    setCursorDate((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
+    // Navigate based on the month of the center tab (current displayed week)
+    setCursorDate((current) => {
+      const center = startOfWeekMonday(new Date(current));
+      return new Date(center.getFullYear(), center.getMonth() + 1, 1);
+    });
   }, []);
 
   const rangeLabel = useMemo(() => {
@@ -771,10 +829,10 @@ function MobileWeekHubInner() {
                     key={toYmd(tab)}
                     type="button"
                     onClick={() => setWeekStartByDate(tab)}
-                    className={`rounded-md px-3 py-1.5 text-sm transition ${
+                    className={`rounded-md border px-3 py-1.5 text-sm transition ${
                       active
-                        ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                        : 'text-zinc-600 dark:text-zinc-300'
+                        ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300'
+                        : 'border-transparent text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-zinc-900'
                     }`}
                   >
                     {label}
@@ -922,7 +980,7 @@ function MobileWeekHubInner() {
                                     aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
                                     data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
                                   >
-                                    <span className="block truncate pr-4">{previewLabel}</span>
+                                    <span className="block truncate pr-4">{renderScheduleEntryLabel(previewLabel)}</span>
                                     {hasMultipleEntries ? (
                                       <span className="absolute bottom-1 right-1 text-xs font-bold leading-none text-red-600 dark:text-red-400">
                                         +
@@ -987,7 +1045,7 @@ function MobileWeekHubInner() {
                               style={{ fontSize: scheduleCellFontSize }}
                               title="現場詳細を開く"
                             >
-                              {entry}
+                              {renderScheduleEntryLabel(entry)}
                             </button>
                           ))}
                         </div>
@@ -1064,9 +1122,9 @@ function MobileWeekHubInner() {
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:cursor-default disabled:text-zinc-500 dark:hover:bg-zinc-900 dark:disabled:text-zinc-400"
                   data-testid={`mobile-cell-entry-option-${item.siteId ?? 'unmapped'}`}
                 >
-                  <span className="truncate">{item.entry}</span>
+                  <span className="truncate">{renderScheduleEntryLabel(item.entry)}</span>
                   <span className="ml-3 shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    {item.siteId ? '詳細へ' : '未紐付け'}
+                    {item.noteOnly ? '追記' : item.siteId ? '詳細へ' : '未紐付け'}
                   </span>
                 </button>
               ))}
