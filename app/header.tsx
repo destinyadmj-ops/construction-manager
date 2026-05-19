@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  buildWeekGridPrefsLocalStorageKey,
   WEEK_GRID_BG_OPTIONS,
   WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS,
   WEEK_GRID_COMPACT_HEIGHT_OPTIONS,
@@ -214,7 +215,9 @@ function HoverPreviewNumberDropdown({
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className="flex w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+        className={`flex w-full items-center justify-between border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black ${
+          isOpen ? 'rounded-t-md rounded-b-none border-b-transparent' : 'rounded-md'
+        }`}
       >
         <span>{value}px</span>
         <span className={`ml-2 text-[10px] text-zinc-500 transition-transform dark:text-zinc-400 ${isOpen ? 'rotate-180' : ''}`}>
@@ -226,7 +229,7 @@ function HoverPreviewNumberDropdown({
           ref={menuRef}
           role="listbox"
           aria-label={label}
-          className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-black"
+          className="absolute left-0 top-full z-50 -mt-px max-h-56 w-full overflow-auto rounded-b-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-black"
         >
           {options.map((option) => {
             const active = value === option;
@@ -339,6 +342,10 @@ export default function AppHeader() {
     if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
     return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
   }, [isWeekHubPage, weekModeKey, weekScheduleKindKey]);
+  const weekGridPrefsLocalStorageKey = useMemo(
+    () => (weekGridPrefsKey ? buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId) : null),
+    [headerUserId, weekGridPrefsKey],
+  );
 
   const defaultWeekGridPrefsForPage = useMemo(
     () => defaultWeekGridPrefs(isMobileWeekHub ? 'mobile' : 'desktop'),
@@ -530,10 +537,10 @@ export default function AppHeader() {
     };
   }, []);
 
-  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
+  const readWeekGridPrefs = useCallback((localStorageKey: string | null): WeekGridPrefs => {
     try {
-      const localKey = `masterHub.ui:${key}`;
-      const txt = window.localStorage.getItem(localKey);
+      if (!localStorageKey) return defaultWeekGridPrefsForPage;
+      const txt = window.localStorage.getItem(localStorageKey);
       if (!txt) return defaultWeekGridPrefsForPage;
       const parsed = JSON.parse(txt) as unknown;
       return normalizeWeekGridPrefs(parsed, defaultWeekGridPrefsForPage);
@@ -542,10 +549,10 @@ export default function AppHeader() {
     }
   }, [defaultWeekGridPrefsForPage]);
 
-  const readWeekGridPrefsRaw = useCallback((key: string): JsonObject => {
+  const readWeekGridPrefsRaw = useCallback((localStorageKey: string | null): JsonObject => {
     try {
-      const localKey = `masterHub.ui:${key}`;
-      const txt = window.localStorage.getItem(localKey);
+      if (!localStorageKey) return {};
+      const txt = window.localStorage.getItem(localStorageKey);
       if (!txt) return {};
       return asObject(JSON.parse(txt) as unknown) ?? {};
     } catch {
@@ -554,20 +561,26 @@ export default function AppHeader() {
   }, []);
 
   const applyWeekGridPrefsPatch = useCallback(
-    (patch: Partial<WeekGridPrefs>, options?: { persist?: boolean }) => {
-      if (!weekGridPrefsKey) return;
+    (patch: Partial<WeekGridPrefs>, options?: { persist?: boolean; storeLocal?: boolean }) => {
+      if (!weekGridPrefsKey || !weekGridPrefsLocalStorageKey) return;
       try {
-        const localKey = `masterHub.ui:${weekGridPrefsKey}`;
-        const current = readWeekGridPrefs(weekGridPrefsKey);
-        const currentRaw = readWeekGridPrefsRaw(weekGridPrefsKey);
+        const localKey = weekGridPrefsLocalStorageKey;
+        const current = readWeekGridPrefs(localKey);
+        const currentRaw = readWeekGridPrefsRaw(localKey);
         const next = normalizeWeekGridPrefs({ ...currentRaw, ...current, ...patch }, defaultWeekGridPrefsForPage);
         const payload = { ...currentRaw, ...next, v: WEEK_GRID_PREFS_VERSION };
-        const nextTxt = JSON.stringify(payload);
-        const prevTxt = window.localStorage.getItem(localKey);
-        if (prevTxt !== nextTxt) {
-          window.localStorage.setItem(localKey, nextTxt);
-          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key: weekGridPrefsKey } }));
+        if (options?.storeLocal !== false) {
+          const nextTxt = JSON.stringify(payload);
+          const prevTxt = window.localStorage.getItem(localKey);
+          if (prevTxt !== nextTxt) {
+            window.localStorage.setItem(localKey, nextTxt);
+          }
         }
+        window.dispatchEvent(
+          new CustomEvent('masterHub:gridPrefsUpdated', {
+            detail: { key: weekGridPrefsKey, storageKey: localKey, value: payload },
+          }),
+        );
 
         setWeekGridPrefs(next);
 
@@ -582,7 +595,14 @@ export default function AppHeader() {
         // ignore
       }
     },
-    [defaultWeekGridPrefsForPage, headerUserId, readWeekGridPrefs, readWeekGridPrefsRaw, weekGridPrefsKey],
+    [
+      defaultWeekGridPrefsForPage,
+      headerUserId,
+      readWeekGridPrefs,
+      readWeekGridPrefsRaw,
+      weekGridPrefsKey,
+      weekGridPrefsLocalStorageKey,
+    ],
   );
 
   const writeWeekGridPrefsPatch = useCallback(
@@ -597,15 +617,19 @@ export default function AppHeader() {
 
     const apply = (event?: Event) => {
       if (event instanceof StorageEvent) {
-        if (event.key && event.key !== `masterHub.ui:${weekGridPrefsKey}`) return;
+        if (event.key && event.key !== weekGridPrefsLocalStorageKey) return;
       }
 
       if (event instanceof CustomEvent) {
         const detail = asObject(event.detail);
-        if (typeof detail?.key === 'string' && detail.key !== weekGridPrefsKey) return;
+        if (typeof detail?.storageKey === 'string' && detail.storageKey !== weekGridPrefsLocalStorageKey) return;
+        if (detail?.value) {
+          setWeekGridPrefs(normalizeWeekGridPrefs(detail.value, defaultWeekGridPrefsForPage));
+          return;
+        }
       }
 
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
     };
 
     window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
@@ -614,7 +638,7 @@ export default function AppHeader() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [readWeekGridPrefs, weekGridPrefsKey]);
+  }, [defaultWeekGridPrefsForPage, readWeekGridPrefs, weekGridPrefsLocalStorageKey]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -622,7 +646,7 @@ export default function AppHeader() {
     if (!weekGridPrefsKey) return;
     // Load (DB -> local fallback)
     if (!headerUserId) {
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
       return;
     }
 
@@ -643,7 +667,8 @@ export default function AppHeader() {
         setWeekGridPrefs(next);
 
         try {
-          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+          const localKey = weekGridPrefsLocalStorageKey;
+          if (!localKey) return;
           window.localStorage.setItem(
             localKey,
             JSON.stringify({ ...(vObj ?? {}), ...next, v: WEEK_GRID_PREFS_VERSION }),
@@ -653,14 +678,23 @@ export default function AppHeader() {
         }
       } catch {
         if (cancelled) return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [defaultWeekGridPrefsForPage, headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
+  }, [
+    defaultWeekGridPrefsForPage,
+    headerUserId,
+    isSettingsOpen,
+    pathname,
+    readWeekColorPickMode,
+    readWeekGridPrefs,
+    weekGridPrefsKey,
+    weekGridPrefsLocalStorageKey,
+  ]);
   const routeKey = useMemo(() => {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
@@ -1743,7 +1777,7 @@ export default function AppHeader() {
                             label="名前幅(px)"
                             value={weekGridPrefs.nameColW}
                             options={WEEK_GRID_NAME_WIDTH_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ nameColW: nextValue }, { persist: false })}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ nameColW: nextValue }, { persist: false, storeLocal: false })}
                             onCommit={(nextValue) => writeWeekGridPrefsPatch({ nameColW: nextValue })}
                           />
                         </div>
@@ -1754,7 +1788,7 @@ export default function AppHeader() {
                             label="日幅(px)"
                             value={weekGridPrefs.cellMinW}
                             options={WEEK_GRID_DAY_WIDTH_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinW: nextValue }, { persist: false })}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinW: nextValue }, { persist: false, storeLocal: false })}
                             onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinW: nextValue })}
                           />
                         </div>
@@ -1765,7 +1799,7 @@ export default function AppHeader() {
                             label="低(px)"
                             value={weekGridPrefs.cellMinHCompact}
                             options={WEEK_GRID_COMPACT_HEIGHT_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHCompact: nextValue }, { persist: false })}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHCompact: nextValue }, { persist: false, storeLocal: false })}
                             onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHCompact: nextValue })}
                           />
                         </div>
@@ -1776,7 +1810,7 @@ export default function AppHeader() {
                             label="高(px)"
                             value={weekGridPrefs.cellMinHComfortable}
                             options={WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHComfortable: nextValue }, { persist: false })}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHComfortable: nextValue }, { persist: false, storeLocal: false })}
                             onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHComfortable: nextValue })}
                           />
                         </div>
