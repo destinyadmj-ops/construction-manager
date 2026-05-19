@@ -6,6 +6,8 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  type CSSProperties,
+  type FormEvent,
   type ReactNode,
   type MouseEvent as ReactMouseEvent,
   useMemo,
@@ -220,6 +222,86 @@ function isLabelColor(value: unknown): value is LabelColor {
 
 function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: LabelColor = 'default'): LabelColor {
   return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
+}
+
+function siteSearchHighlightClass(color: LabelColor | null | undefined): string {
+  const resolved = isLabelColor(color) ? color : 'default';
+  if (resolved === 'default') return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
+  if (resolved === 'red') return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
+  if (resolved === 'orange') return 'border-orange-200 bg-orange-50/80 dark:border-orange-800 dark:bg-orange-950/30';
+  if (resolved === 'yellow') return 'border-amber-200 bg-amber-50/85 dark:border-amber-700 dark:bg-amber-950/30';
+  if (resolved === 'green') return 'border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30';
+  if (resolved === 'blue') return 'border-blue-200 bg-blue-50/80 dark:border-blue-800 dark:bg-blue-950/30';
+  if (resolved === 'purple') return 'border-violet-200 bg-violet-50/80 dark:border-violet-800 dark:bg-violet-950/30';
+  return 'border-pink-200 bg-pink-50/80 dark:border-pink-800 dark:bg-pink-950/30';
+}
+
+function siteSearchHighlightStyle(color: LabelColor | null | undefined): CSSProperties {
+  const resolved = isLabelColor(color) ? color : 'default';
+  const vars =
+    resolved === 'red'
+      ? {
+          lightBorder: 'rgb(254 202 202)',
+          lightBackground: 'rgba(254, 242, 242, 0.88)',
+          darkBorder: 'rgb(127 29 29)',
+          darkBackground: 'rgba(69, 10, 10, 0.45)',
+        }
+      : resolved === 'orange'
+        ? {
+            lightBorder: 'rgb(254 215 170)',
+            lightBackground: 'rgba(255, 247, 237, 0.9)',
+            darkBorder: 'rgb(154 52 18)',
+            darkBackground: 'rgba(67, 20, 7, 0.45)',
+          }
+        : resolved === 'yellow'
+          ? {
+              lightBorder: 'rgb(253 230 138)',
+              lightBackground: 'rgba(254, 252, 232, 0.92)',
+              darkBorder: 'rgb(133 77 14)',
+              darkBackground: 'rgba(66, 32, 6, 0.5)',
+            }
+          : resolved === 'green'
+            ? {
+                lightBorder: 'rgb(187 247 208)',
+                lightBackground: 'rgba(240, 253, 244, 0.9)',
+                darkBorder: 'rgb(22 101 52)',
+                darkBackground: 'rgba(5, 46, 22, 0.45)',
+              }
+            : resolved === 'blue'
+              ? {
+                  lightBorder: 'rgb(191 219 254)',
+                  lightBackground: 'rgba(239, 246, 255, 0.9)',
+                  darkBorder: 'rgb(30 64 175)',
+                  darkBackground: 'rgba(23, 37, 84, 0.45)',
+                }
+              : resolved === 'purple'
+                ? {
+                    lightBorder: 'rgb(221 214 254)',
+                    lightBackground: 'rgba(245, 243, 255, 0.9)',
+                    darkBorder: 'rgb(91 33 182)',
+                    darkBackground: 'rgba(46, 16, 101, 0.45)',
+                  }
+                : resolved === 'pink'
+                  ? {
+                      lightBorder: 'rgb(251 207 232)',
+                      lightBackground: 'rgba(253, 242, 248, 0.9)',
+                      darkBorder: 'rgb(157 23 77)',
+                      darkBackground: 'rgba(80, 7, 36, 0.45)',
+                    }
+                  : {
+                      lightBorder: 'rgb(254 202 202)',
+                      lightBackground: 'rgba(254, 242, 242, 0.88)',
+                      darkBorder: 'rgb(127 29 29)',
+                      darkBackground: 'rgba(69, 10, 10, 0.45)',
+                    };
+
+  return {
+    '--mh-button-border-light': vars.lightBorder,
+    '--mh-button-bg-light': vars.lightBackground,
+    '--mh-button-border-dark': vars.darkBorder,
+    '--mh-button-bg-dark': vars.darkBackground,
+    boxShadow: `inset 0 0 0 1px ${vars.lightBorder}`,
+  } as CSSProperties;
 }
 
 function normalizeOrderedNames(values: string[]): string[] {
@@ -1594,14 +1676,20 @@ function WeekHubInner() {
     pinSiteToTop({ id: null, label });
   }, [pinSiteToTop, sites]);
 
+  const normalizedSiteQuery = useMemo(() => siteQuery.trim().toLowerCase(), [siteQuery]);
+  const hasSiteQuery = normalizedSiteQuery.length > 0;
+
   const visibleSites = useMemo(() => {
-    const q = siteQuery.trim().toLowerCase();
     return sites.filter((s) => {
       if (s.badgeMonthVisible === false) return false;
-      if (!q) return true;
-      return s.label.toLowerCase().includes(q);
+      if (!normalizedSiteQuery) return true;
+      return s.label.toLowerCase().includes(normalizedSiteQuery);
     });
-  }, [siteQuery, sites]);
+  }, [normalizedSiteQuery, sites]);
+
+  const handleSiteQueryInput = useCallback((event: FormEvent<HTMLInputElement>) => {
+    setSiteQuery(event.currentTarget.value);
+  }, []);
 
   useEffect(() => {
     const sp = new URLSearchParams({ kind: scheduleKind });
@@ -3306,7 +3394,7 @@ function WeekHubInner() {
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
                       value={siteQuery}
-                      onChange={(e) => setSiteQuery(e.target.value)}
+                      onInput={handleSiteQueryInput}
                       placeholder="現場名で絞り込み"
                       className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                     />
@@ -3326,6 +3414,8 @@ function WeekHubInner() {
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          const searchHighlighted = hasSiteQuery;
+                          const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
                               key={s.id ?? s.label}
@@ -3348,10 +3438,13 @@ function WeekHubInner() {
                                 setSelectedSite(s);
                               }}
                               className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                active
+                                searchHighlighted
+                                  ? siteSearchHighlightClass(siteColor)
+                                  : active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editActive ? 'cursor-move' : ''}`}
+                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
+                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
@@ -3975,7 +4068,7 @@ function WeekHubInner() {
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
                       value={siteQuery}
-                      onChange={(e) => setSiteQuery(e.target.value)}
+                      onInput={handleSiteQueryInput}
                       placeholder="現場名で絞り込み"
                       className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                     />
@@ -3995,6 +4088,8 @@ function WeekHubInner() {
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          const searchHighlighted = hasSiteQuery;
+                          const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
                               key={s.id ?? s.label}
@@ -4017,10 +4112,13 @@ function WeekHubInner() {
                                 setSelectedSite(s);
                               }}
                               className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                active
+                                searchHighlighted
+                                  ? siteSearchHighlightClass(siteColor)
+                                  : active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editActive ? 'cursor-move' : ''}`}
+                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
+                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
@@ -4202,7 +4300,7 @@ function WeekHubInner() {
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">検索</div>
                     <input
                       value={siteQuery}
-                      onChange={(e) => setSiteQuery(e.target.value)}
+                      onInput={handleSiteQueryInput}
                       placeholder="現場名で絞り込み"
                       className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-800 dark:bg-black"
                     />
@@ -4252,6 +4350,8 @@ function WeekHubInner() {
                         {visibleSites.map((s) => {
                           const active = selectedSite?.label === s.label;
                           const badge = s.id ? siteDeprMap[s.id] : undefined;
+                          const searchHighlighted = hasSiteQuery;
+                          const siteColor = resolveSiteLabelColor(s, 'default');
                           return (
                             <button
                               key={s.id ?? s.label}
@@ -4274,10 +4374,13 @@ function WeekHubInner() {
                                 setSelectedSite(s);
                               }}
                               className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                active
+                                searchHighlighted
+                                  ? siteSearchHighlightClass(siteColor)
+                                  : active
                                   ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
                                   : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${editActive ? 'cursor-move' : ''}`}
+                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
+                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex flex-1 items-center gap-1">
