@@ -1209,6 +1209,54 @@ function WeekHubInner() {
     return effectiveUserIdRef.current;
   }, [authMeUser?.id, qsUserId]);
 
+  const readLocalUserOrder = useCallback(
+    (userId: string | null) => {
+      if (typeof window === 'undefined') return null;
+      const ownerUserId = (userId ?? '').trim();
+      if (!ownerUserId) return null;
+
+      try {
+        const txt = window.localStorage.getItem(`masterHub.userOrder:${ownerUserId}:${userOrderKey}`);
+        if (!txt) return null;
+
+        const raw = JSON.parse(txt) as unknown;
+        const payload = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+        const arr = Array.isArray(payload?.order)
+          ? (payload?.order as unknown[])
+          : Array.isArray(raw)
+            ? (raw as unknown[])
+            : [];
+        const order = arr
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item) => item.length > 0)
+          .slice(0, 1000);
+        const savedAt = typeof payload?.savedAt === 'number' && Number.isFinite(payload.savedAt) ? payload.savedAt : 0;
+        return { order, savedAt };
+      } catch {
+        return null;
+      }
+    },
+    [userOrderKey],
+  );
+
+  const writeLocalUserOrder = useCallback(
+    (userId: string | null, order: string[]) => {
+      if (typeof window === 'undefined') return;
+      const ownerUserId = (userId ?? '').trim() || resolveUserOrderOwnerId();
+      if (!ownerUserId) return;
+
+      try {
+        window.localStorage.setItem(
+          `masterHub.userOrder:${ownerUserId}:${userOrderKey}`,
+          JSON.stringify({ order, savedAt: Date.now() }),
+        );
+      } catch {
+        // ignore
+      }
+    },
+    [resolveUserOrderOwnerId, userOrderKey],
+  );
+
   const resolveEffectiveUserId = useCallback(async () => {
     const viewerUserId = (authMeUser?.id ?? '').trim();
     if (viewerUserId) {
@@ -1243,6 +1291,14 @@ function WeekHubInner() {
       if (userOrderLoadedScopeRef.current === scope) return;
       const requestId = ++userOrderLoadRequestRef.current;
       const localRevisionAtStart = userOrderLocalRevisionRef.current;
+      const localValue = readLocalUserOrder(userId);
+
+      if (localValue && userOrderLoadRequestRef.current === requestId && userOrderLocalRevisionRef.current === localRevisionAtStart) {
+        if (!arrayEqual(userOrderRef.current, localValue.order)) {
+          userOrderRef.current = localValue.order;
+          setUserOrder(localValue.order);
+        }
+      }
 
       try {
         const r = await fetch(
@@ -1259,11 +1315,24 @@ function WeekHubInner() {
           .map((x) => (typeof x === 'string' ? x.trim() : ''))
           .filter((x) => x.length > 0)
           .slice(0, 1000);
+        const remoteUpdatedAtRaw = typeof obj?.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
+        const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
+        const useLocalValue = !!localValue && localValue.savedAt > remoteUpdatedAt;
+        const nextOrder = useLocalValue ? localValue.order : parsed;
         if (userOrderLoadRequestRef.current !== requestId) return;
         if (userOrderLocalRevisionRef.current !== localRevisionAtStart) return;
-        if (!arrayEqual(userOrderRef.current, parsed)) {
-          userOrderRef.current = parsed;
-          setUserOrder(parsed);
+        if (!arrayEqual(userOrderRef.current, nextOrder)) {
+          userOrderRef.current = nextOrder;
+          setUserOrder(nextOrder);
+        }
+        if (useLocalValue && !arrayEqual(parsed, localValue.order)) {
+          void fetch('/api/ui-settings', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ userId, key: userOrderKey, value: localValue.order }),
+          });
+        } else {
+          writeLocalUserOrder(userId, parsed);
         }
       } catch {
         // ignore
@@ -1273,7 +1342,7 @@ function WeekHubInner() {
         }
       }
     },
-    [userOrderKey],
+    [readLocalUserOrder, userOrderKey, writeLocalUserOrder],
   );
 
   const gridPrefsLoadedRef = useRef<Record<string, true>>({});
@@ -1384,6 +1453,7 @@ function WeekHubInner() {
     async (userId: string | null, next: string[]) => {
       const ownerUserId = (userId ?? '').trim() || resolveUserOrderOwnerId();
       if (!ownerUserId) return;
+      writeLocalUserOrder(ownerUserId, next);
       pendingUserOrderRef.current = next;
       if (userOrderSavingRef.current) {
         return userOrderSavePromiseRef.current ?? Promise.resolve();
@@ -1410,7 +1480,7 @@ function WeekHubInner() {
       userOrderSavePromiseRef.current = task;
       return task;
     },
-    [resolveUserOrderOwnerId, userOrderKey],
+    [resolveUserOrderOwnerId, userOrderKey, writeLocalUserOrder],
   );
 
   const flushUserOrderSave = useCallback(async () => {
