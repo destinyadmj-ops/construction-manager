@@ -17,6 +17,19 @@ function scheduleLabelDotClass(color: string | null | undefined): string {
   return 'bg-zinc-300 dark:bg-zinc-700';
 }
 
+function scheduleLabelHighlightClass(color: string | null | undefined): string {
+  const c = (color ?? 'default').toString();
+  if (c === 'default') return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
+  if (c === 'red') return 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30';
+  if (c === 'orange') return 'border-orange-200 bg-orange-50/80 dark:border-orange-800 dark:bg-orange-950/30';
+  if (c === 'yellow') return 'border-amber-200 bg-amber-50/85 dark:border-amber-700 dark:bg-amber-950/30';
+  if (c === 'green') return 'border-green-200 bg-green-50/80 dark:border-green-800 dark:bg-green-950/30';
+  if (c === 'blue') return 'border-blue-200 bg-blue-50/80 dark:border-blue-800 dark:bg-blue-950/30';
+  if (c === 'purple') return 'border-violet-200 bg-violet-50/80 dark:border-violet-800 dark:bg-violet-950/30';
+  if (c === 'pink') return 'border-pink-200 bg-pink-50/80 dark:border-pink-800 dark:bg-pink-950/30';
+  return 'border-zinc-300 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/60';
+}
+
 type ApiSite = {
   id: string;
   companyName: string | null;
@@ -1121,7 +1134,7 @@ export default function SiteLedgerPage() {
                       onClick={() => router.push(buildSiteDetailHref(s.id))}
                       className={`relative min-h-[4.5rem] w-full rounded border px-2 py-1.5 pr-12 text-[11px] text-zinc-700 dark:text-zinc-300 ${
                         isCompactHighlighted
-                          ? 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30'
+                          ? scheduleLabelHighlightClass(s.scheduleLabelColor)
                           : 'border-zinc-200 bg-white/60 dark:border-zinc-800 dark:bg-black/40'
                       }`}
                       title={`${(s.companyName ? `${s.companyName} / ` : '') + s.name}${
