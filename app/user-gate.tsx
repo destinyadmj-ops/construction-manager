@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   mergeUserCandidates,
@@ -9,7 +9,6 @@ import {
   writeCachedUserCandidates,
   type CachedUserCandidate,
 } from './user-candidate-cache';
-import { readStoredScheduleReturn } from '@/shared/schedule-return';
 
 type UserKind = 'NORMAL' | 'DAILY';
 
@@ -194,18 +193,7 @@ function sortUserCandidates(candidates: ApiUser[], rememberedUserId: string | nu
 }
 
 export default function UserGate({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const routeKey = useMemo(() => {
-    const qs = searchParams.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchParams]);
-  const storedScheduleBackHref = useMemo(() => {
-    if (typeof window === 'undefined') return null;
-    const stored = readStoredScheduleReturn();
-    return stored?.href && stored.href !== routeKey ? stored.href : null;
-  }, [routeKey]);
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<{ id: string; name: string | null; email: string | null } | null>(null);
   const [open, setOpen] = useState(false);
