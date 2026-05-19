@@ -98,6 +98,12 @@ export function buildWeekGridPrefsSettingsKey(scheduleKind: string, mode: string
   return `week-hub:${normalizedKind}:${normalizedMode}:gridPrefs:${normalizedTarget}`;
 }
 
+export function buildLegacyWeekGridPrefsSettingsKey(scheduleKind: string, mode: string) {
+  const normalizedKind = scheduleKind === 'daily' ? 'daily' : 'normal';
+  const normalizedMode = mode === 'month' || mode === 'year' ? mode : 'week';
+  return `week-hub:${normalizedKind}:${normalizedMode}:gridPrefs`;
+}
+
 export function defaultWeekGridPrefs(target: WeekGridPrefsTarget = 'desktop'): WeekGridPrefs {
   return target === 'mobile' ? { ...MOBILE_DEFAULT_WEEK_GRID_PREFS } : { ...DEFAULT_WEEK_GRID_PREFS };
 }

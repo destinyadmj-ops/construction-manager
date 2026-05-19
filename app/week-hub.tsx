@@ -34,6 +34,7 @@ import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/s
 import {
   DEFAULT_WEEK_GRID_PREFS,
   WEEK_GRID_PREFS_VERSION,
+  buildLegacyWeekGridPrefsSettingsKey,
   buildDayColumnTrack,
   buildNameColumnTrack,
   buildWeekGridPrefsLocalStorageKey,
@@ -998,6 +999,8 @@ function WeekHubInner() {
   const siteQuickInputRef = useRef<HTMLInputElement | null>(null);
   const pinSiteLabelRef = useRef<string | null>(null);
   const sitePaneScrollRef = useRef<HTMLDivElement | null>(null);
+  const siteListBoxRef = useRef<HTMLDivElement | null>(null);
+  const [siteListViewportHeight, setSiteListViewportHeight] = useState<number | null>(null);
   const onSiteBannerWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
     const el = sitePaneScrollRef.current;
     if (!el) return;
@@ -1176,6 +1179,9 @@ function WeekHubInner() {
 
   const gridPrefsKey = useMemo(() => {
     return buildWeekGridPrefsSettingsKey(scheduleKind, mode, 'desktop');
+  }, [mode, scheduleKind]);
+  const legacyGridPrefsKey = useMemo(() => {
+    return buildLegacyWeekGridPrefsSettingsKey(scheduleKind, mode);
   }, [mode, scheduleKind]);
 
   const userOrderKey = useMemo(() => {
@@ -1384,50 +1390,54 @@ function WeekHubInner() {
     if (gridPrefsLoadedRef.current[scopeKey]) return;
     gridPrefsLoadedRef.current[scopeKey] = true;
     const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, userId);
+    const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, userId);
 
-    const localRaw = readLocalGridPrefs(localStorageKey);
+    const localRaw = readLocalGridPrefs(localStorageKey) ?? readLocalGridPrefs(legacyLocalStorageKey);
     if (localRaw) applyGridPrefs(localRaw);
 
     if (!userId) return;
 
     try {
-      const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(key)}`);
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      if (!r.ok || obj?.ok !== true) return;
+      for (const remoteKey of [key, legacyGridPrefsKey]) {
+        const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(remoteKey)}`);
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) continue;
 
-      const raw = obj.value;
-      const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-      if (!o) return;
+        const raw = obj.value;
+        const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+        if (!o) continue;
 
-      applyGridPrefs(o);
+        applyGridPrefs(o);
 
-      const nextAction =
-        o.cellClickAction === 'toggle' ||
-        o.cellClickAction === 'add' ||
-        o.cellClickAction === 'remove' ||
-        o.cellClickAction === 'replace2' ||
-        o.cellClickAction === 'swap' ||
-        o.cellClickAction === 'recolor'
-          ? (o.cellClickAction as CellClickAction)
-          : null;
-      if (nextAction) setCellClickAction(nextAction);
+        const nextAction =
+          o.cellClickAction === 'toggle' ||
+          o.cellClickAction === 'add' ||
+          o.cellClickAction === 'remove' ||
+          o.cellClickAction === 'replace2' ||
+          o.cellClickAction === 'swap' ||
+          o.cellClickAction === 'recolor'
+            ? (o.cellClickAction as CellClickAction)
+            : null;
+        if (nextAction) setCellClickAction(nextAction);
 
-      if (typeof window !== 'undefined') {
-        try {
-          const normalized = normalizeWeekGridPrefs(o);
-          window.localStorage.setItem(
-            localStorageKey,
-            JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
-          );
-        } catch {
-          // ignore
+        if (typeof window !== 'undefined') {
+          try {
+            const normalized = normalizeWeekGridPrefs(o);
+            window.localStorage.setItem(
+              localStorageKey,
+              JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
+            );
+          } catch {
+            // ignore
+          }
         }
+        break;
       }
     } catch {
       // ignore
     }
-  }, [applyGridPrefs, readLocalGridPrefs]);
+  }, [applyGridPrefs, legacyGridPrefsKey, readLocalGridPrefs]);
 
   const saveGridPrefs = useCallback(async (userId: string | null, key: string, value: unknown) => {
     const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -3194,6 +3204,23 @@ function WeekHubInner() {
   }, [mode]);
 
   useEffect(() => {
+    const apply = () => {
+      const el = siteListBoxRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const next = Math.max(192, Math.floor(window.innerHeight - rect.top));
+      setSiteListViewportHeight((prev) => (prev === next ? prev : next));
+    };
+
+    const handle = window.requestAnimationFrame(apply);
+    window.addEventListener('resize', apply);
+    return () => {
+      window.cancelAnimationFrame(handle);
+      window.removeEventListener('resize', apply);
+    };
+  }, [mode, siteQuickMsg]);
+
+  useEffect(() => {
     if (!editActive && reorderMode) setReorderMode(false);
   }, [editActive, reorderMode]);
 
@@ -3493,7 +3520,9 @@ function WeekHubInner() {
                   </div>
 
                   <div
+                    ref={siteListBoxRef}
                     className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:flex-1 lg:max-h-none"
+                    style={siteListViewportHeight ? { minHeight: `${siteListViewportHeight}px`, maxHeight: `${siteListViewportHeight}px` } : undefined}
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4167,7 +4196,9 @@ function WeekHubInner() {
                   </div>
 
                   <div
+                    ref={siteListBoxRef}
                     className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none"
+                    style={siteListViewportHeight ? { minHeight: `${siteListViewportHeight}px`, maxHeight: `${siteListViewportHeight}px` } : undefined}
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4430,7 +4461,11 @@ function WeekHubInner() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none">
+                  <div
+                    ref={siteListBoxRef}
+                    className="mt-3 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none"
+                    style={siteListViewportHeight ? { minHeight: `${siteListViewportHeight}px`, maxHeight: `${siteListViewportHeight}px` } : undefined}
+                  >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                         まだ候補がありません（過去データから自動で出ます）。
