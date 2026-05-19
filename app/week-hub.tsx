@@ -1677,18 +1677,30 @@ function WeekHubInner() {
   }, [pinSiteToTop, sites]);
 
   const normalizedSiteQuery = useMemo(() => siteQuery.trim().toLowerCase(), [siteQuery]);
-  const hasSiteQuery = normalizedSiteQuery.length > 0;
+  const normalizedQuickSiteFilterQuery = useMemo(() => {
+    const quick = siteQuickInput.trim().toLowerCase();
+    const selectedLabel = (selectedSite?.label ?? '').trim().toLowerCase();
+    if (!quick) return '';
+    return quick === selectedLabel ? '' : quick;
+  }, [selectedSite?.label, siteQuickInput]);
+  const effectiveSiteFilterQuery = normalizedSiteQuery || normalizedQuickSiteFilterQuery;
+  const hasSiteQuery = effectiveSiteFilterQuery.length > 0;
 
   const visibleSites = useMemo(() => {
     return sites.filter((s) => {
       if (s.badgeMonthVisible === false) return false;
-      if (!normalizedSiteQuery) return true;
-      return s.label.toLowerCase().includes(normalizedSiteQuery);
+      if (!effectiveSiteFilterQuery) return true;
+      return s.label.toLowerCase().includes(effectiveSiteFilterQuery);
     });
-  }, [normalizedSiteQuery, sites]);
+  }, [effectiveSiteFilterQuery, sites]);
 
   const handleSiteQueryInput = useCallback((event: FormEvent<HTMLInputElement>) => {
     setSiteQuery(event.currentTarget.value);
+  }, []);
+
+  const handleSiteQuickInput = useCallback((event: FormEvent<HTMLInputElement>) => {
+    setSiteQuickInput(event.currentTarget.value);
+    setSiteQuickMsg(null);
   }, []);
 
   useEffect(() => {
@@ -2217,10 +2229,11 @@ function WeekHubInner() {
   useEffect(() => {
     if (!currentUserOrderScope) return;
     if (userOrderLoadedScopeRef.current !== currentUserOrderScope) return;
-    const next = normalizeUserOrder(userOrder, currentUsersForOrder);
-    if (arrayEqual(next, userOrder)) return;
+    const currentOrder = userOrderRef.current;
+    const next = normalizeUserOrder(currentOrder, currentUsersForOrder);
+    if (arrayEqual(next, currentOrder)) return;
     persistUserOrderChange(next);
-  }, [currentUserOrderScope, currentUsersForOrder, persistUserOrderChange, userOrder]);
+  }, [currentUserOrderScope, currentUsersForOrder, persistUserOrderChange]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -3353,7 +3366,7 @@ function WeekHubInner() {
                       <input
                         ref={siteQuickInputRef}
                         value={siteQuickInput}
-                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onInput={handleSiteQuickInput}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter') return;
                           e.preventDefault();
@@ -3378,7 +3391,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto lg:overscroll-contain"
+                  className="mt-3 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:overscroll-contain"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -3401,7 +3414,7 @@ function WeekHubInner() {
                   </div>
 
                   <div
-                    className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4027,7 +4040,7 @@ function WeekHubInner() {
                       <input
                         ref={siteQuickInputRef}
                         value={siteQuickInput}
-                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onInput={handleSiteQuickInput}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter') return;
                           e.preventDefault();
@@ -4052,7 +4065,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto"
+                  className="mt-3 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -4075,7 +4088,7 @@ function WeekHubInner() {
                   </div>
 
                   <div
-                    className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black"
+                    className="mt-2 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none"
                   >
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -4284,7 +4297,7 @@ function WeekHubInner() {
 
                 <div
                   ref={sitePaneScrollRef}
-                  className="mt-3 flex min-h-0 flex-1 flex-col lg:overflow-y-auto"
+                  className="mt-3 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400">バッジ月（償却）</div>
@@ -4306,7 +4319,7 @@ function WeekHubInner() {
                     />
                   </div>
 
-                  <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                  <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                   <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300">現場リスト</div>
                   <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">現場を選択 → 同じ現場を再クリックで詳細へ</div>
 
@@ -4316,7 +4329,7 @@ function WeekHubInner() {
                       <input
                         ref={siteQuickInputRef}
                         value={siteQuickInput}
-                        onChange={(e) => setSiteQuickInput(e.target.value)}
+                        onInput={handleSiteQuickInput}
                         onKeyDown={(e) => {
                           if (e.key !== 'Enter') return;
                           e.preventDefault();
@@ -4338,7 +4351,7 @@ function WeekHubInner() {
                     ) : null}
                   </div>
 
-                  <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black">
+                  <div className="mt-3 min-h-48 max-h-96 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-black lg:min-h-0 lg:flex-1 lg:max-h-none">
                     {sites.length === 0 ? (
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                         まだ候補がありません（過去データから自動で出ます）。

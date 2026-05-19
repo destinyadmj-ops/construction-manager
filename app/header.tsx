@@ -96,6 +96,168 @@ function navLinkClass(active: boolean, displayClass = 'inline-flex') {
   }`;
 }
 
+type HoverPreviewNumberDropdownProps = {
+  label: string;
+  value: number;
+  options: readonly number[];
+  onPreview: (value: number) => void;
+  onCommit: (value: number) => void;
+};
+
+function HoverPreviewNumberDropdown({
+  label,
+  value,
+  options,
+  onPreview,
+  onCommit,
+}: HoverPreviewNumberDropdownProps) {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [baselineValue, setBaselineValue] = useState<number | null>(null);
+  const openRef = useRef(false);
+  const baselineRef = useRef<number | null>(null);
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    openRef.current = isOpen;
+    baselineRef.current = baselineValue;
+  }, [baselineValue, isOpen]);
+
+  useEffect(
+    () => () => {
+      if (!openRef.current) return;
+      const previousValue = baselineRef.current;
+      if (previousValue === null || previousValue === valueRef.current) return;
+      onPreview(previousValue);
+    },
+    [onPreview],
+  );
+
+  const closeDropdown = useCallback(
+    (commit: boolean) => {
+      const previousValue = baselineRef.current;
+      if (!commit && previousValue !== null && previousValue !== valueRef.current) {
+        onPreview(previousValue);
+      }
+      openRef.current = false;
+      baselineRef.current = null;
+      setIsOpen(false);
+      setBaselineValue(null);
+    },
+    [onPreview],
+  );
+
+  const handleToggle = useCallback(() => {
+    if (isOpen) {
+      closeDropdown(false);
+      return;
+    }
+    openRef.current = true;
+    baselineRef.current = value;
+    setBaselineValue(value);
+    setIsOpen(true);
+  }, [closeDropdown, isOpen, value]);
+
+  const handlePreview = useCallback(
+    (nextValue: number) => {
+      if (!isOpen || valueRef.current === nextValue) return;
+      onPreview(nextValue);
+    },
+    [isOpen, onPreview],
+  );
+
+  const handleCommit = useCallback(
+    (nextValue: number) => {
+      onCommit(nextValue);
+      openRef.current = false;
+      baselineRef.current = null;
+      setIsOpen(false);
+      setBaselineValue(null);
+    },
+    [onCommit],
+  );
+
+  useOutsidePointerDown({
+    open: isOpen,
+    refs: [triggerRef, menuRef],
+    onOutside: () => closeDropdown(false),
+    capture: true,
+  });
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDropdown(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeDropdown, isOpen]);
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={handleToggle}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+      >
+        <span>{value}px</span>
+        <span className={`ml-2 text-[10px] text-zinc-500 transition-transform dark:text-zinc-400 ${isOpen ? 'rotate-180' : ''}`}>
+          ▼
+        </span>
+      </button>
+      {isOpen ? (
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label={label}
+          className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-black"
+        >
+          {options.map((option) => {
+            const active = value === option;
+            return (
+              <button
+                key={`${label}:${option}`}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onPointerEnter={() => handlePreview(option)}
+                onFocus={() => handlePreview(option)}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  handleCommit(option);
+                }}
+                className={`block w-full px-2 py-2 text-left text-[11px] ${
+                  active
+                    ? 'bg-blue-600 text-white'
+                    : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                {option}px
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AppHeader() {
   const router = useRouter();
   const headerRef = useRef<HTMLElement | null>(null);
@@ -391,8 +553,8 @@ export default function AppHeader() {
     }
   }, []);
 
-  const writeWeekGridPrefsPatch = useCallback(
-    (patch: Partial<WeekGridPrefs>) => {
+  const applyWeekGridPrefsPatch = useCallback(
+    (patch: Partial<WeekGridPrefs>, options?: { persist?: boolean }) => {
       if (!weekGridPrefsKey) return;
       try {
         const localKey = `masterHub.ui:${weekGridPrefsKey}`;
@@ -409,7 +571,7 @@ export default function AppHeader() {
 
         setWeekGridPrefs(next);
 
-        if (headerUserId) {
+        if ((options?.persist ?? true) && headerUserId) {
           void fetch('/api/ui-settings', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -421,6 +583,13 @@ export default function AppHeader() {
       }
     },
     [defaultWeekGridPrefsForPage, headerUserId, readWeekGridPrefs, readWeekGridPrefsRaw, weekGridPrefsKey],
+  );
+
+  const writeWeekGridPrefsPatch = useCallback(
+    (patch: Partial<WeekGridPrefs>) => {
+      applyWeekGridPrefsPatch(patch, { persist: true });
+    },
+    [applyWeekGridPrefsPatch],
   );
 
   useEffect(() => {
@@ -1570,66 +1739,46 @@ export default function AppHeader() {
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">名前幅(px)</div>
-                          <select
-                            value={String(weekGridPrefs.nameColW)}
-                            onChange={(e) => writeWeekGridPrefsPatch({ nameColW: Number(e.target.value) })}
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="名前幅(px)"
-                          >
-                            {WEEK_GRID_NAME_WIDTH_OPTIONS.map((width) => (
-                              <option key={width} value={width}>
-                                {width}px
-                              </option>
-                            ))}
-                          </select>
+                          <HoverPreviewNumberDropdown
+                            label="名前幅(px)"
+                            value={weekGridPrefs.nameColW}
+                            options={WEEK_GRID_NAME_WIDTH_OPTIONS}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ nameColW: nextValue }, { persist: false })}
+                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ nameColW: nextValue })}
+                          />
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">日幅(px)</div>
-                          <select
-                            value={String(weekGridPrefs.cellMinW)}
-                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinW: Number(e.target.value) })}
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="日幅(px)"
-                          >
-                            {WEEK_GRID_DAY_WIDTH_OPTIONS.map((width) => (
-                              <option key={width} value={width}>
-                                {width}px
-                              </option>
-                            ))}
-                          </select>
+                          <HoverPreviewNumberDropdown
+                            label="日幅(px)"
+                            value={weekGridPrefs.cellMinW}
+                            options={WEEK_GRID_DAY_WIDTH_OPTIONS}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinW: nextValue }, { persist: false })}
+                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinW: nextValue })}
+                          />
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">低(px)</div>
-                          <select
-                            value={String(weekGridPrefs.cellMinHCompact)}
-                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinHCompact: Number(e.target.value) })}
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="低(px)"
-                          >
-                            {WEEK_GRID_COMPACT_HEIGHT_OPTIONS.map((height) => (
-                              <option key={height} value={height}>
-                                {height}px
-                              </option>
-                            ))}
-                          </select>
+                          <HoverPreviewNumberDropdown
+                            label="低(px)"
+                            value={weekGridPrefs.cellMinHCompact}
+                            options={WEEK_GRID_COMPACT_HEIGHT_OPTIONS}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHCompact: nextValue }, { persist: false })}
+                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHCompact: nextValue })}
+                          />
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高(px)</div>
-                          <select
-                            value={String(weekGridPrefs.cellMinHComfortable)}
-                            onChange={(e) => writeWeekGridPrefsPatch({ cellMinHComfortable: Number(e.target.value) })}
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="高(px)"
-                          >
-                            {WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS.map((height) => (
-                              <option key={height} value={height}>
-                                {height}px
-                              </option>
-                            ))}
-                          </select>
+                          <HoverPreviewNumberDropdown
+                            label="高(px)"
+                            value={weekGridPrefs.cellMinHComfortable}
+                            options={WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS}
+                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHComfortable: nextValue }, { persist: false })}
+                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHComfortable: nextValue })}
+                          />
                         </div>
 
                         <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
