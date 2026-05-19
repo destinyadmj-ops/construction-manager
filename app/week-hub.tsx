@@ -178,6 +178,14 @@ type SlotContextMenuState = {
   noteDraft: string;
 };
 
+type SlotContextRelatedSiteOption = {
+  site: SiteItem;
+  storedName: string;
+  displayName: string;
+  checked: boolean;
+  disabled: boolean;
+};
+
 type ScheduleChangeHistoryItem = {
   id: string;
   dayYmd: string;
@@ -205,6 +213,20 @@ function isLabelColor(value: unknown): value is LabelColor {
 
 function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: LabelColor = 'default'): LabelColor {
   return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
+}
+
+function normalizeOrderedNames(values: string[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    ordered.push(normalized);
+  }
+
+  return ordered;
 }
 
 function isSiteCellEntry(entry: ApiCellEntry | null | undefined) {
@@ -5835,13 +5857,18 @@ function Row({
   );
 
   const slotContextSelectedSiblingNames = useMemo(
-    () =>
-      new Set(
-        (slotContextMenu?.mode === 'related-sites' ? slotContextMenu.selectedSiblingNames : [])
-          .map((name) => name.trim())
-          .filter(Boolean),
-      ),
+    () => normalizeOrderedNames(slotContextMenu?.mode === 'related-sites' ? slotContextMenu.selectedSiblingNames : []),
     [slotContextMenu],
+  );
+
+  const slotContextSelectedSiblingNameSet = useMemo(
+    () => new Set(slotContextSelectedSiblingNames),
+    [slotContextSelectedSiblingNames],
+  );
+
+  const slotContextSelectedSiblingOrder = useMemo(
+    () => new Map(slotContextSelectedSiblingNames.map((name, index) => [name, index + 1] as const)),
+    [slotContextSelectedSiblingNames],
   );
 
   const slotContextDefaultSiteColor = useMemo<LabelColor>(() => {
@@ -5866,7 +5893,8 @@ function Row({
     if (!anchorFamily.key || !anchorFamily.label) return [];
 
     const seen = new Set<string>();
-    const selected = new Set(slotContextMenu.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
+    const selected = slotContextSelectedSiblingNameSet;
+    const selectedCount = slotContextSelectedSiblingNames.length;
 
     return allSites
       .filter((site) => siteFamilyKeyForName(siteStoredName(site)) === anchorFamily.key)
@@ -5875,7 +5903,7 @@ function Row({
         if (!storedName || seen.has(storedName)) return null;
         seen.add(storedName);
         const checked = selected.has(storedName);
-        const disabled = !checked && selected.size >= MAX_GROUP_ITEMS;
+        const disabled = !checked && selectedCount >= MAX_GROUP_ITEMS;
         return {
           site,
           storedName,
@@ -5884,16 +5912,21 @@ function Row({
           disabled,
         };
       })
-      .filter((option): option is { site: SiteItem; storedName: string; displayName: string; checked: boolean; disabled: boolean } => !!option);
-  }, [allSites, siteFamilyInfoForName, siteFamilyKeyForName, slotContextMenu]);
+      .filter((option): option is SlotContextRelatedSiteOption => !!option);
+  }, [allSites, siteFamilyInfoForName, siteFamilyKeyForName, slotContextMenu, slotContextSelectedSiblingNameSet, slotContextSelectedSiblingNames.length]);
 
   const toggleSlotContextSibling = useCallback((storedName: string) => {
     setSlotContextMenu((current) => {
       if (!current || current.mode !== 'related-sites') return current;
-      const next = new Set(current.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
-      if (next.has(storedName)) next.delete(storedName);
-      else next.add(storedName);
-      return { ...current, selectedSiblingNames: Array.from(next) };
+      const next = normalizeOrderedNames(current.selectedSiblingNames);
+      const existingIndex = next.indexOf(storedName);
+      if (existingIndex >= 0) {
+        next.splice(existingIndex, 1);
+      } else {
+        if (next.length >= MAX_GROUP_ITEMS) return current;
+        next.push(storedName);
+      }
+      return { ...current, selectedSiblingNames: next };
     });
   }, []);
 
@@ -6132,13 +6165,16 @@ function Row({
       return;
     }
 
-    const selectedNames = new Set(current.selectedSiblingNames.map((name) => name.trim()).filter(Boolean));
-    if (selectedNames.size === 0) {
+    const selectedNames = normalizeOrderedNames(current.selectedSiblingNames);
+    if (selectedNames.length === 0) {
       onNotify?.('少なくとも1店舗は選択してください');
       return;
     }
 
-    const selectedSites = slotContextRelatedSiteOptions.filter((option) => selectedNames.has(option.storedName));
+    const selectedSiteMap = new Map(slotContextRelatedSiteOptions.map((option) => [option.storedName, option] as const));
+    const selectedSites = selectedNames
+      .map((storedName) => selectedSiteMap.get(storedName))
+      .filter((option): option is SlotContextRelatedSiteOption => Boolean(option));
     if (selectedSites.length > MAX_GROUP_ITEMS) {
       onNotify?.('同名別店舗は4件までです');
       return;
@@ -6761,6 +6797,7 @@ function Row({
           ) ?? '';
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
+        const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const hasMultipleSitesInGroup = siteItems.length > 1;
         const canEditGroup = isEditable && (siteItems.length > 0 || isNoteGroup);
         const hoverMenuItems: CellHoverMenuItem[] =
@@ -6826,7 +6863,6 @@ function Row({
             ) : null}
           </>
         );
-        const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
           : null;
@@ -7741,11 +7777,15 @@ function Row({
               <div className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">同名別店舗をチェック選択</div>
               <div className="max-h-56 space-y-1 overflow-auto overscroll-contain pr-1">
                 {slotContextRelatedSiteOptions.map((option) => (
+                  (() => {
+                    const selectedOrder = slotContextSelectedSiblingOrder.get(option.storedName);
+                    const isChecked = slotContextSelectedSiblingNameSet.has(option.storedName);
+                    return (
                   <button
                     key={option.storedName}
                     type="button"
                     role="checkbox"
-                    aria-checked={slotContextSelectedSiblingNames.has(option.storedName)}
+                    aria-checked={isChecked}
                     disabled={option.disabled}
                     onClick={() => {
                       if (option.disabled) return;
@@ -7754,15 +7794,25 @@ function Row({
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
                       option.disabled
                         ? 'border-zinc-100 bg-zinc-50 text-zinc-400 dark:border-zinc-900 dark:bg-zinc-900/60 dark:text-zinc-500'
-                        : slotContextSelectedSiblingNames.has(option.storedName)
+                        : isChecked
                           ? 'border-blue-200 bg-blue-50/80 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100'
                         : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900'
                     }`}
                   >
                     <span
                       aria-hidden="true"
+                      className={`w-4 shrink-0 text-center text-[11px] font-semibold tabular-nums leading-none ${
+                        selectedOrder != null
+                          ? 'text-blue-700 dark:text-blue-300'
+                          : 'text-transparent'
+                      }`}
+                    >
+                      {selectedOrder ?? '0'}
+                    </span>
+                    <span
+                      aria-hidden="true"
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold leading-none transition ${
-                        slotContextSelectedSiblingNames.has(option.storedName)
+                        isChecked
                           ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-zinc-950'
                           : option.disabled
                             ? 'border-zinc-300 bg-zinc-100 text-transparent dark:border-zinc-700 dark:bg-zinc-800'
@@ -7774,10 +7824,12 @@ function Row({
                     <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
                     {option.disabled ? (
                       <span className="text-[10px] text-amber-600 dark:text-amber-400">枠上限</span>
-                    ) : slotContextSelectedSiblingNames.has(option.storedName) ? (
-                      <span className="text-[10px] text-blue-700 dark:text-blue-300">選択中</span>
+                    ) : selectedOrder != null ? (
+                      <span className="text-[10px] text-blue-700 dark:text-blue-300">{selectedOrder}番目</span>
                     ) : null}
                   </button>
+                    );
+                  })()
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2">
