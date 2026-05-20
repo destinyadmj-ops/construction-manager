@@ -2237,10 +2237,10 @@ export default function AppHeader() {
 
         {/* Right-side hub actions */}
           <div
-            className={`${isMobileBrowser ? 'hidden' : 'flex'} ${
+            className={`flex ${
               isElectronShell
                 ? 'ml-1 shrink-0 flex-nowrap items-end gap-1'
-                : 'min-w-0 max-w-full flex-wrap items-center justify-end gap-1'
+                : `${isMobileBrowser ? 'w-full justify-end' : 'min-w-0'} max-w-full flex-wrap items-center gap-1`
             }`}
           >
           <div ref={overflowMenuRef} className="relative lg:hidden">
