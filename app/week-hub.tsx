@@ -1046,6 +1046,7 @@ function WeekHubInner() {
   const pendingUserOrderRef = useRef<string[] | null>(null);
   const userOrderLoadRequestRef = useRef(0);
   const userOrderLocalRevisionRef = useRef(0);
+  const userOrderRemoteUpdatedAtRef = useRef<string | null>(null);
   const effectiveUserIdRef = useRef<string | null>(null);
   const userOrderRef = useRef<string[]>([]);
   const [reorderMode, setReorderMode] = useState(false);
@@ -1360,12 +1361,14 @@ function WeekHubInner() {
           .map((x) => (typeof x === 'string' ? x.trim() : ''))
           .filter((x) => x.length > 0)
           .slice(0, 1000);
-        const remoteUpdatedAtRaw = typeof obj?.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
+        const remoteUpdatedAtIso = typeof obj?.updatedAt === 'string' ? obj.updatedAt : null;
+        const remoteUpdatedAtRaw = remoteUpdatedAtIso ? Date.parse(remoteUpdatedAtIso) : Number.NaN;
         const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
         const useLocalValue = !!localValue && localValue.savedAt > remoteUpdatedAt;
         const nextOrder = useLocalValue ? localValue.order : parsed;
         if (userOrderLoadRequestRef.current !== requestId) return;
         if (userOrderLocalRevisionRef.current !== localRevisionAtStart) return;
+        userOrderRemoteUpdatedAtRef.current = remoteUpdatedAtIso;
         if (!arrayEqual(userOrderRef.current, nextOrder)) {
           userOrderRef.current = nextOrder;
           setUserOrder(nextOrder);
@@ -1518,11 +1521,38 @@ function WeekHubInner() {
           while (pendingUserOrderRef.current) {
             const v = pendingUserOrderRef.current;
             pendingUserOrderRef.current = null;
-            await fetch('/api/ui-settings', {
+            const r = await fetch('/api/ui-settings', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ userId: ownerUserId, key: userOrderKey, value: v }),
+              body: JSON.stringify({
+                userId: ownerUserId,
+                key: userOrderKey,
+                value: v,
+                expectedUpdatedAt: userOrderRemoteUpdatedAtRef.current,
+              }),
             });
+            const j = (await r.json().catch(() => null)) as unknown;
+            const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+
+            if (r.status === 409 && obj) {
+              const currentValueRaw = Array.isArray(obj.currentValue) ? (obj.currentValue as unknown[]) : [];
+              const currentValue = currentValueRaw
+                .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                .filter((item) => item.length > 0)
+                .slice(0, 1000);
+              userOrderRemoteUpdatedAtRef.current = typeof obj.currentUpdatedAt === 'string' ? obj.currentUpdatedAt : null;
+              userOrderLoadedScopeRef.current = `${ownerUserId}:${userOrderKey}`;
+              if (!arrayEqual(userOrderRef.current, currentValue)) {
+                userOrderRef.current = currentValue;
+                setUserOrder(currentValue);
+              }
+              writeLocalUserOrder(ownerUserId, currentValue);
+              continue;
+            }
+
+            if (r.ok && obj?.ok === true) {
+              userOrderRemoteUpdatedAtRef.current = typeof obj.updatedAt === 'string' ? obj.updatedAt : userOrderRemoteUpdatedAtRef.current;
+            }
           }
         } finally {
           userOrderSavingRef.current = false;
@@ -1554,7 +1584,8 @@ function WeekHubInner() {
   useEffect(() => {
     userOrderLoadedScopeRef.current = null;
     userOrderLoadRequestRef.current += 1;
-  }, [userOrderKey]);
+    userOrderRemoteUpdatedAtRef.current = null;
+  }, [currentUserOrderScope]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

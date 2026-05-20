@@ -16,6 +16,7 @@ const PostSchema = z
     userId: z.string().min(1).max(64),
     key: z.string().min(1).max(200),
     value: z.unknown(),
+    expectedUpdatedAt: z.union([z.string().datetime(), z.null()]).optional(),
   })
   .strict();
 
@@ -27,6 +28,25 @@ function isReasonableValue(value: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+async function readCurrentUiSetting(userId: string, key: string) {
+  return prisma.userUiSetting.findUnique({
+    where: { userId_key: { userId, key } },
+    select: { value: true, updatedAt: true },
+  });
+}
+
+function buildConflictResponse(current: { value: Prisma.JsonValue; updatedAt: Date } | null) {
+  return Response.json(
+    {
+      ok: false,
+      error: 'Conflict',
+      currentValue: current?.value ?? null,
+      currentUpdatedAt: current ? current.updatedAt.toISOString() : null,
+    },
+    { status: 409 },
+  );
 }
 
 export async function GET(request: Request) {
@@ -72,15 +92,58 @@ export async function POST(request: Request) {
 
   try {
     const value = parsed.data.value as Prisma.InputJsonValue;
+    const userId = parsed.data.userId;
+    const key = parsed.data.key;
+    const expectedUpdatedAt = parsed.data.expectedUpdatedAt;
 
-    await prisma.userUiSetting.upsert({
-      where: { userId_key: { userId: parsed.data.userId, key: parsed.data.key } },
-      create: { userId: parsed.data.userId, key: parsed.data.key, value },
+    if (expectedUpdatedAt !== undefined) {
+      if (expectedUpdatedAt === null) {
+        const created = await prisma.userUiSetting.createMany({
+          data: [{ userId, key, value }],
+          skipDuplicates: true,
+        });
+
+        if (created.count !== 1) {
+          const current = await readCurrentUiSetting(userId, key);
+          return buildConflictResponse(current);
+        }
+      } else {
+        const updated = await prisma.userUiSetting.updateMany({
+          where: {
+            userId,
+            key,
+            updatedAt: new Date(expectedUpdatedAt),
+          },
+          data: { value },
+        });
+
+        if (updated.count !== 1) {
+          const current = await readCurrentUiSetting(userId, key);
+          return buildConflictResponse(current);
+        }
+      }
+
+      const saved = await prisma.userUiSetting.findUnique({
+        where: { userId_key: { userId, key } },
+        select: { updatedAt: true },
+      });
+
+      if (!saved) {
+        const current = await readCurrentUiSetting(userId, key);
+        return buildConflictResponse(current);
+      }
+
+      return Response.json({ ok: true, updatedAt: saved.updatedAt.toISOString() });
+    }
+
+    const saved = await prisma.userUiSetting.upsert({
+      where: { userId_key: { userId, key } },
+      create: { userId, key, value },
       update: { value },
-      select: { id: true },
+      select: { updatedAt: true },
     });
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, updatedAt: saved.updatedAt.toISOString() });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'DB unavailable' },
