@@ -1361,6 +1361,7 @@ export default function AppHeader() {
   const isManagement = pathname === '/management';
   const isSiteLedger = pathname === '/site-ledger';
   const isPartners = pathname === '/partners';
+  const isSchedule = pathname === '/schedule';
   const isMulti = pathname === '/multi';
   const isReports = pathname === '/reports';
   const isInvoices = pathname === '/invoices';
@@ -2575,6 +2576,37 @@ export default function AppHeader() {
               </div>
             ) : null}
           </div>
+
+            <Link
+              href="/schedule"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:nav:schedule-mobile"
+              onClick={() => {
+                navIntentRef.current = 'push';
+              }}
+              className={`lg:hidden rounded-md border px-3 py-2 text-[11px] ${
+                isSchedule
+                  ? 'border-blue-300 bg-blue-500 text-white dark:border-blue-700'
+                  : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/80 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60'
+              }`}
+              aria-current={isSchedule ? 'page' : undefined}
+            >
+              スケジュール
+            </Link>
+
+          <Link
+            href="/schedule"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:schedule"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={navLinkClass(isSchedule, 'hidden lg:inline-flex')}
+            title="個人スケジュールへ"
+            aria-current={isSchedule ? 'page' : undefined}
+          >
+            スケジュール
+          </Link>
         </div>
       </div>
       </div>
