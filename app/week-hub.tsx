@@ -40,8 +40,10 @@ import {
   buildWeekGridPrefsLocalStorageKey,
   buildWeekGridPrefsSettingsKey,
   clampNameColumnWidth,
+  defaultWeekGridPrefs,
   normalizeWeekGridPrefs,
   type WeekGridCellBg as CellBg,
+  type WeekGridPrefsTarget,
   type WeekGridTextColor as CellTextColor,
 } from '@/shared/week-grid-prefs';
 import {
@@ -153,6 +155,17 @@ type SiteItem = {
   contactName?: string | null;
   createdAt?: string | null;
 };
+
+function detectWeekGridPrefsTarget(): WeekGridPrefsTarget {
+  if (typeof navigator !== 'undefined') {
+    const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+    if (userAgentData?.mobile === true) return 'mobile';
+    const userAgent = navigator.userAgent || '';
+    if (/iPhone|iPod|Windows Phone/i.test(userAgent)) return 'mobile';
+    if (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) return 'mobile';
+  }
+  return 'desktop';
+}
 
 type CellHistoryEntry = {
   kind: 'cell';
@@ -1001,6 +1014,7 @@ function WeekHubInner() {
   const sitePaneScrollRef = useRef<HTMLDivElement | null>(null);
   const siteListBoxRef = useRef<HTMLDivElement | null>(null);
   const [siteListViewportHeight, setSiteListViewportHeight] = useState<number | null>(null);
+  const [gridPrefsTarget, setGridPrefsTarget] = useState<WeekGridPrefsTarget>('desktop');
   const onSiteBannerWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
     const el = sitePaneScrollRef.current;
     if (!el) return;
@@ -1168,6 +1182,11 @@ function WeekHubInner() {
   }, [qsUserId]);
 
   useEffect(() => {
+    const next = detectWeekGridPrefsTarget();
+    setGridPrefsTarget((current) => (current === next ? current : next));
+  }, []);
+
+  useEffect(() => {
     const l = (searchParams.get('layout') ?? '').toLowerCase();
     setGridLayout(l === 'comfortable' ? 'comfortable' : 'compact');
   }, [searchParams]);
@@ -1176,10 +1195,11 @@ function WeekHubInner() {
   const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
   const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
   const currentEditorLabel = authMeUser?.name ?? authMeUser?.email ?? '管理者';
+  const gridPrefsDefaults = useMemo(() => defaultWeekGridPrefs(gridPrefsTarget), [gridPrefsTarget]);
 
   const gridPrefsKey = useMemo(() => {
-    return buildWeekGridPrefsSettingsKey(scheduleKind, mode, 'desktop');
-  }, [mode, scheduleKind]);
+    return buildWeekGridPrefsSettingsKey(scheduleKind, mode, gridPrefsTarget);
+  }, [gridPrefsTarget, mode, scheduleKind]);
   const legacyGridPrefsKey = useMemo(() => {
     return buildLegacyWeekGridPrefsSettingsKey(scheduleKind, mode);
   }, [mode, scheduleKind]);
@@ -1187,6 +1207,18 @@ function WeekHubInner() {
   const userOrderKey = useMemo(() => {
     return `week-hub:${scheduleKind}:userOrder`;
   }, [scheduleKind]);
+
+  const userOrderOwnerId = useMemo(() => {
+    const viewerUserId = (authMeUser?.id ?? '').trim();
+    if (viewerUserId) return viewerUserId;
+    const q = (qsUserId ?? '').trim();
+    if (q) return q;
+    return effectiveUserId;
+  }, [authMeUser?.id, effectiveUserId, qsUserId]);
+
+  const userOrderLocalStorageKey = useMemo(() => {
+    return userOrderOwnerId ? `masterHub.userOrder:${userOrderOwnerId}:${userOrderKey}` : null;
+  }, [userOrderKey, userOrderOwnerId]);
 
   const currentUserOrderScope = effectiveUserId ? `${effectiveUserId}:${userOrderKey}` : null;
 
@@ -1253,11 +1285,15 @@ function WeekHubInner() {
       if (typeof window === 'undefined') return;
       const ownerUserId = (userId ?? '').trim() || resolveUserOrderOwnerId();
       if (!ownerUserId) return;
+      const savedAt = Date.now();
+      const storageKey = `masterHub.userOrder:${ownerUserId}:${userOrderKey}`;
 
       try {
-        window.localStorage.setItem(
-          `masterHub.userOrder:${ownerUserId}:${userOrderKey}`,
-          JSON.stringify({ order, savedAt: Date.now() }),
+        window.localStorage.setItem(storageKey, JSON.stringify({ order, savedAt }));
+        window.dispatchEvent(
+          new CustomEvent('masterHub:userOrderUpdated', {
+            detail: { storageKey, order, savedAt },
+          }),
         );
       } catch {
         // ignore
@@ -1334,15 +1370,7 @@ function WeekHubInner() {
           userOrderRef.current = nextOrder;
           setUserOrder(nextOrder);
         }
-        if (useLocalValue && !arrayEqual(parsed, localValue.order)) {
-          void fetch('/api/ui-settings', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId, key: userOrderKey, value: localValue.order }),
-          });
-        } else {
-          writeLocalUserOrder(userId, parsed);
-        }
+        writeLocalUserOrder(userId, nextOrder);
       } catch {
         // ignore
       } finally {
@@ -1375,7 +1403,7 @@ function WeekHubInner() {
   }, []);
 
   const applyGridPrefs = useCallback((raw: unknown) => {
-    const next = normalizeWeekGridPrefs(raw);
+    const next = normalizeWeekGridPrefs(raw, gridPrefsDefaults);
     setGridLayout(next.gridLayout);
     setCellTextColor(next.cellTextColor);
     setCellBg(next.cellBg);
@@ -1383,7 +1411,7 @@ function WeekHubInner() {
     setCellMinW(next.cellMinW);
     setCellMinHCompact(next.cellMinHCompact);
     setCellMinHComfortable(next.cellMinHComfortable);
-  }, []);
+  }, [gridPrefsDefaults]);
 
   const loadGridPrefs = useCallback(async (userId: string | null, key: string) => {
     const scopeKey = `${userId ?? 'anon'}:${key}`;
@@ -1393,7 +1421,11 @@ function WeekHubInner() {
     const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, userId);
 
     const localRaw = readLocalGridPrefs(localStorageKey) ?? readLocalGridPrefs(legacyLocalStorageKey);
-    if (localRaw) applyGridPrefs(localRaw);
+    if (localRaw) {
+      applyGridPrefs(localRaw);
+    } else {
+      applyGridPrefs(gridPrefsDefaults);
+    }
 
     if (!userId) return;
 
@@ -1423,7 +1455,7 @@ function WeekHubInner() {
 
         if (typeof window !== 'undefined') {
           try {
-            const normalized = normalizeWeekGridPrefs(o);
+            const normalized = normalizeWeekGridPrefs(o, gridPrefsDefaults);
             window.localStorage.setItem(
               localStorageKey,
               JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
@@ -1437,11 +1469,11 @@ function WeekHubInner() {
     } catch {
       // ignore
     }
-  }, [applyGridPrefs, legacyGridPrefsKey, readLocalGridPrefs]);
+  }, [applyGridPrefs, gridPrefsDefaults, legacyGridPrefsKey, readLocalGridPrefs]);
 
   const saveGridPrefs = useCallback(async (userId: string | null, key: string, value: unknown) => {
     const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-    const normalized = normalizeWeekGridPrefs(value);
+    const normalized = normalizeWeekGridPrefs(value, gridPrefsDefaults);
     const payload = { ...raw, ...normalized, v: WEEK_GRID_PREFS_VERSION };
     const localKey = buildWeekGridPrefsLocalStorageKey(key, userId);
 
@@ -1468,7 +1500,7 @@ function WeekHubInner() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [gridPrefsDefaults]);
 
   const saveUserOrder = useCallback(
     async (userId: string | null, next: string[]) => {
@@ -1523,6 +1555,39 @@ function WeekHubInner() {
     userOrderLoadedScopeRef.current = null;
     userOrderLoadRequestRef.current += 1;
   }, [userOrderKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!userOrderLocalStorageKey) return;
+
+    const apply = (value: unknown) => {
+      const parsed = readLocalUserOrder(userOrderOwnerId);
+      if (!parsed) return;
+      if (arrayEqual(userOrderRef.current, parsed.order)) return;
+      userOrderRef.current = parsed.order;
+      setUserOrder(parsed.order);
+    };
+
+    const onStorage = (event: Event) => {
+      if (!(event instanceof StorageEvent)) return;
+      if (event.key && event.key !== userOrderLocalStorageKey) return;
+      apply(event.newValue);
+    };
+
+    const onUpdated = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = event.detail && typeof event.detail === 'object' ? (event.detail as Record<string, unknown>) : null;
+      if (typeof detail?.storageKey === 'string' && detail.storageKey !== userOrderLocalStorageKey) return;
+      apply(detail?.order);
+    };
+
+    window.addEventListener('storage', onStorage as EventListener);
+    window.addEventListener('masterHub:userOrderUpdated', onUpdated as EventListener);
+    return () => {
+      window.removeEventListener('storage', onStorage as EventListener);
+      window.removeEventListener('masterHub:userOrderUpdated', onUpdated as EventListener);
+    };
+  }, [readLocalUserOrder, userOrderLocalStorageKey, userOrderOwnerId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2323,8 +2388,10 @@ function WeekHubInner() {
     const currentOrder = userOrderRef.current;
     const next = normalizeUserOrder(currentOrder, currentUsersForOrder);
     if (arrayEqual(next, currentOrder)) return;
-    persistUserOrderChange(next);
-  }, [currentUserOrderScope, currentUsersForOrder, persistUserOrderChange]);
+    const applied = commitLocalUserOrder(next);
+    if (!applied) return;
+    writeLocalUserOrder(userOrderOwnerId, applied);
+  }, [commitLocalUserOrder, currentUserOrderScope, currentUsersForOrder, userOrderOwnerId, writeLocalUserOrder]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
