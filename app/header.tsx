@@ -2243,7 +2243,7 @@ export default function AppHeader() {
                 : `${isMobileBrowser ? 'ml-auto shrink-0 flex-nowrap justify-end' : 'min-w-0'} max-w-full items-center gap-1`
             }`}
           >
-          <div ref={overflowMenuRef} className="relative lg:hidden">
+          <div ref={overflowMenuRef} className={`${isMobileBrowser ? 'hidden' : 'relative lg:hidden'}`}>
             <button
               type="button"
               data-color-edit-slot="button"
