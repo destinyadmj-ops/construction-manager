@@ -21,15 +21,14 @@ export const DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
   gridLayout: 'compact',
   cellTextColor: 'default',
   cellBg: 'default',
-  nameColW: 128,
-  cellMinW: 112,
+  nameColW: 96,
+  cellMinW: 192,
   cellMinHCompact: 48,
   cellMinHComfortable: 64,
 };
 
 export const MOBILE_DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
   ...DEFAULT_WEEK_GRID_PREFS,
-  nameColW: 88,
 };
 
 export const WEEK_GRID_BG_OPTIONS: Array<{ value: WeekGridCellBg; label: string }> = [

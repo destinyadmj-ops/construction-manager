@@ -409,6 +409,10 @@ function MobileWeekHubInner() {
     () => buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, authUser?.id ?? null),
     [authUser?.id, legacyWeekGridPrefsKey],
   );
+  const userOrderLocalStorageKey = useMemo(
+    () => (authUser?.id ? `masterHub.userOrder:${authUser.id}:${userOrderKey}` : null),
+    [authUser?.id, userOrderKey],
+  );
   const weekViewLabel = useMemo(() => (scheduleKind === 'daily' ? '日常予定' : '週予定'), [scheduleKind]);
 
   const viewMonth = useMemo(() => `${weekStart.getFullYear()}-${pad2(weekStart.getMonth() + 1)}`, [weekStart]);
@@ -464,16 +468,55 @@ function MobileWeekHubInner() {
     if (typeof window === 'undefined') return;
     const ownerUserId = (userId ?? '').trim();
     if (!ownerUserId) return;
+    const savedAt = Date.now();
+    const storageKey = `masterHub.userOrder:${ownerUserId}:${userOrderKey}`;
 
     try {
-      window.localStorage.setItem(
-        `masterHub.userOrder:${ownerUserId}:${userOrderKey}`,
-        JSON.stringify({ order, savedAt: Date.now() }),
+      window.localStorage.setItem(storageKey, JSON.stringify({ order, savedAt }));
+      window.dispatchEvent(
+        new CustomEvent('masterHub:userOrderUpdated', {
+          detail: { storageKey, order, savedAt },
+        }),
       );
     } catch {
       // ignore
     }
   }, [userOrderKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!userOrderLocalStorageKey || !authUser?.id) return;
+
+    const apply = () => {
+      const parsed = readLocalUserOrder(authUser.id);
+      if (!parsed) return;
+      setUserOrder((current) => {
+        const next = parsed.order;
+        if (current.length === next.length && current.every((value, index) => value === next[index])) return current;
+        return next;
+      });
+    };
+
+    const onStorage = (event: Event) => {
+      if (!(event instanceof StorageEvent)) return;
+      if (event.key && event.key !== userOrderLocalStorageKey) return;
+      apply();
+    };
+
+    const onUpdated = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = asObject(event.detail);
+      if (typeof detail?.storageKey === 'string' && detail.storageKey !== userOrderLocalStorageKey) return;
+      apply();
+    };
+
+    window.addEventListener('storage', onStorage as EventListener);
+    window.addEventListener('masterHub:userOrderUpdated', onUpdated as EventListener);
+    return () => {
+      window.removeEventListener('storage', onStorage as EventListener);
+      window.removeEventListener('masterHub:userOrderUpdated', onUpdated as EventListener);
+    };
+  }, [authUser?.id, readLocalUserOrder, userOrderLocalStorageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
