@@ -120,6 +120,35 @@ function userLabel(user: ApiUser | AuthMeUser | null) {
   return (user.name ?? user.email ?? user.id).trim();
 }
 
+function orderUsers(users: ApiUser[], order: string[]) {
+  if (!order || order.length === 0) return users;
+  const byId = new Map(users.map((user) => [user.id, user] as const));
+  const used = new Set<string>();
+  const next: ApiUser[] = [];
+
+  for (const id of order) {
+    const user = byId.get(id);
+    if (!user) continue;
+    next.push(user);
+    used.add(id);
+  }
+
+  for (const user of users) {
+    if (used.has(user.id)) continue;
+    next.push(user);
+  }
+
+  return next;
+}
+
+function parseUserOrder(raw: unknown) {
+  const arr = Array.isArray(raw) ? (raw as unknown[]) : [];
+  return arr
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
+    .slice(0, 1000);
+}
+
 function cellEntries(cell: ApiCell | null | undefined) {
   return cellGroups(cell)
     .map((group) => {
@@ -318,6 +347,7 @@ function MobileWeekHubInner() {
   const [authUser, setAuthUser] = useState<AuthMeUser | null>(null);
   const [schedule, setSchedule] = useState<ApiResponse | null>(null);
   const [sites, setSites] = useState<SiteItem[]>([]);
+  const [userOrder, setUserOrder] = useState<string[]>([]);
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs('mobile'));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -370,6 +400,7 @@ function MobileWeekHubInner() {
 
   const weekGridPrefsKey = useMemo(() => buildWeekGridPrefsSettingsKey(scheduleKind, 'week', 'mobile'), [scheduleKind]);
   const legacyWeekGridPrefsKey = useMemo(() => buildLegacyWeekGridPrefsSettingsKey(scheduleKind, 'week'), [scheduleKind]);
+  const userOrderKey = useMemo(() => `week-hub:${scheduleKind}:userOrder`, [scheduleKind]);
   const weekGridPrefsLocalStorageKey = useMemo(
     () => buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, authUser?.id ?? null),
     [authUser?.id, weekGridPrefsKey],
@@ -409,6 +440,40 @@ function MobileWeekHubInner() {
       return defaultWeekGridPrefs('mobile');
     }
   }, []);
+
+  const readLocalUserOrder = useCallback((userId: string | null) => {
+    if (typeof window === 'undefined') return null;
+    const ownerUserId = (userId ?? '').trim();
+    if (!ownerUserId) return null;
+
+    try {
+      const txt = window.localStorage.getItem(`masterHub.userOrder:${ownerUserId}:${userOrderKey}`);
+      if (!txt) return null;
+      const raw = JSON.parse(txt) as unknown;
+      const payload = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as JsonObject) : null;
+      return {
+        order: parseUserOrder(payload?.order ?? raw),
+        savedAt: typeof payload?.savedAt === 'number' && Number.isFinite(payload.savedAt) ? payload.savedAt : 0,
+      };
+    } catch {
+      return null;
+    }
+  }, [userOrderKey]);
+
+  const writeLocalUserOrder = useCallback((userId: string | null, order: string[]) => {
+    if (typeof window === 'undefined') return;
+    const ownerUserId = (userId ?? '').trim();
+    if (!ownerUserId) return;
+
+    try {
+      window.localStorage.setItem(
+        `masterHub.userOrder:${ownerUserId}:${userOrderKey}`,
+        JSON.stringify({ order, savedAt: Date.now() }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [userOrderKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -517,6 +582,50 @@ function MobileWeekHubInner() {
   }, []);
 
   useEffect(() => {
+    if (!authUser?.id) {
+      setUserOrder([]);
+      return;
+    }
+
+    let cancelled = false;
+    const localValue = readLocalUserOrder(authUser.id);
+    if (localValue) {
+      setUserOrder(localValue.order);
+    }
+
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/ui-settings?userId=${encodeURIComponent(authUser.id)}&key=${encodeURIComponent(userOrderKey)}`,
+          { cache: 'no-store' },
+        );
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) {
+          if (!cancelled && !localValue) setUserOrder([]);
+          return;
+        }
+
+        const remoteOrder = parseUserOrder(obj.value);
+        const remoteUpdatedAtRaw = typeof obj.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
+        const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
+        const nextOrder = localValue && localValue.savedAt > remoteUpdatedAt ? localValue.order : remoteOrder;
+        if (cancelled) return;
+        setUserOrder(nextOrder);
+        writeLocalUserOrder(authUser.id, nextOrder);
+      } catch {
+        if (!cancelled && !localValue) {
+          setUserOrder([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, readLocalUserOrder, userOrderKey, writeLocalUserOrder]);
+
+  useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
@@ -556,9 +665,11 @@ function MobileWeekHubInner() {
     return () => controller.abort();
   }, [refreshRevision, scheduleKind, viewMonth, weekStart]);
 
+  const orderedUsers = useMemo(() => orderUsers(schedule?.users ?? [], userOrder), [schedule?.users, userOrder]);
+
   const currentUser = (() => {
-    if (!authUser || !schedule?.users) return null;
-    return schedule.users.find((user) => user.id === authUser.id) ?? null;
+    if (!authUser || orderedUsers.length === 0) return null;
+    return orderedUsers.find((user) => user.id === authUser.id) ?? null;
   })();
 
   const currentUserGrid = (() => {
@@ -915,7 +1026,7 @@ function MobileWeekHubInner() {
               <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
                 読み込み中...
               </div>
-            ) : !schedule || schedule.users.length === 0 ? (
+            ) : !schedule || orderedUsers.length === 0 ? (
               <div className="rounded-lg border border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
                 表示できる従業員予定がありません。
               </div>
@@ -971,7 +1082,7 @@ function MobileWeekHubInner() {
                     className="grid"
                     style={{ gridTemplateColumns: weekGridTemplateColumns, minWidth: `${weekGridMinWidth}px` }}
                   >
-                    {schedule.users.map((user) => {
+                    {orderedUsers.map((user) => {
                       const isCurrentUser = user.id === authUser?.id;
                       return (
                         <Fragment key={user.id}>
