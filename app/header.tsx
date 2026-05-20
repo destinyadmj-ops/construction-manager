@@ -1381,14 +1381,18 @@ export default function AppHeader() {
     >
       <div className="bg-white/60 dark:bg-black/60">
         <div
-          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 py-2 sm:py-3 lg:flex-nowrap ${
-            isElectronShell ? 'px-1 sm:px-2 lg:px-3' : 'px-3 sm:px-4 lg:px-6'
+          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 items-center py-2 sm:py-3 ${
+            isElectronShell
+              ? 'mh-scrollbar-hidden justify-start gap-2 overflow-x-auto overflow-y-hidden whitespace-nowrap px-0.5 sm:px-1.5 lg:px-2.5'
+              : 'flex-wrap justify-between gap-2 px-3 sm:px-4 lg:flex-nowrap lg:px-6'
           }`}
         >
 
           <div
-            className={`flex min-w-0 flex-1 flex-wrap items-center ${
-              isElectronShell ? '-ml-1 gap-1 sm:-ml-2 sm:gap-1.5' : 'gap-2 sm:-ml-2'
+            className={`flex items-center ${
+              isElectronShell
+                ? 'shrink-0 flex-nowrap gap-1 sm:gap-1.5'
+                : 'min-w-0 flex-1 flex-wrap gap-2 sm:-ml-2'
             }`}
           >
             {/* Left small banner area (future: settings/alerts/notifications) */}
@@ -1953,9 +1957,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div
-            className={`${isElectronShell ? 'flex' : 'hidden'} mh-scrollbar-hidden min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap`}
-          >
+          <div className={`${isElectronShell ? 'flex' : 'hidden'} ml-1 shrink-0 flex-nowrap items-center gap-1`}>
             <button
               type="button"
               data-color-edit-id="header-action-back"
@@ -2035,6 +2037,20 @@ export default function AppHeader() {
               className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden xl:ml-1 xl:inline-flex'} mh-btn`}
             >
               編集
+            </button>
+
+            <button
+              type="button"
+              data-color-edit-id="header-action-reload"
+              data-testid="header-action-reload"
+              onClick={() => {
+                if (typeof window === 'undefined') return;
+                window.location.reload();
+              }}
+              title="リロード"
+              className="mh-btn"
+            >
+              リロード
             </button>
 
             <div
@@ -2234,7 +2250,13 @@ export default function AppHeader() {
         </div>
 
         {/* Right-side hub actions */}
-        <div className={`${isMobileBrowser ? 'hidden' : 'flex'} min-w-0 max-w-full flex-wrap items-center justify-end gap-1`}>
+          <div
+            className={`${isMobileBrowser ? 'hidden' : 'flex'} ${
+              isElectronShell
+                ? 'ml-auto shrink-0 flex-nowrap items-center gap-1'
+                : 'min-w-0 max-w-full flex-wrap items-center justify-end gap-1'
+            }`}
+          >
           <div ref={overflowMenuRef} className="relative lg:hidden">
             <button
               type="button"
