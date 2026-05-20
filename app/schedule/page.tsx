@@ -70,10 +70,8 @@ function addMonths(month: string, delta: number) {
 function monthTitle(month: string) {
   const [yearText, monthText] = month.split('-');
   const year = Number(yearText);
-  const monthIndex = Number(monthText) - 1;
-  const date = new Date(year, monthIndex, 1);
-  const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(date);
-  return { year, monthName };
+  const monthNumber = Number(monthText);
+  return { year, monthNumber };
 }
 
 function toYmd(date: Date) {
@@ -427,7 +425,10 @@ export default function PersonalSchedulePage() {
         <div className="mt-4 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800 sm:px-4 sm:py-3">
             <div className="flex items-baseline gap-3 text-zinc-950 dark:text-zinc-50">
-              <span className="text-3xl font-black leading-none sm:text-4xl">{title.monthName}</span>
+              <span className="flex items-baseline gap-1 leading-none">
+                <span className="text-3xl font-black sm:text-4xl">{title.monthNumber}</span>
+                <span className="text-lg font-semibold sm:text-xl">月</span>
+              </span>
               <span className="text-2xl font-semibold leading-none sm:text-3xl">{title.year}</span>
             </div>
             {loading ? <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
