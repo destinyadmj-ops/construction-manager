@@ -1560,7 +1560,7 @@ function WeekHubInner() {
     if (typeof window === 'undefined') return;
     if (!userOrderLocalStorageKey) return;
 
-    const apply = (value: unknown) => {
+    const apply = () => {
       const parsed = readLocalUserOrder(userOrderOwnerId);
       if (!parsed) return;
       if (arrayEqual(userOrderRef.current, parsed.order)) return;
@@ -1571,14 +1571,14 @@ function WeekHubInner() {
     const onStorage = (event: Event) => {
       if (!(event instanceof StorageEvent)) return;
       if (event.key && event.key !== userOrderLocalStorageKey) return;
-      apply(event.newValue);
+      apply();
     };
 
     const onUpdated = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
       const detail = event.detail && typeof event.detail === 'object' ? (event.detail as Record<string, unknown>) : null;
       if (typeof detail?.storageKey === 'string' && detail.storageKey !== userOrderLocalStorageKey) return;
-      apply(detail?.order);
+      apply();
     };
 
     window.addEventListener('storage', onStorage as EventListener);
