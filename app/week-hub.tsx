@@ -47,6 +47,10 @@ import {
   type WeekGridTextColor as CellTextColor,
 } from '@/shared/week-grid-prefs';
 import {
+  personalScheduleSwatchClass,
+  type PersonalScheduleSummaryDay,
+} from '@/shared/personal-schedule';
+import {
   consumeForceDesktopWeekHomeOnce,
   getCurrentPathWithSearch,
   readStoredScheduleReturn,
@@ -137,6 +141,12 @@ type YearSummaryApiResponse = {
   months: string[]; // YYYY-MM x 12
   users: ApiUser[];
   grid: Record<string, Record<string, { entries: number; days: number }>>;
+};
+
+type PersonalScheduleSummaryApiResponse = {
+  ok: true;
+  month: string;
+  summary: Record<string, Record<string, PersonalScheduleSummaryDay>>;
 };
 
 type SiteItem = {
@@ -1065,6 +1075,7 @@ function WeekHubInner() {
   const [editingInput, setEditingInput] = useState('');
   const [siteSuggestions, setSiteSuggestions] = useState<SiteItem[]>([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [personalScheduleSummaryByUser, setPersonalScheduleSummaryByUser] = useState<Record<string, Record<string, PersonalScheduleSummaryDay>>>({});
   const [scheduleHistoryItems, setScheduleHistoryItems] = useState<ScheduleChangeHistoryItem[]>([]);
   const [scheduleHistoryTotal, setScheduleHistoryTotal] = useState(0);
   const [scheduleHistoryLoading, setScheduleHistoryLoading] = useState(false);
@@ -2461,6 +2472,67 @@ function WeekHubInner() {
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
+  const visiblePersonalScheduleMonths = useMemo(
+    () => Array.from(new Set(days.map((day) => toYmd(day).slice(0, 7)))),
+    [days],
+  );
+  const weekPersonalScheduleUserIds = useMemo(
+    () => Array.from(new Set((data?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))),
+    [data?.users],
+  );
+
+  useEffect(() => {
+    if (mode !== 'week') {
+      setPersonalScheduleSummaryByUser({});
+      return;
+    }
+    if (weekPersonalScheduleUserIds.length === 0 || visiblePersonalScheduleMonths.length === 0) {
+      setPersonalScheduleSummaryByUser({});
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const monthSummaries = await Promise.all(
+          visiblePersonalScheduleMonths.map(async (month) => {
+            const response = await fetch(
+              `/api/personal-schedule/summary?month=${encodeURIComponent(month)}&userIds=${encodeURIComponent(weekPersonalScheduleUserIds.join(','))}`,
+              { signal: controller.signal, cache: 'no-store' },
+            );
+            if (!response.ok) {
+              throw new Error(`Failed to load personal schedule summary (${response.status})`);
+            }
+            const json = (await response.json()) as PersonalScheduleSummaryApiResponse;
+            return json.summary;
+          }),
+        );
+
+        if (controller.signal.aborted) return;
+
+        const merged = weekPersonalScheduleUserIds.reduce<Record<string, Record<string, PersonalScheduleSummaryDay>>>(
+          (accumulator, userId) => {
+            accumulator[userId] = {};
+            return accumulator;
+          },
+          {},
+        );
+
+        for (const summary of monthSummaries) {
+          for (const [userId, byDay] of Object.entries(summary)) {
+            merged[userId] = { ...(merged[userId] ?? {}), ...byDay };
+          }
+        }
+
+        setPersonalScheduleSummaryByUser(merged);
+      } catch {
+        if (controller.signal.aborted) return;
+        setPersonalScheduleSummaryByUser({});
+      }
+    })();
+
+    return () => controller.abort();
+  }, [mode, visiblePersonalScheduleMonths, weekPersonalScheduleUserIds]);
 
   useEffect(() => {
     if (mode !== 'week') return;
@@ -4288,6 +4360,7 @@ function WeekHubInner() {
                 <WeekGrid
                   dayLabels={dayLabels}
                   data={data}
+                  personalScheduleSummaryByUser={personalScheduleSummaryByUser}
                   weekStart={weekStart}
                   monthWeekTabs={monthWeekTabs}
                   apiKind={apiKind}
@@ -5072,6 +5145,7 @@ function WeekHubInner() {
 function WeekGrid({
   dayLabels,
   data,
+  personalScheduleSummaryByUser,
   weekStart,
   monthWeekTabs,
   apiKind,
@@ -5129,6 +5203,7 @@ function WeekGrid({
 }: {
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   data: ApiResponse | null;
+  personalScheduleSummaryByUser: Record<string, Record<string, PersonalScheduleSummaryDay>>;
   weekStart: Date;
   monthWeekTabs: { monthKey: string; tabs: Date[] };
   apiKind: 'NORMAL' | 'DAILY';
@@ -5381,6 +5456,7 @@ function WeekGrid({
                   dayLabels={dayLabels}
                   allGrid={grid}
                   grid={grid[u.id] ?? {}}
+                  personalScheduleSummary={personalScheduleSummaryByUser[u.id] ?? {}}
                   apiKind={apiKind}
                   selectedSite={selectedSite}
                   resolveSiteReference={resolveSiteReference}
@@ -6126,6 +6202,7 @@ function Row({
   dayLabels,
   allGrid,
   grid,
+  personalScheduleSummary,
   apiKind,
   selectedSite,
   resolveSiteReference,
@@ -6176,6 +6253,7 @@ function Row({
   dayLabels: Array<{ key: string; dow: string; dayNum: number; isSat: boolean; isSun: boolean }>;
   allGrid: Record<string, Record<string, ApiCell>>;
   grid: Record<string, ApiCell>;
+  personalScheduleSummary?: Record<string, PersonalScheduleSummaryDay>;
   apiKind: 'NORMAL' | 'DAILY';
   selectedSite: SiteItem | null;
   resolveSiteReference?: (input: { siteId?: string | null; siteName?: string | null }) => SiteItem | null;
@@ -6225,6 +6303,7 @@ function Row({
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const lastContextMenuWheelAtRef = useRef(0);
   const [slotContextMenu, setSlotContextMenu] = useState<SlotContextMenuState | null>(null);
+  const [personalScheduleHoverDay, setPersonalScheduleHoverDay] = useState<string | null>(null);
 
   const resolveStoredSite = useCallback(
     (siteName: string) => {
@@ -7759,6 +7838,12 @@ function Row({
         const beforeCell = cloneApiCell(cell);
         const beforeGroups = apiCellToGroups(beforeCell);
         const hasAnyEntry = beforeGroups.length > 0;
+        const personalScheduleDay = personalScheduleSummary?.[d.key] ?? null;
+        const showPersonalScheduleBadge =
+          !!personalScheduleDay &&
+          personalScheduleDay.count > 0 &&
+          !(editingCell?.userId === user.id && editingCell?.day === d.key);
+        const isPersonalScheduleHoverOpen = personalScheduleHoverDay === d.key;
         const isHighlight = historyHover && historyHover.userId === user.id && historyHover.day === d.key;
         const isPaceTarget = paceTargetUserId === user.id && Boolean(paceTargetDays?.has(d.key));
 
@@ -7853,7 +7938,7 @@ function Row({
             {isPaceTarget ? (
               <span className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 dark:bg-amber-300" aria-hidden="true" />
             ) : null}
-            <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
+            <div style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }} className="relative">
               {editingCell?.userId === user.id && editingCell?.day === d.key ? (
                 <div data-inline-editor className="relative" onClick={(e) => e.stopPropagation()}>
                   {(() => {
@@ -8029,6 +8114,59 @@ function Row({
               ) : (
                 <>{renderCellLabels(cell, d.key, beforeCell)}</>
               )}
+              {showPersonalScheduleBadge && personalScheduleDay ? (
+                <div
+                  className="absolute bottom-1 right-1 z-20"
+                  onMouseEnter={() => setPersonalScheduleHoverDay(d.key)}
+                  onMouseLeave={() => {
+                    setPersonalScheduleHoverDay((current) => (current === d.key ? null : current));
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                >
+                  {isPersonalScheduleHoverOpen ? (
+                    <div className="absolute bottom-full right-0 mb-1 w-60 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-emerald-200 bg-white/95 shadow-2xl backdrop-blur dark:border-emerald-900/60 dark:bg-zinc-950/95">
+                      <div className="border-b border-emerald-100 px-3 py-2 text-[10px] font-medium text-emerald-700 dark:border-emerald-900/50 dark:text-emerald-300">
+                        {d.key} / スケジュール {personalScheduleDay.count}件
+                      </div>
+                      <div className="max-h-56 overflow-y-auto p-1">
+                        {personalScheduleDay.items.map((item) => (
+                          <div
+                            key={`personal-schedule:${user.id}:${d.key}:${item.id}`}
+                            className="rounded-lg px-2 py-1.5 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20"
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${personalScheduleSwatchClass(item.color)}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">{item.slotIndex + 1}</span>
+                                  <span className="truncate text-[11px] font-medium text-zinc-800 dark:text-zinc-100">{item.title}</span>
+                                </div>
+                                {item.note ? (
+                                  <div className="mt-0.5 break-words text-[10px] text-zinc-500 dark:text-zinc-400">{item.note}</div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="flex min-w-[1.5rem] items-center justify-center rounded-full border border-emerald-300 bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-lg shadow-emerald-900/20 dark:border-emerald-700 dark:bg-emerald-600"
+                    aria-label={`${d.key} の個人スケジュール ${personalScheduleDay.count}件`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    {personalScheduleDay.count}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         );
@@ -8049,6 +8187,8 @@ function Row({
       onSetSelectedCell,
       paceTargetDays,
       paceTargetUserId,
+      personalScheduleHoverDay,
+      personalScheduleSummary,
       applyDraggedGroup,
       commitInlineEdit,
       renderCellLabels,
