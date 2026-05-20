@@ -1380,9 +1380,13 @@ export default function AppHeader() {
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
       <div className="bg-white/60 dark:bg-black/60">
-        <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3 lg:flex-nowrap lg:px-6">
+        <div
+          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 py-2 sm:py-3 lg:flex-nowrap ${
+            isElectronShell ? 'px-2 sm:px-3 lg:px-4' : 'px-3 sm:px-4 lg:px-6'
+          }`}
+        >
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:-ml-2">
+          <div className={`flex min-w-0 flex-1 flex-wrap items-center ${isElectronShell ? 'gap-1.5 sm:-ml-3' : 'gap-2 sm:-ml-2'}`}>
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link
               href="/"
@@ -1945,7 +1949,9 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className={`${isElectronShell ? 'flex' : 'hidden'} min-w-0 flex-wrap items-center gap-1`}>
+          <div
+            className={`${isElectronShell ? 'flex' : 'hidden'} mh-scrollbar-hidden min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap`}
+          >
             <button
               type="button"
               data-color-edit-id="header-action-back"
@@ -2184,7 +2190,7 @@ export default function AppHeader() {
             </div>
 
             {pathname === '/' ? (
-              <div className="ml-0 hidden min-w-0 flex-wrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
+              <div className="ml-0 hidden min-w-0 shrink-0 flex-nowrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
                 <div
                   data-color-edit-slot="button"
                   data-color-edit-id="header:alert-legend:invoice"

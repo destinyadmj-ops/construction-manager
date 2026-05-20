@@ -2,6 +2,10 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  personalScheduleSwatchClass,
+  type PersonalScheduleSummaryDay,
+} from '@/shared/personal-schedule';
 import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
 import {
   buildDayColumnTrack,
@@ -72,6 +76,22 @@ type CellEntryMenuState = {
   top: number;
   left: number;
   width: number;
+};
+
+type PersonalScheduleMenuState = {
+  title: string;
+  dayYmd: string;
+  count: number;
+  items: PersonalScheduleSummaryDay['items'];
+  top: number;
+  left: number;
+  width: number;
+};
+
+type PersonalScheduleSummaryApiResponse = {
+  ok: true;
+  month: string;
+  summary: Record<string, Record<string, PersonalScheduleSummaryDay>>;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -353,6 +373,8 @@ function MobileWeekHubInner() {
   const [error, setError] = useState<string | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [cellEntryMenu, setCellEntryMenu] = useState<CellEntryMenuState | null>(null);
+  const [personalScheduleSummaryByUser, setPersonalScheduleSummaryByUser] = useState<Record<string, Record<string, PersonalScheduleSummaryDay>>>({});
+  const [personalScheduleMenu, setPersonalScheduleMenu] = useState<PersonalScheduleMenuState | null>(null);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const didInitialHistoryRestoreRef = useRef(false);
 
@@ -430,6 +452,10 @@ function MobileWeekHubInner() {
       isSun: i === 6,
     }));
   }, [days]);
+  const visiblePersonalScheduleMonths = useMemo(
+    () => Array.from(new Set(dayLabels.map((day) => day.key.slice(0, 7)))),
+    [dayLabels],
+  );
 
   const readWeekGridPrefs = useCallback((localStorageKey: string | null, fallbackLocalStorageKey: string | null = null): WeekGridPrefs => {
     try {
@@ -708,6 +734,64 @@ function MobileWeekHubInner() {
     return () => controller.abort();
   }, [refreshRevision, scheduleKind, viewMonth, weekStart]);
 
+  const weekPersonalScheduleUserIds = useMemo(
+    () => Array.from(new Set((schedule?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))),
+    [schedule?.users],
+  );
+
+  useEffect(() => {
+    if (activeTab !== 'week') {
+      setPersonalScheduleSummaryByUser({});
+      return;
+    }
+    if (weekPersonalScheduleUserIds.length === 0 || visiblePersonalScheduleMonths.length === 0) {
+      setPersonalScheduleSummaryByUser({});
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const monthSummaries = await Promise.all(
+          visiblePersonalScheduleMonths.map(async (month) => {
+            const response = await fetch(
+              `/api/personal-schedule/summary?month=${encodeURIComponent(month)}&userIds=${encodeURIComponent(weekPersonalScheduleUserIds.join(','))}`,
+              { signal: controller.signal, cache: 'no-store' },
+            );
+            if (!response.ok) {
+              throw new Error(`Failed to load personal schedule summary (${response.status})`);
+            }
+            const json = (await response.json()) as PersonalScheduleSummaryApiResponse;
+            return json.summary;
+          }),
+        );
+
+        if (controller.signal.aborted) return;
+
+        const merged = weekPersonalScheduleUserIds.reduce<Record<string, Record<string, PersonalScheduleSummaryDay>>>(
+          (accumulator, userId) => {
+            accumulator[userId] = {};
+            return accumulator;
+          },
+          {},
+        );
+
+        for (const summary of monthSummaries) {
+          for (const [userId, byDay] of Object.entries(summary)) {
+            merged[userId] = { ...(merged[userId] ?? {}), ...byDay };
+          }
+        }
+
+        setPersonalScheduleSummaryByUser(merged);
+      } catch {
+        if (controller.signal.aborted) return;
+        setPersonalScheduleSummaryByUser({});
+      }
+    })();
+
+    return () => controller.abort();
+  }, [activeTab, visiblePersonalScheduleMonths, weekPersonalScheduleUserIds]);
+
   const orderedUsers = useMemo(() => orderUsers(schedule?.users ?? [], userOrder), [schedule?.users, userOrder]);
 
   const currentUser = (() => {
@@ -758,6 +842,10 @@ function MobileWeekHubInner() {
     setCellEntryMenu(null);
   }, []);
 
+  const closePersonalScheduleMenu = useCallback(() => {
+    setPersonalScheduleMenu(null);
+  }, []);
+
   const openCellEntryMenu = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>, title: string, items: ScheduleEntryTarget[]) => {
       if (items.length === 0) return;
@@ -773,7 +861,29 @@ function MobileWeekHubInner() {
         ? preferredTop
         : Math.max(8, rect.top - estimatedHeight - 8);
 
+      setPersonalScheduleMenu(null);
       setCellEntryMenu({ title, items, top, left, width });
+    },
+    [],
+  );
+
+  const openPersonalScheduleMenu = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>, title: string, dayYmd: string, day: PersonalScheduleSummaryDay) => {
+      if (day.count <= 0 || day.items.length === 0) return;
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(Math.max(260, rect.width + 120), Math.max(240, viewportWidth - 16));
+      const estimatedHeight = Math.min(day.items.length * 56 + 56, 320);
+      const left = Math.max(8, Math.min(rect.right - width, viewportWidth - width - 8));
+      const preferredTop = rect.bottom + 8;
+      const top = preferredTop + estimatedHeight <= viewportHeight - 8
+        ? preferredTop
+        : Math.max(8, rect.top - estimatedHeight - 8);
+
+      setCellEntryMenu(null);
+      setPersonalScheduleMenu({ title, dayYmd, count: day.count, items: day.items, top, left, width });
     },
     [],
   );
@@ -797,7 +907,26 @@ function MobileWeekHubInner() {
   }, [cellEntryMenu]);
 
   useEffect(() => {
+    if (!personalScheduleMenu) return;
+
+    const close = () => setPersonalScheduleMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [personalScheduleMenu]);
+
+  useEffect(() => {
     setCellEntryMenu(null);
+    setPersonalScheduleMenu(null);
   }, [activeTab, scheduleKind, weekStart]);
 
   const handleTabChange = useCallback((tab: MobileTab, nextKind?: ScheduleKind) => {
@@ -1142,10 +1271,11 @@ function MobileWeekHubInner() {
                             const entryTargets = resolveScheduleEntryTargets(entries, siteIdByScheduleEntry);
                             const previewLabel = resolveScheduleEntryPreview(entries, siteIdByScheduleEntry);
                             const hasMultipleEntries = entryTargets.length > 1;
+                            const personalScheduleDay = personalScheduleSummaryByUser[user.id]?.[day.key] ?? null;
                             return (
                               <div
                                 key={`${user.id}:${day.key}`}
-                                className={`border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
+                                className={`relative border-b border-l border-zinc-200 px-2 py-2 text-xs dark:border-zinc-800 ${
                                   isCurrentUser ? 'bg-blue-50/60 dark:bg-blue-950/10' : ''
                                 }`}
                                 style={{ minHeight: `${weekGridCellMinH}px` }}
@@ -1161,6 +1291,8 @@ function MobileWeekHubInner() {
                                       )
                                     }
                                     className={`relative w-full rounded border px-2 py-1 text-left leading-snug ${
+                                      personalScheduleDay?.count ? 'pb-5' : ''
+                                    } ${
                                       entryTargets.some(isLinkedScheduleEntryTarget)
                                         ? 'border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900'
                                         : 'border-dashed border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
@@ -1183,6 +1315,16 @@ function MobileWeekHubInner() {
                                 ) : (
                                   <div className="text-zinc-300 dark:text-zinc-700">-</div>
                                 )}
+                                {personalScheduleDay && personalScheduleDay.count > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => openPersonalScheduleMenu(event, `${userLabel(user)} / ${day.key}`, day.key, personalScheduleDay)}
+                                    className="absolute bottom-1 right-1 z-10 flex min-w-[1.5rem] items-center justify-center rounded-full border border-emerald-300 bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-lg shadow-emerald-900/20 dark:border-emerald-700 dark:bg-emerald-600"
+                                    aria-label={`${day.key} の個人スケジュール ${personalScheduleDay.count}件`}
+                                  >
+                                    {personalScheduleDay.count}
+                                  </button>
+                                ) : null}
                               </div>
                             );
                           })}
@@ -1320,6 +1462,51 @@ function MobileWeekHubInner() {
                     {item.noteOnly ? '追記' : item.siteId ? '詳細へ' : '未紐付け'}
                   </span>
                 </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {personalScheduleMenu ? (
+        <>
+          <button
+            type="button"
+            aria-label="個人スケジュール一覧を閉じる"
+            onClick={closePersonalScheduleMenu}
+            className="fixed inset-0 z-40 bg-black/20"
+          />
+          <div
+            className="fixed z-50 overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-2xl dark:border-emerald-900/60 dark:bg-zinc-950"
+            style={{ top: personalScheduleMenu.top, left: personalScheduleMenu.left, width: personalScheduleMenu.width }}
+            data-testid="mobile-personal-schedule-menu"
+          >
+            <div className="border-b border-emerald-100 px-3 py-2 dark:border-emerald-900/50">
+              <div className="truncate text-[11px] font-medium text-emerald-700 dark:text-emerald-300">{personalScheduleMenu.title}</div>
+              <div className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                {personalScheduleMenu.dayYmd} / スケジュール {personalScheduleMenu.count}件
+              </div>
+            </div>
+
+            <div className="overflow-y-auto p-1" style={{ maxHeight: 'min(50vh, 22rem)' }}>
+              {personalScheduleMenu.items.map((item) => (
+                <div
+                  key={`${personalScheduleMenu.dayYmd}:${item.id}`}
+                  className="rounded-lg px-3 py-2 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${personalScheduleSwatchClass(item.color)}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <span className="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">{item.slotIndex + 1}</span>
+                        <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">{item.title}</span>
+                      </div>
+                      {item.note ? (
+                        <div className="mt-0.5 break-words text-[11px] text-zinc-500 dark:text-zinc-400">{item.note}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
