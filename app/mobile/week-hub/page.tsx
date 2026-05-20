@@ -21,6 +21,8 @@ import { readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/sc
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
+const LABEL_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+type LabelColor = (typeof LABEL_COLORS)[number];
 
 type AuthMeUser = {
   id: string;
@@ -38,8 +40,10 @@ type ApiUser = {
 type ApiCell = {
   slot1: string | null;
   slot2: string | null;
+  color1?: LabelColor | null;
+  color2?: LabelColor | null;
   groups?: Array<{
-    items: Array<{ label: string; kind?: string | null }>;
+    items: Array<{ label: string; color?: LabelColor | null; kind?: string | null }>;
     note?: string | null;
   }>;
 };
@@ -56,16 +60,24 @@ type SiteItem = {
   id: string;
   companyName?: string | null;
   name: string;
+  scheduleLabelColor?: LabelColor | null;
+};
+
+type ScheduleEntryDisplay = {
+  entry: string;
+  color: LabelColor;
 };
 
 type ScheduleEntryTarget = {
   entry: string;
+  color: LabelColor;
   siteId: string | null;
   noteOnly: boolean;
 };
 
 type LinkedScheduleEntryTarget = {
   entry: string;
+  color: LabelColor;
   siteId: string;
   noteOnly: boolean;
 };
@@ -95,6 +107,11 @@ type PersonalScheduleSummaryApiResponse = {
 };
 
 type JsonObject = Record<string, unknown>;
+
+type SiteLookupValue = {
+  siteId: string;
+  color: LabelColor;
+};
 
 type MobileWeekHubHistoryState = {
   v: 1;
@@ -169,14 +186,36 @@ function parseUserOrder(raw: unknown) {
     .slice(0, 1000);
 }
 
-function cellEntries(cell: ApiCell | null | undefined) {
+function isLabelColor(value: unknown): value is LabelColor {
+  return typeof value === 'string' && (LABEL_COLORS as readonly string[]).includes(value);
+}
+
+function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: LabelColor = 'default'): LabelColor {
+  return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
+}
+
+function labelTextClass(color: LabelColor): string {
+  if (color === 'default') return 'text-zinc-800 dark:text-zinc-200';
+  if (color === 'red') return 'text-red-600 dark:text-red-400';
+  if (color === 'orange') return 'text-orange-600 dark:text-orange-400';
+  if (color === 'yellow') return 'text-amber-600 dark:text-amber-300';
+  if (color === 'green') return 'text-green-600 dark:text-green-400';
+  if (color === 'blue') return 'text-blue-600 dark:text-blue-400';
+  if (color === 'purple') return 'text-violet-600 dark:text-violet-400';
+  return 'text-pink-600 dark:text-pink-400';
+}
+
+function cellEntries(cell: ApiCell | null | undefined): ScheduleEntryDisplay[] {
   return cellGroups(cell)
     .map((group) => {
       const labels = group.items.map((entry) => entry.label.trim()).filter((entry) => entry.length > 0);
       const note = typeof group.note === 'string' ? group.note.trim() || null : null;
-      return formatScheduleCellGroupDisplayValue(labels, note) ?? '';
+      return {
+        entry: formatScheduleCellGroupDisplayValue(labels, note) ?? '',
+        color: group.items[0]?.color ?? 'default',
+      };
     })
-    .filter((entry): entry is string => entry.length > 0);
+    .filter((entry): entry is ScheduleEntryDisplay => entry.entry.length > 0);
 }
 
 function describeScheduleEntry(entry: string) {
@@ -210,15 +249,15 @@ function describeScheduleEntry(entry: string) {
   };
 }
 
-function renderScheduleEntryLabel(entry: string) {
+function renderScheduleEntryLabel(entry: string, color: LabelColor = 'default') {
   const described = describeScheduleEntry(entry);
-  if (!described.noteText) return entry;
+  if (!described.noteText) return <span className={labelTextClass(color)}>{entry}</span>;
   if (described.noteOnly || !described.mainText) {
     return <span className="text-red-600 dark:text-red-400">{`追記: ${described.noteText}`}</span>;
   }
   return (
     <>
-      <span>{described.mainText}</span>
+      <span className={labelTextClass(color)}>{described.mainText}</span>
       <span className="text-red-600 dark:text-red-400">{`（追記: ${described.noteText}）`}</span>
     </>
   );
@@ -235,10 +274,11 @@ function cellGroups(cell: ApiCell | null | undefined) {
             if (!label) return null;
             return {
               label,
+              color: isLabelColor(entry?.color) ? entry.color : 'default',
               kind: typeof entry?.kind === 'string' ? entry.kind : null,
             };
           })
-          .filter((entry): entry is { label: string; kind: string | null } => !!entry)
+          .filter((entry): entry is { label: string; color: LabelColor; kind: string | null } => !!entry)
           .slice(0, 4);
         if (items.length === 0) return null;
         return {
@@ -246,14 +286,17 @@ function cellGroups(cell: ApiCell | null | undefined) {
           note: typeof group.note === 'string' ? group.note.trim() || null : null,
         };
       })
-      .filter((group): group is { items: Array<{ label: string; kind: string | null }>; note: string | null } => !!group)
+      .filter((group): group is { items: Array<{ label: string; color: LabelColor; kind: string | null }>; note: string | null } => !!group)
       .slice(0, 4);
   }
 
   return [cell?.slot1 ?? null, cell?.slot2 ?? null]
-    .map((entry) => (entry ?? '').trim())
-    .filter((entry): entry is string => entry.length > 0)
-    .map((entry) => ({ items: [{ label: entry, kind: 'site' as const }], note: null }));
+    .map((entry, index) => ({
+      label: (entry ?? '').trim(),
+      color: isLabelColor(index === 0 ? cell?.color1 : cell?.color2) ? (index === 0 ? cell?.color1 : cell?.color2) : 'default',
+    }))
+    .filter((entry): entry is { label: string; color: LabelColor } => entry.label.length > 0)
+    .map((entry) => ({ items: [{ label: entry.label, color: entry.color, kind: 'site' as const }], note: null }));
 }
 
 function cellSiteNames(cell: ApiCell | null | undefined) {
@@ -294,33 +337,37 @@ function readMobileWeekHubHistoryState(): MobileWeekHubHistoryState | null {
   return normalizeMobileWeekHubHistoryState((rawState as Record<string, unknown>)[MOBILE_WEEK_HUB_HISTORY_STATE_KEY]);
 }
 
-function resolveScheduleEntryTargets(entries: string[], siteIdByScheduleEntry: Map<string, string>): ScheduleEntryTarget[] {
+function resolveScheduleEntryTargets(entries: ScheduleEntryDisplay[], siteLookupByScheduleEntry: Map<string, SiteLookupValue>): ScheduleEntryTarget[] {
   return entries.flatMap<ScheduleEntryTarget>((entry) => {
-    const tokenMatches = entry
+    const tokenMatches = entry.entry
       .split('/')
       .map((part) => part.trim())
       .filter((part) => part.length > 0)
-      .map((part) => ({
-        entry: part,
-        siteId: siteIdByScheduleEntry.get(normalizeSiteLookupKey(part)) ?? null,
-        noteOnly: describeScheduleEntry(part).noteOnly,
-      }))
+      .map((part) => {
+        const matchedSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(part));
+        return {
+          entry: part,
+          color: matchedSite?.color ?? entry.color,
+          siteId: matchedSite?.siteId ?? null,
+          noteOnly: describeScheduleEntry(part).noteOnly,
+        };
+      })
       .filter(isLinkedScheduleEntryTarget);
 
     if (tokenMatches.length > 1) {
       return tokenMatches;
     }
 
-    const exactSiteId = siteIdByScheduleEntry.get(normalizeSiteLookupKey(entry)) ?? null;
-    if (exactSiteId) {
-      return [{ entry, siteId: exactSiteId, noteOnly: false }];
+    const exactSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(entry.entry)) ?? null;
+    if (exactSite) {
+      return [{ entry: entry.entry, color: exactSite.color, siteId: exactSite.siteId, noteOnly: false }];
     }
 
     if (tokenMatches.length === 1) {
-      return [{ entry, siteId: tokenMatches[0].siteId, noteOnly: false }];
+      return [{ entry: entry.entry, color: tokenMatches[0].color, siteId: tokenMatches[0].siteId, noteOnly: false }];
     }
 
-    return [{ entry, siteId: null, noteOnly: describeScheduleEntry(entry).noteOnly }];
+    return [{ entry: entry.entry, color: entry.color, siteId: null, noteOnly: describeScheduleEntry(entry.entry).noteOnly }];
   });
 }
 
@@ -328,21 +375,22 @@ function isLinkedScheduleEntryTarget(target: ScheduleEntryTarget): target is Lin
   return typeof target.siteId === 'string' && target.siteId.length > 0;
 }
 
-function resolveScheduleEntryPreview(entries: string[], siteIdByScheduleEntry: Map<string, string>) {
+function resolveScheduleEntryPreview(entries: ScheduleEntryDisplay[], siteLookupByScheduleEntry: Map<string, SiteLookupValue>): ScheduleEntryDisplay {
   for (const entry of entries) {
-    const parts = entry
+    const parts = entry.entry
       .split('/')
       .map((part) => part.trim())
       .filter((part) => part.length > 0);
 
     for (const part of parts) {
-      if (siteIdByScheduleEntry.has(normalizeSiteLookupKey(part))) return part;
+      const matchedSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(part));
+      if (matchedSite) return { entry: part, color: matchedSite.color };
     }
 
-    if (parts.length > 0) return parts[0];
+    if (parts.length > 0) return { entry: parts[0], color: entry.color };
   }
 
-  return '';
+  return { entry: '', color: 'default' };
 }
 
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
@@ -809,10 +857,11 @@ function MobileWeekHubInner() {
       sites.map((site) => [site.name.trim(), {
         id: site.id,
         label: site.companyName ? `${site.companyName} / ${site.name}` : site.name,
+        color: resolveSiteLabelColor(site),
       }]),
     );
     const seen = new Set<string>();
-    const items: Array<{ id: string | null; label: string }> = [];
+    const items: Array<{ id: string | null; label: string; color: LabelColor }> = [];
 
     for (const day of dayLabels) {
       const siteNames = cellSiteNames(currentUserGrid[day.key]);
@@ -821,19 +870,19 @@ function MobileWeekHubInner() {
         if (!lookupKey || seen.has(lookupKey)) continue;
         seen.add(lookupKey);
         const matched = byName.get(lookupKey);
-        items.push(matched ? matched : { id: null, label: entry });
+        items.push(matched ? matched : { id: null, label: entry, color: 'default' });
       }
     }
 
     return items;
   }, [currentUserGrid, dayLabels, sites]);
 
-  const siteIdByScheduleEntry = useMemo(() => {
-    const map = new Map<string, string>();
+  const siteLookupByScheduleEntry = useMemo(() => {
+    const map = new Map<string, SiteLookupValue>();
     for (const site of sites) {
       const key = normalizeSiteLookupKey(site.name.trim());
       if (!key || map.has(key)) continue;
-      map.set(key, site.id);
+      map.set(key, { siteId: site.id, color: resolveSiteLabelColor(site) });
     }
     return map;
   }, [sites]);
@@ -1005,11 +1054,11 @@ function MobileWeekHubInner() {
 
   const handleScheduleEntryClick = useCallback((entry: string) => {
     const siteId =
-      resolveScheduleEntryTargets([entry], siteIdByScheduleEntry).find(isLinkedScheduleEntryTarget)?.siteId ??
+      resolveScheduleEntryTargets([{ entry, color: 'default' }], siteLookupByScheduleEntry).find(isLinkedScheduleEntryTarget)?.siteId ??
       null;
     if (!siteId) return;
     handleSiteClick(siteId);
-  }, [handleSiteClick, siteIdByScheduleEntry]);
+  }, [handleSiteClick, siteLookupByScheduleEntry]);
 
   const weekGridCellMinH = useMemo(() => {
     return weekGridPrefs.gridLayout === 'comfortable'
@@ -1268,8 +1317,8 @@ function MobileWeekHubInner() {
                           </div>
                           {dayLabels.map((day) => {
                             const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
-                            const entryTargets = resolveScheduleEntryTargets(entries, siteIdByScheduleEntry);
-                            const previewLabel = resolveScheduleEntryPreview(entries, siteIdByScheduleEntry);
+                            const entryTargets = resolveScheduleEntryTargets(entries, siteLookupByScheduleEntry);
+                            const previewLabel = resolveScheduleEntryPreview(entries, siteLookupByScheduleEntry);
                             const hasMultipleEntries = entryTargets.length > 1;
                             const personalScheduleDay = personalScheduleSummaryByUser[user.id]?.[day.key] ?? null;
                             return (
@@ -1307,7 +1356,7 @@ function MobileWeekHubInner() {
                                       className="block overflow-hidden whitespace-nowrap leading-tight"
                                       style={hasMultipleEntries ? { maxWidth: 'calc(100% - 1rem)' } : undefined}
                                     >
-                                      {renderScheduleEntryLabel(previewLabel)}
+                                      {renderScheduleEntryLabel(previewLabel.entry, previewLabel.color)}
                                     </span>
                                     {hasMultipleEntries ? (
                                       <span className="absolute bottom-1 right-1 text-xs font-bold leading-none text-red-600 dark:text-red-400">
@@ -1376,14 +1425,14 @@ function MobileWeekHubInner() {
                         <div className="mt-3 flex flex-wrap gap-2">
                           {entries.map((entry) => (
                             <button
-                              key={`${day.key}:${entry}`}
+                              key={`${day.key}:${entry.entry}`}
                               type="button"
-                              onClick={() => handleScheduleEntryClick(entry)}
+                              onClick={() => handleScheduleEntryClick(entry.entry)}
                               className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                               style={{ fontSize: scheduleCellFontSize }}
                               title="現場詳細を開く"
                             >
-                              {renderScheduleEntryLabel(entry)}
+                              {renderScheduleEntryLabel(entry.entry, entry.color)}
                             </button>
                           ))}
                         </div>
@@ -1409,7 +1458,7 @@ function MobileWeekHubInner() {
                       onClick={() => handleSiteClick(site.id!)}
                       className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
                     >
-                      <div className="font-medium">{site.label}</div>
+                      <div className={`font-medium ${labelTextClass(site.color)}`}>{site.label}</div>
                       <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">タップして打刻・詳細を表示</div>
                     </button>
                   ) : (
@@ -1417,7 +1466,7 @@ function MobileWeekHubInner() {
                       key={site.label}
                       className="w-full rounded-lg border border-zinc-200 bg-white p-4 text-left shadow-sm dark:border-zinc-800 dark:bg-black"
                     >
-                      <div className="font-medium">{site.label}</div>
+                      <div className={`font-medium ${labelTextClass(site.color)}`}>{site.label}</div>
                       <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">台帳未紐付けの予定名です</div>
                     </div>
                   ),
@@ -1460,7 +1509,7 @@ function MobileWeekHubInner() {
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:cursor-default disabled:text-zinc-500 dark:hover:bg-zinc-900 dark:disabled:text-zinc-400"
                   data-testid={`mobile-cell-entry-option-${item.siteId ?? 'unmapped'}`}
                 >
-                  <span className="truncate">{renderScheduleEntryLabel(item.entry)}</span>
+                  <span className="truncate">{renderScheduleEntryLabel(item.entry, item.color)}</span>
                   <span className="ml-3 shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
                     {item.noteOnly ? '追記' : item.siteId ? '詳細へ' : '未紐付け'}
                   </span>
