@@ -83,9 +83,28 @@ model User {
   uiSettings     UserUiSetting[]
   targetScheduleChanges ScheduleChangeHistory[] @relation("TargetUserScheduleChangeHistory")
   editorScheduleChanges ScheduleChangeHistory[] @relation("EditorUserScheduleChangeHistory")
+  personalScheduleEntries PersonalScheduleEntry[]
 
   siteMemberships SiteMember[]
   timeClocks      TimeClock[]
+}
+
+model PersonalScheduleEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  dayYmd    String
+  slotIndex Int
+  title     String   @default("")
+  note      String?
+  color     String   @default("emerald")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayYmd, slotIndex])
+  @@index([userId, dayYmd])
+  @@index([dayYmd, userId])
 }
 
 model UserLoginMemory {
