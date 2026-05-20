@@ -7501,34 +7501,39 @@ function Row({
             : [];
         const displayValue = (
           <>
-            {renderedItems.map((item, itemIndex) => {
-              const isSiteItem = isSiteCellEntry(item.entry);
-              return (
-                <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
-                  {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
-                  {isSiteItem ? (
-                    <span className={labelTextClass(item.entry.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
-                      {item.displayName}
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-red-600 dark:text-red-400">追記:</span>
-                      {' '}
-                      <span className="text-zinc-700 dark:text-zinc-200">{item.fullDisplayName}</span>
-                    </>
-                  )}
-                </Fragment>
-              );
-            })}
-            {groupNote ? (
-              <>
-                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
-                <span className="text-red-600 dark:text-red-400">追記:</span>
-                {' '}
-                <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
-                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
-              </>
-            ) : null}
+            <span
+              className="block overflow-hidden whitespace-nowrap"
+              style={hasMultipleSitesInGroup ? { maxWidth: 'calc(100% - 1rem)' } : undefined}
+            >
+              {renderedItems.map((item, itemIndex) => {
+                const isSiteItem = isSiteCellEntry(item.entry);
+                return (
+                  <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
+                    {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
+                    {isSiteItem ? (
+                      <span className={labelTextClass(item.entry.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
+                        {item.displayName}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-red-600 dark:text-red-400">追記:</span>
+                        {' '}
+                        <span className="text-zinc-700 dark:text-zinc-200">{item.fullDisplayName}</span>
+                      </>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {groupNote ? (
+                <>
+                  {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
+                  <span className="text-red-600 dark:text-red-400">追記:</span>
+                  {' '}
+                  <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
+                  {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
+                </>
+              ) : null}
+            </span>
             {hasMultipleSitesInGroup ? (
               <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
                 +
@@ -7548,7 +7553,7 @@ function Row({
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
               className: `block overflow-hidden whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                hasMultipleSitesInGroup ? 'relative pr-4' : ''
+                hasMultipleSitesInGroup ? 'relative' : ''
               } ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'

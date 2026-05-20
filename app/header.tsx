@@ -1382,11 +1382,15 @@ export default function AppHeader() {
       <div className="bg-white/60 dark:bg-black/60">
         <div
           className={`mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 py-2 sm:py-3 lg:flex-nowrap ${
-            isElectronShell ? 'px-2 sm:px-3 lg:px-4' : 'px-3 sm:px-4 lg:px-6'
+            isElectronShell ? 'px-1 sm:px-2 lg:px-3' : 'px-3 sm:px-4 lg:px-6'
           }`}
         >
 
-          <div className={`flex min-w-0 flex-1 flex-wrap items-center ${isElectronShell ? 'gap-1.5 sm:-ml-3' : 'gap-2 sm:-ml-2'}`}>
+          <div
+            className={`flex min-w-0 flex-1 flex-wrap items-center ${
+              isElectronShell ? '-ml-1 gap-1 sm:-ml-2 sm:gap-1.5' : 'gap-2 sm:-ml-2'
+            }`}
+          >
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link
               href="/"
@@ -1403,7 +1407,7 @@ export default function AppHeader() {
               data-color-edit-slot="button"
               data-color-edit-id="header:site-list-toggle"
               aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
-              className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
+              className={`${isElectronShell ? 'ml-0' : 'ml-1'} flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900`}
               style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
               onClick={() => setIsSiteListCollapsed((v) => !v)}
             >
