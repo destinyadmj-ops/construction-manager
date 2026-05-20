@@ -451,6 +451,7 @@ export default function PersonalSchedulePage() {
             {calendarCells.map((cell) => {
               const day = dayMap.get(cell.dayYmd) ?? null;
               const items = filledItems(day);
+              const availableSlotIndex = nextOpenSlotIndex(day);
               return (
                 <div
                   key={cell.key}
@@ -468,18 +469,37 @@ export default function PersonalSchedulePage() {
                     cell.inMonth ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-50/60 dark:bg-zinc-950/50'
                   } ${cell.isToday ? 'ring-1 ring-inset ring-blue-400 dark:ring-blue-500' : ''}`}
                 >
-                  <div
-                    className={`mb-1 text-xs font-semibold sm:text-sm ${
-                      cell.inMonth
-                        ? cell.isSun
-                          ? 'text-red-600 dark:text-red-400'
-                          : cell.isSat
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-zinc-900 dark:text-zinc-100'
-                        : 'text-zinc-400 dark:text-zinc-600'
-                    }`}
-                  >
-                    {cell.dayNumber}
+                  <div className="mb-1 flex items-start justify-between gap-1">
+                    <div
+                      className={`text-xs font-semibold sm:text-sm ${
+                        cell.inMonth
+                          ? cell.isSun
+                            ? 'text-red-600 dark:text-red-400'
+                            : cell.isSat
+                              ? 'text-blue-600 dark:text-blue-400'
+                              : 'text-zinc-900 dark:text-zinc-100'
+                          : 'text-zinc-400 dark:text-zinc-600'
+                      }`}
+                    >
+                      {cell.dayNumber}
+                    </div>
+
+                    {cell.inMonth && availableSlotIndex !== null ? (
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openEditor(cell.dayYmd, availableSlotIndex, null);
+                        }}
+                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-[12px] font-medium text-zinc-500 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                        aria-label={`${cell.dayYmd} に予定を追加`}
+                        title="新規入力"
+                      >
+                        +
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="min-h-0 flex-1 space-y-1 overflow-hidden">
