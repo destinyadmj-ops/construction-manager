@@ -2240,7 +2240,7 @@ export default function AppHeader() {
             className={`flex ${
               isElectronShell
                 ? 'ml-1 shrink-0 flex-nowrap items-end gap-1'
-                : `${isMobileBrowser ? 'w-full justify-end' : 'min-w-0'} max-w-full flex-wrap items-center gap-1`
+                : `${isMobileBrowser ? 'ml-auto shrink-0 flex-nowrap justify-end' : 'min-w-0'} max-w-full items-center gap-1`
             }`}
           >
           <div ref={overflowMenuRef} className="relative lg:hidden">
@@ -2499,7 +2499,7 @@ export default function AppHeader() {
                 }
               }
             }}
-            className={navLinkClass(isNormalWeek)}
+            className={navLinkClass(isNormalWeek, isMobileBrowser ? 'hidden' : 'inline-flex')}
             title="週予定へ（週モードに戻す）"
             aria-current={isNormalWeek ? 'page' : undefined}
           >

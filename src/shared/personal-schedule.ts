@@ -56,18 +56,18 @@ export const PERSONAL_SCHEDULE_COLOR_OPTIONS: Array<{ value: PersonalScheduleCol
 ];
 
 const PERSONAL_SCHEDULE_SURFACE_CLASS: Record<PersonalScheduleColor, string> = {
-  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/80 dark:bg-emerald-950/40 dark:text-emerald-100',
-  sky: 'border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/80 dark:bg-sky-950/40 dark:text-sky-100',
-  amber: 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/80 dark:bg-amber-950/40 dark:text-amber-100',
-  rose: 'border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-900/80 dark:bg-rose-950/40 dark:text-rose-100',
-  violet: 'border-violet-200 bg-violet-50 text-violet-950 dark:border-violet-900/80 dark:bg-violet-950/40 dark:text-violet-100',
-  orange: 'border-orange-200 bg-orange-50 text-orange-950 dark:border-orange-900/80 dark:bg-orange-950/40 dark:text-orange-100',
-  teal: 'border-teal-200 bg-teal-50 text-teal-950 dark:border-teal-900/80 dark:bg-teal-950/40 dark:text-teal-100',
-  cyan: 'border-cyan-200 bg-cyan-50 text-cyan-950 dark:border-cyan-900/80 dark:bg-cyan-950/40 dark:text-cyan-100',
-  lime: 'border-lime-200 bg-lime-50 text-lime-950 dark:border-lime-900/80 dark:bg-lime-950/40 dark:text-lime-100',
-  indigo: 'border-indigo-200 bg-indigo-50 text-indigo-950 dark:border-indigo-900/80 dark:bg-indigo-950/40 dark:text-indigo-100',
-  pink: 'border-pink-200 bg-pink-50 text-pink-950 dark:border-pink-900/80 dark:bg-pink-950/40 dark:text-pink-100',
-  slate: 'border-slate-300 bg-slate-50 text-slate-950 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-100',
+  emerald: 'border-emerald-700 bg-emerald-500 text-white hover:bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-500 dark:text-white dark:hover:bg-emerald-400',
+  sky: 'border-sky-700 bg-sky-500 text-white hover:bg-sky-600 dark:border-sky-500 dark:bg-sky-500 dark:text-white dark:hover:bg-sky-400',
+  amber: 'border-amber-600 bg-amber-400 text-amber-950 hover:bg-amber-500 dark:border-amber-400 dark:bg-amber-400 dark:text-amber-950 dark:hover:bg-amber-300',
+  rose: 'border-rose-700 bg-rose-500 text-white hover:bg-rose-600 dark:border-rose-500 dark:bg-rose-500 dark:text-white dark:hover:bg-rose-400',
+  violet: 'border-violet-700 bg-violet-500 text-white hover:bg-violet-600 dark:border-violet-500 dark:bg-violet-500 dark:text-white dark:hover:bg-violet-400',
+  orange: 'border-orange-700 bg-orange-500 text-white hover:bg-orange-600 dark:border-orange-500 dark:bg-orange-500 dark:text-white dark:hover:bg-orange-400',
+  teal: 'border-teal-700 bg-teal-500 text-white hover:bg-teal-600 dark:border-teal-500 dark:bg-teal-500 dark:text-white dark:hover:bg-teal-400',
+  cyan: 'border-cyan-700 bg-cyan-400 text-cyan-950 hover:bg-cyan-500 dark:border-cyan-500 dark:bg-cyan-400 dark:text-cyan-950 dark:hover:bg-cyan-300',
+  lime: 'border-lime-700 bg-lime-400 text-lime-950 hover:bg-lime-500 dark:border-lime-500 dark:bg-lime-400 dark:text-lime-950 dark:hover:bg-lime-300',
+  indigo: 'border-indigo-700 bg-indigo-500 text-white hover:bg-indigo-600 dark:border-indigo-500 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400',
+  pink: 'border-pink-700 bg-pink-500 text-white hover:bg-pink-600 dark:border-pink-500 dark:bg-pink-500 dark:text-white dark:hover:bg-pink-400',
+  slate: 'border-slate-700 bg-slate-500 text-white hover:bg-slate-600 dark:border-slate-500 dark:bg-slate-500 dark:text-white dark:hover:bg-slate-400',
 };
 
 const PERSONAL_SCHEDULE_SWATCH_CLASS: Record<PersonalScheduleColor, string> = {

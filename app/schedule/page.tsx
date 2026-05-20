@@ -523,10 +523,9 @@ export default function PersonalSchedulePage() {
                             current?.dayYmd === item.dayYmd && current.slotIndex === item.slotIndex ? null : current,
                           );
                         }}
-                        className={`flex min-h-[24px] w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left text-[10px] font-medium transition sm:text-[11px] ${personalScheduleSurfaceClass(item.color)} disabled:cursor-default disabled:opacity-70`}
+                        className={`flex min-h-[24px] w-full items-center rounded-md border px-2 py-1 text-left text-[10px] font-semibold shadow-sm transition sm:text-[11px] ${personalScheduleSurfaceClass(item.color)} disabled:cursor-default disabled:opacity-70`}
                         title={isTouchLike ? undefined : item.title}
                       >
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${personalScheduleSwatchClass(item.color)}`} />
                         <span className="min-w-0 flex-1 truncate">{item.title}</span>
                       </button>
                     ))}
