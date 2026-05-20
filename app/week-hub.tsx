@@ -1050,6 +1050,9 @@ function WeekHubInner() {
   const effectiveUserIdRef = useRef<string | null>(null);
   const userOrderRef = useRef<string[]>([]);
   const [reorderMode, setReorderMode] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedDeleteUserIds, setSelectedDeleteUserIds] = useState<string[]>([]);
+  const [deleteUsersBusy, setDeleteUsersBusy] = useState(false);
 
   const [undoStack, setUndoStack] = useState<CellHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<CellHistoryEntry[]>([]);
@@ -2373,6 +2376,23 @@ function WeekHubInner() {
     return map;
   }, [data?.users, monthData?.users, yearData?.users]);
 
+  const selectedDeleteUserIdSet = useMemo(() => new Set(selectedDeleteUserIds), [selectedDeleteUserIds]);
+
+  const clearDeleteMode = useCallback(() => {
+    setDeleteMode(false);
+    setSelectedDeleteUserIds([]);
+  }, []);
+
+  const toggleDeleteUserSelection = useCallback((userId: string, checked: boolean) => {
+    setSelectedDeleteUserIds((current) => {
+      if (checked) {
+        if (current.includes(userId)) return current;
+        return [...current, userId];
+      }
+      return current.filter((id) => id !== userId);
+    });
+  }, []);
+
   const currentUsersForOrder = useMemo(() => {
     if (mode === 'week') return data?.users ?? [];
     if (mode === 'month') return monthData?.users ?? [];
@@ -2423,6 +2443,20 @@ function WeekHubInner() {
     if (!applied) return;
     writeLocalUserOrder(userOrderOwnerId, applied);
   }, [commitLocalUserOrder, currentUserOrderScope, currentUsersForOrder, userOrderOwnerId, writeLocalUserOrder]);
+
+  useEffect(() => {
+    if (editActive && reorderMode) return;
+    if (!deleteMode && selectedDeleteUserIds.length === 0) return;
+    clearDeleteMode();
+  }, [clearDeleteMode, deleteMode, editActive, reorderMode, selectedDeleteUserIds.length]);
+
+  useEffect(() => {
+    if (selectedDeleteUserIds.length === 0) return;
+    setSelectedDeleteUserIds((current) => {
+      const next = current.filter((id) => userLabelById.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [selectedDeleteUserIds.length, userLabelById]);
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -2564,40 +2598,94 @@ function WeekHubInner() {
     [apiKind, normalizeCurrentUserOrder, persistUserOrderChange, refreshCurrentView, scheduleKind],
   );
 
-  const deleteUser = useCallback(
-    async (userId: string) => {
-      const label = userLabelById.get(userId) ?? userId;
-      if (!window.confirm(`「${label}」を削除しますか？`)) return;
+  const deleteUsers = useCallback(
+    async (userIds: string[]) => {
+      const targets = Array.from(new Set(userIds.map((userId) => userId.trim()).filter((userId) => userId.length > 0)));
+      if (targets.length === 0) return;
+
+      setDeleteUsersBusy(true);
+      const deletedIds: string[] = [];
+      const failedIds: string[] = [];
+      const failedMessages: string[] = [];
 
       try {
-        const r = await fetch(`/api/users?id=${encodeURIComponent(userId)}`, {
-          method: 'DELETE',
-        });
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) {
-          const msg = typeof obj?.error === 'string' ? (obj.error as string) : `HTTP ${r.status}`;
-          showCellActionMsg(`削除に失敗しました: ${msg}`);
+        for (const userId of targets) {
+          const label = userLabelById.get(userId) ?? userId;
+          try {
+            const r = await fetch(`/api/users?id=${encodeURIComponent(userId)}`, {
+              method: 'DELETE',
+            });
+            const j = (await r.json().catch(() => null)) as unknown;
+            const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+            if (!r.ok || obj?.ok !== true) {
+              const msg = typeof obj?.error === 'string' ? (obj.error as string) : `HTTP ${r.status}`;
+              failedIds.push(userId);
+              failedMessages.push(`${label}: ${msg}`);
+              continue;
+            }
+            deletedIds.push(userId);
+          } catch {
+            failedIds.push(userId);
+            failedMessages.push(`${label}: 通信エラー`);
+          }
+        }
+
+        if (deletedIds.length > 0) {
+          const deletedIdSet = new Set(deletedIds);
+          if (selectedUserId && deletedIdSet.has(selectedUserId)) {
+            setSelectedUserId(null);
+          }
+
+          persistUserOrderChange((cur) => normalizeCurrentUserOrder(cur).filter((id) => !deletedIdSet.has(id)));
+          await refreshCurrentView();
+        }
+
+        if (failedIds.length === 0) {
+          clearDeleteMode();
+          showCellActionMsg(deletedIds.length === 1 ? '削除しました' : `${deletedIds.length}名削除しました`);
           return;
         }
 
-        if (selectedUserId === userId) {
-          setSelectedUserId(null);
+        setDeleteMode(true);
+        setSelectedDeleteUserIds(failedIds);
+        if (deletedIds.length > 0) {
+          showCellActionMsg(`${deletedIds.length}名削除 / ${failedIds.length}名失敗: ${failedMessages[0] ?? '削除に失敗しました'}`);
+        } else {
+          showCellActionMsg(`削除に失敗しました: ${failedMessages[0] ?? '不明なエラー'}`);
         }
-
-        persistUserOrderChange((cur) => {
-          const next = normalizeCurrentUserOrder(cur).filter((id) => id !== userId);
-          return effectiveUserIdRef.current === userId ? cur : next;
-        });
-
-        await refreshCurrentView();
-        showCellActionMsg('削除しました');
-      } catch {
-        showCellActionMsg('削除に失敗しました');
+      } finally {
+        setDeleteUsersBusy(false);
       }
     },
-    [normalizeCurrentUserOrder, persistUserOrderChange, refreshCurrentView, selectedUserId, showCellActionMsg, userLabelById],
+    [clearDeleteMode, normalizeCurrentUserOrder, persistUserOrderChange, refreshCurrentView, selectedUserId, showCellActionMsg, userLabelById],
   );
+
+  const handleDeleteUsersButton = useCallback(async () => {
+    if (!editActive || !reorderMode || deleteUsersBusy) return;
+    if (!deleteMode) {
+      setDeleteMode(true);
+      return;
+    }
+
+    if (selectedDeleteUserIds.length === 0) return;
+
+    const labels = selectedDeleteUserIds.map((userId) => userLabelById.get(userId) ?? userId);
+    const preview = labels.slice(0, 8).map((label) => `・${label}`).join('\n');
+    const remaining = labels.length - Math.min(labels.length, 8);
+    const confirmed = window.confirm(
+      [
+        `選択した従業員 ${labels.length} 名を削除しますか？`,
+        preview,
+        remaining > 0 ? `ほか ${remaining}名` : '',
+        'この操作は取り消せません。',
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
+    );
+    if (!confirmed) return;
+
+    await deleteUsers(selectedDeleteUserIds);
+  }, [deleteMode, deleteUsers, deleteUsersBusy, editActive, reorderMode, selectedDeleteUserIds, userLabelById]);
 
   const refreshSites = useCallback(async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -3203,6 +3291,40 @@ function WeekHubInner() {
                   >
                     {reorderMode ? '並べ替え: ON' : '並べ替え'}
                   </button>
+                ) : null}
+
+                {hasScheduleEditPermission && editActive && reorderMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteUsersButton()}
+                      disabled={deleteUsersBusy || (deleteMode && selectedDeleteUserIds.length === 0)}
+                      className={`rounded-md border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                        deleteMode
+                          ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70'
+                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black'
+                      }`}
+                      title={
+                        deleteMode
+                          ? selectedDeleteUserIds.length > 0
+                            ? '選択した従業員を削除'
+                            : '削除する従業員を選択してください'
+                          : '削除モードを開始'
+                      }
+                    >
+                      {deleteMode ? `削除${selectedDeleteUserIds.length > 0 ? ` (${selectedDeleteUserIds.length})` : ''}` : '削除'}
+                    </button>
+                    {deleteMode ? (
+                      <button
+                        type="button"
+                        onClick={clearDeleteMode}
+                        disabled={deleteUsersBusy}
+                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] text-zinc-500 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-400 dark:hover:bg-black"
+                      >
+                        終了
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
 
                 {selectedUserId ? (
@@ -4210,13 +4332,15 @@ function WeekHubInner() {
                   }}
                   userOrder={userOrder}
                   reorderMode={reorderMode}
+                  deleteMode={deleteMode}
                   onMoveUser={(userId, dir) => {
                     persistUserOrderChange((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
                       return next;
                     });
                   }}
-                  onDeleteUser={deleteUser}
+                  deleteSelectedUserIds={selectedDeleteUserIdSet}
+                  onDeleteSelectionChange={toggleDeleteUserSelection}
                   onCreateUser={createUser}
                   draggedSite={draggedSite}
                   selectedCell={selectedCell}
@@ -4481,13 +4605,15 @@ function WeekHubInner() {
                   }}
                   userOrder={userOrder}
                   reorderMode={reorderMode}
+                  deleteMode={deleteMode}
                   onMoveUser={(userId, dir) => {
                     persistUserOrderChange((cur) => {
                       const next = moveUserOrder(cur, userId, dir);
                       return next;
                     });
                   }}
-                  onDeleteUser={deleteUser}
+                  deleteSelectedUserIds={selectedDeleteUserIdSet}
+                  onDeleteSelectionChange={toggleDeleteUserSelection}
                   onCreateUser={createUser}
                 />
               </div>
@@ -4696,6 +4822,7 @@ function WeekHubInner() {
                   onOpenMonth={openMonthFromYear}
                   userOrder={userOrder}
                   reorderMode={reorderMode}
+                  deleteMode={deleteMode}
                   gridLayout={gridLayout}
                   nameColW={nameColW}
                   cellMinW={cellMinW}
@@ -4709,7 +4836,8 @@ function WeekHubInner() {
                       return next;
                     });
                   }}
-                  onDeleteUser={deleteUser}
+                  deleteSelectedUserIds={selectedDeleteUserIdSet}
+                  onDeleteSelectionChange={toggleDeleteUserSelection}
                 />
               </div>
             </>
@@ -4981,8 +5109,10 @@ function WeekGrid({
   historyHover,
   userOrder,
   reorderMode,
+  deleteMode,
   onMoveUser,
-  onDeleteUser,
+  deleteSelectedUserIds,
+  onDeleteSelectionChange,
   onCreateUser,
   draggedSite,
   selectedCell,
@@ -5036,8 +5166,10 @@ function WeekGrid({
   historyHover: { userId: string; day: string } | null;
   userOrder: string[];
   reorderMode: boolean;
+  deleteMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
-  onDeleteUser: (userId: string) => void | Promise<void>;
+  deleteSelectedUserIds: ReadonlySet<string>;
+  onDeleteSelectionChange: (userId: string, checked: boolean) => void;
   onCreateUser: (
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
@@ -5271,11 +5403,13 @@ function WeekGrid({
                   onAssigned={onAssigned}
                   historyHover={historyHover}
                   reorderMode={reorderMode}
+                  deleteMode={deleteMode}
                   moveUpDisabled={idx === 0}
                   moveDownDisabled={idx === users.length - 1}
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
-                  onDeleteUser={() => onDeleteUser(u.id)}
+                  deleteSelected={deleteSelectedUserIds.has(u.id)}
+                  onDeleteSelectionChange={(checked) => onDeleteSelectionChange(u.id, checked)}
                   onStartNameColResize={onStartNameColResize}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={draggedSite}
@@ -5338,8 +5472,10 @@ function MonthGrid({
   historyHover,
   userOrder,
   reorderMode,
+  deleteMode,
   onMoveUser,
-  onDeleteUser,
+  deleteSelectedUserIds,
+  onDeleteSelectionChange,
   onCreateUser,
 }: {
   monthKey: string;
@@ -5377,8 +5513,10 @@ function MonthGrid({
   historyHover: { userId: string; day: string } | null;
   userOrder: string[];
   reorderMode: boolean;
+  deleteMode: boolean;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
-  onDeleteUser: (userId: string) => void | Promise<void>;
+  deleteSelectedUserIds: ReadonlySet<string>;
+  onDeleteSelectionChange: (userId: string, checked: boolean) => void;
   onCreateUser: (
     input: { name: string; email: string },
   ) => Promise<{ ok: true; userId: string } | { ok: false; error: string }>;
@@ -5616,11 +5754,13 @@ function MonthGrid({
                   onAssigned={onAssigned}
                   historyHover={historyHover}
                   reorderMode={reorderMode}
+                  deleteMode={deleteMode}
                   moveUpDisabled={idx === 0}
                   moveDownDisabled={idx === users.length - 1}
                   onMoveUp={() => onMoveUser(u.id, -1)}
                   onMoveDown={() => onMoveUser(u.id, 1)}
-                  onDeleteUser={() => onDeleteUser(u.id)}
+                  deleteSelected={deleteSelectedUserIds.has(u.id)}
+                  onDeleteSelectionChange={(checked) => onDeleteSelectionChange(u.id, checked)}
                   onStartNameColResize={onStartNameColResize}
                   rowCellClassName={isSelectedUser ? selectedBg : baseBg}
                   draggedSite={null}
@@ -5719,6 +5859,7 @@ function YearGrid({
   onOpenMonth,
   userOrder,
   reorderMode,
+  deleteMode,
   gridLayout,
   nameColW,
   cellMinW,
@@ -5727,7 +5868,8 @@ function YearGrid({
   cellBg,
   onStartNameColResize,
   onMoveUser,
-  onDeleteUser,
+  deleteSelectedUserIds,
+  onDeleteSelectionChange,
 }: {
   data: YearSummaryApiResponse | null;
   selectedUserId: string | null;
@@ -5735,6 +5877,7 @@ function YearGrid({
   onOpenMonth: (month: string, userId: string) => void;
   userOrder: string[];
   reorderMode: boolean;
+  deleteMode: boolean;
   gridLayout: GridLayout;
   nameColW: number;
   cellMinW: number;
@@ -5743,7 +5886,8 @@ function YearGrid({
   cellBg: CellBg;
   onStartNameColResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onMoveUser: (userId: string, dir: -1 | 1) => void;
-  onDeleteUser: (userId: string) => void | Promise<void>;
+  deleteSelectedUserIds: ReadonlySet<string>;
+  onDeleteSelectionChange: (userId: string, checked: boolean) => void;
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const months = useMemo(() => data?.months ?? [], [data?.months]);
@@ -5888,53 +6032,52 @@ function YearGrid({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2" style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{u.name ?? u.email ?? u.id}</div>
-                        <div className="mt-0.5 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
-                          合計: {sum.days}日 / {sum.entries}件
+                      <div className="min-w-0 flex items-start gap-2">
+                        {deleteMode ? (
+                          <input
+                            type="checkbox"
+                            checked={deleteSelectedUserIds.has(u.id)}
+                            onChange={(event) => onDeleteSelectionChange(u.id, event.target.checked)}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
+                            aria-label={`${u.name ?? u.email ?? u.id} を削除対象にする`}
+                          />
+                        ) : null}
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{u.name ?? u.email ?? u.id}</div>
+                          <div className="mt-0.5 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                            合計: {sum.days}日 / {sum.entries}件
+                          </div>
                         </div>
                       </div>
                       {reorderMode ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onMoveUser(u.id, -1);
-                              }}
-                              className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                              aria-label="上へ"
-                            >
-                              ▲
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === users.length - 1}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onMoveUser(u.id, 1);
-                              }}
-                              className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                              aria-label="下へ"
-                            >
-                              ▼
-                            </button>
-                          </div>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
+                            disabled={idx === 0}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              void onDeleteUser(u.id);
+                              onMoveUser(u.id, -1);
                             }}
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
-                            aria-label="削除"
+                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            aria-label="上へ"
                           >
-                            削除
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === users.length - 1}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onMoveUser(u.id, 1);
+                            }}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            aria-label="下へ"
+                          >
+                            ▼
                           </button>
                         </div>
                       ) : null}
@@ -6005,11 +6148,13 @@ function Row({
   onAssigned,
   historyHover,
   reorderMode,
+  deleteMode,
   moveUpDisabled,
   moveDownDisabled,
   onMoveUp,
   onMoveDown,
-  onDeleteUser,
+  deleteSelected,
+  onDeleteSelectionChange,
   onStartNameColResize,
   rowCellClassName,
   draggedSite,
@@ -6053,11 +6198,13 @@ function Row({
   onAssigned: () => void | Promise<void>;
   historyHover: { userId: string; day: string } | null;
   reorderMode?: boolean;
+  deleteMode?: boolean;
   moveUpDisabled?: boolean;
   moveDownDisabled?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
-  onDeleteUser?: () => void | Promise<void>;
+  deleteSelected?: boolean;
+  onDeleteSelectionChange?: (checked: boolean) => void;
   onStartNameColResize?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   rowCellClassName?: string;
   draggedSite: SiteItem | null;
@@ -7944,53 +8091,52 @@ function Row({
           className="flex items-start justify-between gap-2"
           style={{ minHeight: Math.max(32, Math.round(cellMinH || 0)) }}
         >
-          <div
-            data-user-label
-            className={`min-w-0 truncate font-medium ${isCurrentUser ? 'text-red-500 dark:text-red-300' : ''}`}
-          >
-            {user.name ?? user.email ?? user.id}
+          <div className="min-w-0 flex items-start gap-2">
+            {deleteMode ? (
+              <input
+                type="checkbox"
+                checked={deleteSelected === true}
+                onChange={(event) => onDeleteSelectionChange?.(event.target.checked)}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-black"
+                aria-label={`${user.name ?? user.email ?? user.id} を削除対象にする`}
+              />
+            ) : null}
+            <div
+              data-user-label
+              className={`min-w-0 truncate font-medium ${isCurrentUser ? 'text-red-500 dark:text-red-300' : ''}`}
+            >
+              {user.name ?? user.email ?? user.id}
+            </div>
           </div>
           {reorderMode ? (
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={moveUpDisabled}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onMoveUp?.();
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  aria-label="上へ"
-                >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  disabled={moveDownDisabled}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onMoveDown?.();
-                  }}
-                  className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  aria-label="下へ"
-                >
-                  ▼
-                </button>
-              </div>
+            <div className="flex items-center gap-1">
               <button
                 type="button"
+                disabled={moveUpDisabled}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  void onDeleteUser?.();
+                  onMoveUp?.();
                 }}
-                className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
-                aria-label="削除"
+                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="上へ"
               >
-                削除
+                ▲
+              </button>
+              <button
+                type="button"
+                disabled={moveDownDisabled}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onMoveDown?.();
+                }}
+                className="rounded-md border border-zinc-200 bg-white/60 px-1.5 py-0.5 text-[10px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                aria-label="下へ"
+              >
+                ▼
               </button>
             </div>
           ) : null}
