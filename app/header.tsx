@@ -2039,20 +2039,6 @@ export default function AppHeader() {
               編集
             </button>
 
-            <button
-              type="button"
-              data-color-edit-id="header-action-reload"
-              data-testid="header-action-reload"
-              onClick={() => {
-                if (typeof window === 'undefined') return;
-                window.location.reload();
-              }}
-              title="リロード"
-              className="mh-btn"
-            >
-              リロード
-            </button>
-
             <div
               className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}
               onPointerEnter={() => {
@@ -2253,7 +2239,7 @@ export default function AppHeader() {
           <div
             className={`${isMobileBrowser ? 'hidden' : 'flex'} ${
               isElectronShell
-                ? 'ml-1 shrink-0 flex-nowrap items-center gap-1'
+                ? 'ml-1 shrink-0 flex-nowrap items-end gap-1'
                 : 'min-w-0 max-w-full flex-wrap items-center justify-end gap-1'
             }`}
           >
@@ -2414,28 +2400,90 @@ export default function AppHeader() {
             ) : null}
           </div>
 
-          <Link
-            href="/alerts"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:alerts"
-            onClick={() => {
-              navIntentRef.current = 'push';
-            }}
-            className={`relative hidden rounded-md border px-3 py-2 text-[11px] lg:inline-flex ${
-              isAlerts
-                ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
-                : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
-            }`}
-            title="アラート（通知/現場単価/送信失敗）へ"
-            aria-current={isAlerts ? 'page' : undefined}
-          >
-            アラート
-            {!alertLoading && alertCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                {alertCount > 99 ? '99+' : alertCount}
-              </span>
-            )}
-          </Link>
+          {isElectronShell && pathname === '/' ? (
+            <div className="flex shrink-0 flex-col items-start gap-0.5">
+              <div className="flex shrink-0 flex-nowrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:invoice"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                    aria-hidden="true"
+                  />
+                  <span>請求未</span>
+                </div>
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:report"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
+                    aria-hidden="true"
+                  />
+                  <span>報告未</span>
+                </div>
+                <div
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:alert-legend:unassigned"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+                >
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                    aria-hidden="true"
+                  />
+                  <span>未配置</span>
+                </div>
+              </div>
+              <Link
+                href="/alerts"
+                data-color-edit-slot="button"
+                data-color-edit-id="header:nav:alerts"
+                onClick={() => {
+                  navIntentRef.current = 'push';
+                }}
+                className={`relative inline-flex rounded-md border px-3 py-2 text-[11px] ${
+                  isAlerts
+                    ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
+                    : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
+                }`}
+                title="アラート（通知/現場単価/送信失敗）へ"
+                aria-current={isAlerts ? 'page' : undefined}
+              >
+                アラート
+                {!alertLoading && alertCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                    {alertCount > 99 ? '99+' : alertCount}
+                  </span>
+                )}
+              </Link>
+            </div>
+          ) : (
+            <Link
+              href="/alerts"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:nav:alerts"
+              onClick={() => {
+                navIntentRef.current = 'push';
+              }}
+              className={`relative hidden rounded-md border px-3 py-2 text-[11px] lg:inline-flex ${
+                isAlerts
+                  ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
+                  : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
+              }`}
+              title="アラート（通知/現場単価/送信失敗）へ"
+              aria-current={isAlerts ? 'page' : undefined}
+            >
+              アラート
+              {!alertLoading && alertCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                  {alertCount > 99 ? '99+' : alertCount}
+                </span>
+              )}
+            </Link>
+          )}
           <Link
             href="/?mode=week&kind=normal"
             data-color-edit-slot="button"
@@ -2640,43 +2688,6 @@ export default function AppHeader() {
             スケジュール
           </Link>
 
-          {pathname === '/' && isElectronShell ? (
-            <div className="ml-1 flex shrink-0 flex-nowrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
-              <div
-                data-color-edit-slot="button"
-                data-color-edit-id="header:alert-legend:invoice"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
-                  aria-hidden="true"
-                />
-                <span>請求未</span>
-              </div>
-              <div
-                data-color-edit-slot="button"
-                data-color-edit-id="header:alert-legend:report"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
-                  aria-hidden="true"
-                />
-                <span>報告未</span>
-              </div>
-              <div
-                data-color-edit-slot="button"
-                data-color-edit-id="header:alert-legend:unassigned"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
-                  aria-hidden="true"
-                />
-                <span>未配置</span>
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
       </div>
