@@ -182,13 +182,6 @@ function createAppMenu(win) {
     {
       label: '表示',
       submenu: [
-        { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => win.webContents.reload() },
-        {
-          label: 'キャッシュ無視で再読み込み',
-          accelerator: 'CmdOrCtrl+Shift+R',
-          click: () => win.webContents.reloadIgnoringCache(),
-        },
-        { type: 'separator' },
         { role: 'togglefullscreen', label: '全画面' },
       ],
     },
@@ -216,8 +209,14 @@ function createAppMenu(win) {
     },
     {
       label: 'リロード',
-      accelerator: 'F5',
-      click: () => win.webContents.reload(),
+      submenu: [
+        { label: '再読み込み', accelerator: 'F5', click: () => win.webContents.reload() },
+        {
+          label: 'キャッシュ無視で再読み込み',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => win.webContents.reloadIgnoringCache(),
+        },
+      ],
     },
   ];
 
