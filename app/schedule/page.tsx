@@ -10,7 +10,7 @@ import {
   type PersonalScheduleDay,
   type PersonalScheduleItem,
 } from '@/shared/personal-schedule';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 
 type MonthApiResponse = {
   ok: true;
@@ -33,6 +33,17 @@ type EditorState = {
   title: string;
   note: string;
   color: PersonalScheduleColor;
+};
+
+type ContentPreviewState = {
+  dayYmd: string;
+  slotIndex: number;
+  title: string;
+  note: string;
+  color: PersonalScheduleColor;
+  x: number;
+  y: number;
+  width: number;
 };
 
 const WEEKDAY_LABELS = [
@@ -121,8 +132,14 @@ function removeDayItem(days: PersonalScheduleDay[], dayYmd: string, slotIndex: n
   });
 }
 
-function emptySlots() {
-  return Array.from({ length: PERSONAL_SCHEDULE_SLOT_COUNT }, (_, index) => index);
+function filledItems(day: PersonalScheduleDay | null) {
+  return day?.items.filter((item): item is PersonalScheduleItem => item !== null) ?? [];
+}
+
+function nextOpenSlotIndex(day: PersonalScheduleDay | null) {
+  if (!day) return 0;
+  const index = day.items.findIndex((item) => item === null);
+  return index >= 0 ? index : null;
 }
 
 export default function PersonalSchedulePage() {
@@ -134,6 +151,7 @@ export default function PersonalSchedulePage() {
   const [isTouchLike, setIsTouchLike] = useState(false);
   const [menuState, setMenuState] = useState<SlotMenuState | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const [previewState, setPreviewState] = useState<ContentPreviewState | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
 
@@ -184,16 +202,29 @@ export default function PersonalSchedulePage() {
   useEffect(() => {
     setMenuState(null);
     setEditorState(null);
+    setPreviewState(null);
   }, [month]);
+
+  useEffect(() => {
+    if (!previewState) return;
+    const closePreview = () => setPreviewState(null);
+    window.addEventListener('resize', closePreview);
+    window.addEventListener('scroll', closePreview, true);
+    return () => {
+      window.removeEventListener('resize', closePreview);
+      window.removeEventListener('scroll', closePreview, true);
+    };
+  }, [previewState]);
 
   const dayMap = useMemo(() => new Map(days.map((day) => [day.dayYmd, day])), [days]);
   const calendarCells = useMemo(() => buildCalendarCells(month), [month]);
   const title = useMemo(() => monthTitle(month), [month]);
 
   const openSlotMenu = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement>, dayYmd: string, slotIndex: number, item: PersonalScheduleItem | null) => {
+    (event: ReactMouseEvent<HTMLElement>, dayYmd: string, slotIndex: number, item: PersonalScheduleItem | null) => {
       event.preventDefault();
       event.stopPropagation();
+      setPreviewState(null);
       const rect = event.currentTarget.getBoundingClientRect();
       const width = typeof window !== 'undefined' ? window.innerWidth : 360;
       const height = typeof window !== 'undefined' ? window.innerHeight : 640;
@@ -207,6 +238,42 @@ export default function PersonalSchedulePage() {
     },
     [isTouchLike],
   );
+
+  const openNewItemMenu = useCallback(
+    (event: ReactMouseEvent<HTMLElement>, dayYmd: string, day: PersonalScheduleDay | null) => {
+      const slotIndex = nextOpenSlotIndex(day);
+      if (slotIndex === null) {
+        event.preventDefault();
+        event.stopPropagation();
+        setError(`この日は${PERSONAL_SCHEDULE_SLOT_COUNT}件まで入力済みです`);
+        return;
+      }
+      openSlotMenu(event, dayYmd, slotIndex, null);
+    },
+    [openSlotMenu],
+  );
+
+  const openContentPreview = useCallback((target: HTMLElement, item: PersonalScheduleItem) => {
+    if (!item.note || typeof window === 'undefined') {
+      setPreviewState(null);
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const preferredTop = rect.bottom + 8;
+    const top = preferredTop + 132 <= window.innerHeight ? preferredTop : Math.max(12, rect.top - 132);
+    setPreviewState({
+      dayYmd: item.dayYmd,
+      slotIndex: item.slotIndex,
+      title: item.title,
+      note: item.note,
+      color: item.color,
+      x: left,
+      y: top,
+      width,
+    });
+  }, []);
 
   const openEditor = useCallback((dayYmd: string, slotIndex: number, item: PersonalScheduleItem | null) => {
     setEditorState({
@@ -313,16 +380,16 @@ export default function PersonalSchedulePage() {
   }, [menuState]);
 
   return (
-    <main className="mx-auto max-w-[1500px] p-3 sm:p-4">
-      <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-black/80">
+    <main className="mx-auto max-w-[1600px] p-2 sm:p-3">
+      <div className="rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm dark:border-zinc-800 dark:bg-black/80 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">スケジュール</h1>
             <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              自分専用の月予定です。予定セルは右クリック、スマホはタップで編集します。
+              入力済みの予定だけ表示します。PC はタイトルにカーソルで内容確認、右クリックで編集できます。
             </div>
             <div className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-              スマホは画面幅に合わせた最小表示です。必要ならブラウザーの拡大操作でズームできます。
+              スマホはタイトルをタップで内容表示、日付セルの空白をタップで新規入力です。
             </div>
           </div>
 
@@ -358,10 +425,10 @@ export default function PersonalSchedulePage() {
         ) : null}
 
         <div className="mt-4 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800 sm:px-4 sm:py-3">
             <div className="flex items-baseline gap-3 text-zinc-950 dark:text-zinc-50">
-              <span className="text-4xl font-black leading-none">{title.monthName}</span>
-              <span className="text-3xl font-semibold leading-none">{title.year}</span>
+              <span className="text-3xl font-black leading-none sm:text-4xl">{title.monthName}</span>
+              <span className="text-2xl font-semibold leading-none sm:text-3xl">{title.year}</span>
             </div>
             {loading ? <div className="text-xs text-zinc-500 dark:text-zinc-400">読み込み中…</div> : null}
           </div>
@@ -370,25 +437,39 @@ export default function PersonalSchedulePage() {
             {WEEKDAY_LABELS.map((day) => (
               <div
                 key={day.key}
-                className={`border-r border-zinc-200 px-2 py-2 text-center text-xs font-semibold last:border-r-0 dark:border-zinc-800 ${day.className}`}
+                className={`border-r border-zinc-200 px-1 py-1.5 text-center text-[11px] font-semibold last:border-r-0 dark:border-zinc-800 sm:px-2 sm:py-2 sm:text-xs ${day.className}`}
               >
                 {day.label}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7">
+          <div
+            className="grid grid-cols-7 auto-rows-fr"
+            style={isTouchLike ? undefined : { height: 'clamp(520px, calc(100vh - 220px), 760px)' }}
+          >
             {calendarCells.map((cell) => {
               const day = dayMap.get(cell.dayYmd) ?? null;
+              const items = filledItems(day);
               return (
                 <div
                   key={cell.key}
-                  className={`border-r border-b border-zinc-200 p-2 align-top last:border-r-0 dark:border-zinc-800 ${
+                  onContextMenu={(event) => {
+                    if (!cell.inMonth || saving) return;
+                    openNewItemMenu(event, cell.dayYmd, day);
+                  }}
+                  onClick={(event) => {
+                    if (!isTouchLike || !cell.inMonth || saving) return;
+                    const target = event.target as HTMLElement;
+                    if (target.closest('button')) return;
+                    openNewItemMenu(event, cell.dayYmd, day);
+                  }}
+                  className={`relative flex min-h-[92px] min-w-0 flex-col border-r border-b border-zinc-200 p-1.5 align-top last:border-r-0 dark:border-zinc-800 sm:p-2 ${
                     cell.inMonth ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-50/60 dark:bg-zinc-950/50'
                   } ${cell.isToday ? 'ring-1 ring-inset ring-blue-400 dark:ring-blue-500' : ''}`}
                 >
                   <div
-                    className={`mb-2 text-sm font-semibold ${
+                    className={`mb-1 text-xs font-semibold sm:text-sm ${
                       cell.inMonth
                         ? cell.isSun
                           ? 'text-red-600 dark:text-red-400'
@@ -401,40 +482,34 @@ export default function PersonalSchedulePage() {
                     {cell.dayNumber}
                   </div>
 
-                  <div className="space-y-1">
-                    {emptySlots().map((slotIndex) => {
-                      const item = day?.items[slotIndex] ?? null;
-                      const filled = Boolean(item);
-                      const slotClass = filled && item
-                        ? personalScheduleSurfaceClass(item.color)
-                        : 'border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-600 dark:hover:bg-zinc-900';
-                      return (
-                        <button
-                          key={`${cell.dayYmd}:${slotIndex}`}
-                          type="button"
-                          disabled={!cell.inMonth || saving}
-                          onClick={(event) => {
-                            if (!isTouchLike) return;
-                            openSlotMenu(event, cell.dayYmd, slotIndex, item);
-                          }}
-                          onContextMenu={(event) => openSlotMenu(event, cell.dayYmd, slotIndex, item)}
-                          className={`flex min-h-[44px] w-full items-start gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition sm:min-h-[52px] ${slotClass} disabled:cursor-default disabled:opacity-70`}
-                          title={item ? [item.title, item.note].filter(Boolean).join('\n') : '空き枠'}
-                        >
-                          <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-current opacity-70" />
-                          <span className="min-w-0 flex-1">
-                            {item ? (
-                              <>
-                                <span className="block truncate font-medium">{item.title}</span>
-                                <span className="mt-0.5 block truncate opacity-75">{item.note ?? ' '}</span>
-                              </>
-                            ) : (
-                              <span className="block truncate">空き枠</span>
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
+                  <div className="min-h-0 flex-1 space-y-1 overflow-hidden">
+                    {items.map((item) => (
+                      <button
+                        key={`${item.dayYmd}:${item.slotIndex}`}
+                        type="button"
+                        disabled={!cell.inMonth || saving}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!isTouchLike) return;
+                          openSlotMenu(event, item.dayYmd, item.slotIndex, item);
+                        }}
+                        onContextMenu={(event) => openSlotMenu(event, item.dayYmd, item.slotIndex, item)}
+                        onMouseEnter={(event) => {
+                          if (isTouchLike) return;
+                          openContentPreview(event.currentTarget, item);
+                        }}
+                        onMouseLeave={() => {
+                          setPreviewState((current) =>
+                            current?.dayYmd === item.dayYmd && current.slotIndex === item.slotIndex ? null : current,
+                          );
+                        }}
+                        className={`flex min-h-[24px] w-full items-center gap-1.5 rounded-md border px-1.5 py-1 text-left text-[10px] font-medium transition sm:text-[11px] ${personalScheduleSurfaceClass(item.color)} disabled:cursor-default disabled:opacity-70`}
+                        title={isTouchLike ? undefined : item.title}
+                      >
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${personalScheduleSwatchClass(item.color)}`} />
+                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               );
@@ -442,6 +517,23 @@ export default function PersonalSchedulePage() {
           </div>
         </div>
       </div>
+
+      {previewState && !isTouchLike ? (
+        <div
+          className="pointer-events-none fixed z-[88] rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-2xl backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95"
+          style={{ left: `${previewState.x}px`, top: `${previewState.y}px`, width: `${previewState.width}px` }}
+        >
+          <div className="flex items-start gap-2">
+            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${personalScheduleSwatchClass(previewState.color)}`} />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{previewState.title}</div>
+              <div className="mt-1 whitespace-pre-wrap text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                {previewState.note}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {menuState ? (
         <div
@@ -458,13 +550,30 @@ export default function PersonalSchedulePage() {
           <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             {menuState.dayYmd} / 枠 {menuState.slotIndex + 1}
           </div>
+          <div className="border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
+            {menuState.item ? (
+              <div className="flex items-start gap-2">
+                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${personalScheduleSwatchClass(menuState.item.color)}`} />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{menuState.item.title}</div>
+                  <div className="mt-1 whitespace-pre-wrap text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                    {menuState.item.note || '内容は未入力です'}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                未入力です。ここに新しい予定を追加できます。
+              </div>
+            )}
+          </div>
           <div className="p-2">
             <button
               type="button"
               onClick={() => openEditor(menuState.dayYmd, menuState.slotIndex, menuState.item)}
               className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
             >
-              編集
+              {menuState.item ? '編集' : '入力'}
             </button>
             <button
               type="button"
@@ -478,7 +587,7 @@ export default function PersonalSchedulePage() {
           <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             色編集
           </div>
-          <div className="grid grid-cols-5 gap-2 p-3">
+          <div className="grid grid-cols-6 gap-2 p-3">
             {PERSONAL_SCHEDULE_COLOR_OPTIONS.map((color) => {
               const selected = menuState.item?.color === color.value;
               return (
@@ -525,7 +634,7 @@ export default function PersonalSchedulePage() {
               </label>
 
               <label className="block text-xs text-zinc-500 dark:text-zinc-400">
-                メモ
+                内容
                 <textarea
                   rows={4}
                   maxLength={500}
@@ -538,7 +647,7 @@ export default function PersonalSchedulePage() {
               </label>
 
               <div className="text-xs text-zinc-500 dark:text-zinc-400">色</div>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {PERSONAL_SCHEDULE_COLOR_OPTIONS.map((color) => {
                   const selected = editorState.color === color.value;
                   return (
