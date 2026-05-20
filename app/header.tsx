@@ -2209,7 +2209,7 @@ export default function AppHeader() {
               ) : null}
             </div>
 
-            {pathname === '/' ? (
+            {pathname === '/' && !isElectronShell ? (
               <div className="ml-0 hidden min-w-0 shrink-0 flex-nowrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
                 <div
                   data-color-edit-slot="button"
@@ -2253,7 +2253,7 @@ export default function AppHeader() {
           <div
             className={`${isMobileBrowser ? 'hidden' : 'flex'} ${
               isElectronShell
-                ? 'ml-auto shrink-0 flex-nowrap items-center gap-1'
+                ? 'ml-1 shrink-0 flex-nowrap items-center gap-1'
                 : 'min-w-0 max-w-full flex-wrap items-center justify-end gap-1'
             }`}
           >
@@ -2639,6 +2639,44 @@ export default function AppHeader() {
           >
             スケジュール
           </Link>
+
+          {pathname === '/' && isElectronShell ? (
+            <div className="ml-1 flex shrink-0 flex-nowrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
+              <div
+                data-color-edit-slot="button"
+                data-color-edit-id="header:alert-legend:invoice"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                  aria-hidden="true"
+                />
+                <span>請求未</span>
+              </div>
+              <div
+                data-color-edit-slot="button"
+                data-color-edit-id="header:alert-legend:report"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
+                  aria-hidden="true"
+                />
+                <span>報告未</span>
+              </div>
+              <div
+                data-color-edit-slot="button"
+                data-color-edit-id="header:alert-legend:unassigned"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                  aria-hidden="true"
+                />
+                <span>未配置</span>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
       </div>
