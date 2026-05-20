@@ -887,9 +887,6 @@ function MobileWeekHubInner() {
       ? weekGridPrefs.cellMinHComfortable
       : weekGridPrefs.cellMinHCompact;
   }, [weekGridPrefs.cellMinHComfortable, weekGridPrefs.cellMinHCompact, weekGridPrefs.gridLayout]);
-  const mobileCellPreviewLineClamp = useMemo(() => {
-    return weekGridCellMinH >= 64 ? 3 : 2;
-  }, [weekGridCellMinH]);
 
   const weekGridTemplateColumns = useMemo(() => {
     return `${buildNameColumnTrack(weekGridPrefs.nameColW)} repeat(7, ${buildDayColumnTrack(weekGridPrefs.cellMinW)})`;
@@ -1174,14 +1171,7 @@ function MobileWeekHubInner() {
                                     aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
                                     data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
                                   >
-                                    <span
-                                      className={`block overflow-hidden whitespace-normal break-words leading-tight ${hasMultipleEntries ? 'pr-4' : ''}`}
-                                      style={{
-                                        display: '-webkit-box',
-                                        WebkitBoxOrient: 'vertical',
-                                        WebkitLineClamp: mobileCellPreviewLineClamp,
-                                      }}
-                                    >
+                                    <span className={`block overflow-hidden whitespace-nowrap leading-tight ${hasMultipleEntries ? 'pr-4' : ''}`}>
                                       {renderScheduleEntryLabel(previewLabel)}
                                     </span>
                                     {hasMultipleEntries ? (
