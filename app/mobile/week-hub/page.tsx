@@ -1303,7 +1303,10 @@ function MobileWeekHubInner() {
                                     aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
                                     data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
                                   >
-                                    <span className={`block overflow-hidden whitespace-nowrap leading-tight ${hasMultipleEntries ? 'pr-4' : ''}`}>
+                                    <span
+                                      className="block overflow-hidden whitespace-nowrap leading-tight"
+                                      style={hasMultipleEntries ? { maxWidth: 'calc(100% - 1rem)' } : undefined}
+                                    >
                                       {renderScheduleEntryLabel(previewLabel)}
                                     </span>
                                     {hasMultipleEntries ? (

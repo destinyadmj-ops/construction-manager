@@ -214,6 +214,11 @@ function createAppMenu(win) {
         },
       ],
     },
+    {
+      label: 'リロード',
+      accelerator: 'F5',
+      click: () => win.webContents.reload(),
+    },
   ];
 
   const menu = Menu.buildFromTemplate(template);
