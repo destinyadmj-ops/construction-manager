@@ -1371,10 +1371,14 @@ function MobileWeekHubInner() {
                                   <button
                                     type="button"
                                     onClick={(event) => openPersonalScheduleMenu(event, `${userLabel(user)} / ${day.key}`, day.key, personalScheduleDay)}
-                                    className="absolute bottom-1 right-1 z-10 flex min-w-[1.5rem] items-center justify-center rounded-full border border-emerald-300 bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-lg shadow-emerald-900/20 dark:border-emerald-700 dark:bg-emerald-600"
+                                    className="absolute bottom-1 right-1 z-10 flex items-center gap-1 rounded px-0.5 py-0.5 text-[11px] font-bold leading-none text-emerald-600 drop-shadow-[0_1px_2px_rgba(0,0,0,0.28)] transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                                     aria-label={`${day.key} の個人スケジュール ${personalScheduleDay.count}件`}
                                   >
-                                    {personalScheduleDay.count}
+                                    <span
+                                      aria-hidden="true"
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_2px_rgba(255,255,255,0.95)] dark:shadow-[0_0_0_2px_rgba(9,9,11,0.95)]"
+                                    />
+                                    <span className="tabular-nums">{personalScheduleDay.count}</span>
                                   </button>
                                 ) : null}
                               </div>
