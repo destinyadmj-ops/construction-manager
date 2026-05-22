@@ -396,18 +396,18 @@ export default function SiteWorkSlipsPage() {
               <div className="text-xs text-zinc-400 dark:text-zinc-600">まだファイルがありません。</div>
             ) : (
               workSlips.map((item) => (
-                <a
+                <button
                   key={item.id}
-                  href={`/api/documents/${encodeURIComponent(item.id)}/download`}
-                  className="group flex flex-col items-center justify-center w-36 h-36 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:bg-cyan-50 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-cyan-900/30 transition"
+                  type="button"
+                  onClick={() => window.location.assign(`/site-ledger/work-slips/${encodeURIComponent(item.id)}`)}
+                  className="group flex flex-col items-center justify-center w-36 h-36 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:bg-cyan-50 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-cyan-900/30 transition cursor-pointer"
                   title={item.fileName}
-                  download
                 >
                   <span className="text-4xl mb-2">{excelIcon(item.fileName)}</span>
                   <span className="font-semibold text-sm text-zinc-800 dark:text-zinc-100 mb-1 text-center truncate w-full" title={item.fileName}>{item.fileName}</span>
                   <span className="text-xs text-zinc-500 dark:text-zinc-300 text-center">{formatBytes(item.sizeBytes)}</span>
-                  <span className="mt-2 text-[10px] text-cyan-600 group-hover:underline">ダウンロード</span>
-                </a>
+                  <span className="mt-2 text-[10px] text-cyan-600 group-hover:underline">編集</span>
+                </button>
               ))
             )}
           </div>
