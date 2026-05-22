@@ -68,6 +68,11 @@ type ScheduleEntryDisplay = {
   color: LabelColor;
 };
 
+type NormalizedCellGroup = {
+  items: Array<{ label: string; color: LabelColor; kind: string | null }>;
+  note: string | null;
+};
+
 type ScheduleEntryTarget = {
   entry: string;
   color: LabelColor;
@@ -205,17 +210,20 @@ function labelTextClass(color: LabelColor): string {
   return 'text-pink-600 dark:text-pink-400';
 }
 
+function groupDisplayEntry(group: NormalizedCellGroup): ScheduleEntryDisplay | null {
+  const labels = group.items.map((entry) => entry.label.trim()).filter((entry) => entry.length > 0);
+  const entry = formatScheduleCellGroupDisplayValue(labels, group.note) ?? '';
+  if (!entry) return null;
+  return {
+    entry,
+    color: group.items[0]?.color ?? 'default',
+  };
+}
+
 function cellEntries(cell: ApiCell | null | undefined): ScheduleEntryDisplay[] {
   return cellGroups(cell)
-    .map((group) => {
-      const labels = group.items.map((entry) => entry.label.trim()).filter((entry) => entry.length > 0);
-      const note = typeof group.note === 'string' ? group.note.trim() || null : null;
-      return {
-        entry: formatScheduleCellGroupDisplayValue(labels, note) ?? '',
-        color: group.items[0]?.color ?? 'default',
-      };
-    })
-    .filter((entry): entry is ScheduleEntryDisplay => entry.entry.length > 0);
+    .map((group) => groupDisplayEntry(group))
+    .filter((entry): entry is ScheduleEntryDisplay => Boolean(entry?.entry));
 }
 
 function describeScheduleEntry(entry: string) {
@@ -263,7 +271,7 @@ function renderScheduleEntryLabel(entry: string, color: LabelColor = 'default') 
   );
 }
 
-function cellGroups(cell: ApiCell | null | undefined) {
+function cellGroups(cell: ApiCell | null | undefined): NormalizedCellGroup[] {
   if (Array.isArray(cell?.groups)) {
     return cell.groups
       .map((group) => {
@@ -286,7 +294,7 @@ function cellGroups(cell: ApiCell | null | undefined) {
           note: typeof group.note === 'string' ? group.note.trim() || null : null,
         };
       })
-      .filter((group): group is { items: Array<{ label: string; color: LabelColor; kind: string | null }>; note: string | null } => !!group)
+      .filter((group): group is NormalizedCellGroup => !!group)
       .slice(0, 4);
   }
 
@@ -297,6 +305,39 @@ function cellGroups(cell: ApiCell | null | undefined) {
     }))
     .filter((entry): entry is { label: string; color: LabelColor } => entry.label.length > 0)
     .map((entry) => ({ items: [{ label: entry.label, color: entry.color, kind: 'site' as const }], note: null }));
+}
+
+function resolveScheduleGroupTargets(
+  group: NormalizedCellGroup,
+  siteLookupByScheduleEntry: Map<string, SiteLookupValue>,
+): ScheduleEntryTarget[] {
+  const itemTargets = group.items.map<ScheduleEntryTarget>((entry) => {
+    const matchedSite = normalizeScheduleCellEntryKind(entry.kind) === 'site'
+      ? siteLookupByScheduleEntry.get(normalizeSiteLookupKey(entry.label)) ?? null
+      : null;
+
+    return {
+      entry:
+        normalizeScheduleCellEntryKind(entry.kind) === 'site'
+          ? entry.label
+          : `追記: ${entry.label}`,
+      color: matchedSite?.color ?? entry.color,
+      siteId: matchedSite?.siteId ?? null,
+      noteOnly: normalizeScheduleCellEntryKind(entry.kind) !== 'site',
+    };
+  });
+
+  if (!group.note) return itemTargets;
+
+  return [
+    ...itemTargets,
+    {
+      entry: `追記: ${group.note}`,
+      color: 'default',
+      siteId: null,
+      noteOnly: true,
+    },
+  ];
 }
 
 function cellSiteNames(cell: ApiCell | null | undefined) {
@@ -1316,10 +1357,7 @@ function MobileWeekHubInner() {
                             {userLabel(user)}
                           </div>
                           {dayLabels.map((day) => {
-                            const entries = cellEntries(schedule.grid?.[user.id]?.[day.key]);
-                            const entryTargets = resolveScheduleEntryTargets(entries, siteLookupByScheduleEntry);
-                            const previewLabel = resolveScheduleEntryPreview(entries, siteLookupByScheduleEntry);
-                            const hasMultipleEntries = entryTargets.length > 1;
+                            const groups = cellGroups(schedule.grid?.[user.id]?.[day.key]);
                             const personalScheduleDay = personalScheduleSummaryByUser[user.id]?.[day.key] ?? null;
                             return (
                               <div
@@ -1329,41 +1367,54 @@ function MobileWeekHubInner() {
                                 }`}
                                 style={{ minHeight: `${weekGridCellMinH}px` }}
                               >
-                                {entries.length > 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={(event) =>
-                                      openCellEntryMenu(
-                                        event,
-                                        `${userLabel(user)} / ${day.key}`,
-                                        entryTargets,
-                                      )
-                                    }
-                                    className={`relative w-full rounded border px-2 py-1 text-left leading-snug ${
-                                      personalScheduleDay?.count ? 'pb-5' : ''
-                                    } ${
-                                      entryTargets.some(isLinkedScheduleEntryTarget)
-                                        ? 'border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900'
-                                        : 'border-dashed border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
-                                    }`}
-                                    style={{ fontSize: scheduleCellFontSize }}
-                                    title="内容を確認"
-                                    aria-haspopup="menu"
-                                    aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
-                                    data-testid={`mobile-week-cell-menu-${user.id}-${day.key}`}
-                                  >
-                                    <span
-                                      className="block overflow-hidden whitespace-nowrap leading-tight"
-                                      style={hasMultipleEntries ? { maxWidth: 'calc(100% - 1rem)' } : undefined}
-                                    >
-                                      {renderScheduleEntryLabel(previewLabel.entry, previewLabel.color)}
-                                    </span>
-                                    {hasMultipleEntries ? (
-                                      <span className="absolute bottom-1 right-1 text-xs font-bold leading-none text-red-600 dark:text-red-400">
-                                        +
-                                      </span>
-                                    ) : null}
-                                  </button>
+                                {groups.length > 0 ? (
+                                  <div className={`space-y-1 ${personalScheduleDay?.count ? 'pb-4' : ''}`}>
+                                    {groups.map((group, groupIndex) => {
+                                      const displayEntry = groupDisplayEntry(group);
+                                      if (!displayEntry) return null;
+                                      const entryTargets = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry);
+                                      const previewLabel = resolveScheduleEntryPreview([displayEntry], siteLookupByScheduleEntry);
+                                      const hasMultipleEntries = group.items.filter(
+                                        (entry) => normalizeScheduleCellEntryKind(entry.kind) === 'site',
+                                      ).length > 1;
+
+                                      return (
+                                        <button
+                                          key={`${user.id}:${day.key}:${groupIndex}:${displayEntry.entry}`}
+                                          type="button"
+                                          onClick={(event) =>
+                                            openCellEntryMenu(
+                                              event,
+                                              `${userLabel(user)} / ${day.key}`,
+                                              entryTargets,
+                                            )
+                                          }
+                                          className={`relative w-full rounded border px-2 py-1 text-left leading-snug ${
+                                            entryTargets.some(isLinkedScheduleEntryTarget)
+                                              ? 'border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900'
+                                              : 'border-dashed border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                                          }`}
+                                          style={{ fontSize: scheduleCellFontSize }}
+                                          title="内容を確認"
+                                          aria-haspopup="menu"
+                                          aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
+                                          data-testid={`mobile-week-cell-menu-${user.id}-${day.key}-${groupIndex}`}
+                                        >
+                                          <span
+                                            className="block overflow-hidden whitespace-nowrap leading-tight"
+                                            style={hasMultipleEntries ? { maxWidth: 'calc(100% - 0.8rem)' } : undefined}
+                                          >
+                                            {renderScheduleEntryLabel(previewLabel.entry, previewLabel.color)}
+                                          </span>
+                                          {hasMultipleEntries ? (
+                                            <span className="absolute bottom-1 right-1 text-[10px] font-bold leading-none text-red-600 dark:text-red-400">
+                                              +
+                                            </span>
+                                          ) : null}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 ) : (
                                   <div className="text-zinc-300 dark:text-zinc-700">-</div>
                                 )}
@@ -1371,12 +1422,12 @@ function MobileWeekHubInner() {
                                   <button
                                     type="button"
                                     onClick={(event) => openPersonalScheduleMenu(event, `${userLabel(user)} / ${day.key}`, day.key, personalScheduleDay)}
-                                    className="absolute bottom-1 right-1 z-10 flex items-center gap-1 rounded px-0.5 py-0.5 text-[11px] font-bold leading-none text-emerald-600 drop-shadow-[0_1px_2px_rgba(0,0,0,0.28)] transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                    className="absolute bottom-1 right-1 z-10 flex items-center gap-0.5 rounded px-0 py-0 text-[9px] font-semibold leading-none text-emerald-600 drop-shadow-[0_1px_2px_rgba(0,0,0,0.28)] transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                                     aria-label={`${day.key} の個人スケジュール ${personalScheduleDay.count}件`}
                                   >
                                     <span
                                       aria-hidden="true"
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_2px_rgba(255,255,255,0.95)] dark:shadow-[0_0_0_2px_rgba(9,9,11,0.95)]"
+                                      className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:shadow-[0_0_0_1.5px_rgba(9,9,11,0.95)]"
                                     />
                                     <span className="tabular-nums">{personalScheduleDay.count}</span>
                                   </button>
