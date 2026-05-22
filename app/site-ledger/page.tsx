@@ -225,6 +225,13 @@ export default function SiteLedgerPage() {
     return /^\d{4}-\d{2}$/.test(value) ? value : null;
   }, [searchParams]);
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
+  const workSlipHref = useMemo(() => {
+    const sp = new URLSearchParams();
+    sp.set('kind', scheduleKind);
+    if (monthParam) sp.set('month', monthParam);
+    const query = sp.toString();
+    return query ? `/site-ledger/work-slips?${query}` : '/site-ledger/work-slips';
+  }, [monthParam, scheduleKind]);
 
   const [deprMonthByKind, setDeprMonthByKind] = useState<{ normal: string; daily: string }>(() => {
     const fallbackMonth = currentMonthKey();
@@ -794,6 +801,24 @@ export default function SiteLedgerPage() {
         ref={rootRef}
         className="space-y-4"
       >
+        <div className="rounded-3xl border border-sky-200 bg-[linear-gradient(135deg,rgba(14,165,233,0.14),rgba(34,211,238,0.18),rgba(255,255,255,0.92))] p-4 shadow-sm dark:border-sky-900/70 dark:bg-[linear-gradient(135deg,rgba(12,74,110,0.45),rgba(21,94,117,0.34),rgba(9,9,11,0.88))]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">作業伝票</div>
+              <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                Excel を現場単位で追加し、現場詳細、報告書、写真、会計へすぐ移動できます。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push(workSlipHref)}
+              className="rounded-2xl border border-sky-500 bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(14,165,233,0.24)] transition hover:bg-sky-600 dark:border-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
+            >
+              作業伝票
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">現場台帳</div>
