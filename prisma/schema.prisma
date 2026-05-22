@@ -1,3 +1,13 @@
+model WorkSlipButtonColor {
+  id           String   @id @default(cuid())
+  workSlipId   String
+  buttonKey    String
+  color        String
+  updatedAt    DateTime @updatedAt
+
+  @@unique([workSlipId, buttonKey])
+  @@index([workSlipId])
+}
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
