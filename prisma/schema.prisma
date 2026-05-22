@@ -32,6 +32,7 @@ enum StoredDocumentKind {
   INVOICE
   BUSINESS_CARD
   PHOTO
+  WORK_SLIP
 }
 
 enum OutlookMailStatus {

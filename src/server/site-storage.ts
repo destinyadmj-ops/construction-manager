@@ -70,6 +70,7 @@ export async function getSiteDayFolderPaths(siteId: string, siteName: string, da
     folderRoot,
     photosDir: path.join(folderRoot, 'photos'),
     reportsDir: path.join(folderRoot, 'reports'),
+    workSlipsDir: path.join(folderRoot, 'work-slips'),
   };
 }
 
@@ -77,6 +78,7 @@ export async function ensureSiteDayFolders(input: { siteId: string; siteName: st
   const paths = await getSiteDayFolderPaths(input.siteId, input.siteName, input.dayYmd);
   await mkdir(paths.photosDir, { recursive: true });
   await mkdir(paths.reportsDir, { recursive: true });
+  await mkdir(paths.workSlipsDir, { recursive: true });
   return paths;
 }
 
