@@ -1,8 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
+
+const DEFAULT_COLOR = '#38bdf8';
 
 export default function WorkSlipExcelEditor({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -11,6 +13,34 @@ export default function WorkSlipExcelEditor({ params }: { params: { id: string }
   const [error, setError] = useState<string | null>(null);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [buttonColor, setButtonColor] = useState<string>(DEFAULT_COLOR);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  // 色取得（初回＋定期ポーリング）
+  useEffect(() => {
+    let stopped = false;
+    async function fetchColor() {
+      try {
+        const res = await fetch(`/api/work-slip-color?id=${encodeURIComponent(id)}`);
+        const json = await res.json();
+        if (json.ok && typeof json.color === 'string') setButtonColor(json.color);
+      } catch {}
+    }
+    fetchColor();
+    pollingRef.current = setInterval(fetchColor, 3000);
+    return () => {
+      stopped = true;
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [id]);
+  // 色変更イベント
+  async function handleColorChange(newColor: string) {
+    setButtonColor(newColor);
+    await fetch('/api/work-slip-color', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, color: newColor }),
+    });
+  }
 
   useEffect(() => {
     async function fetchExcel() {
@@ -72,6 +102,20 @@ export default function WorkSlipExcelEditor({ params }: { params: { id: string }
         <button onClick={() => router.back()} className="rounded px-3 py-1 bg-zinc-200 hover:bg-zinc-300">戻る</button>
         <h1 className="font-bold text-lg">Excel編集: {fileName}</h1>
         <button onClick={handleSave} className="ml-auto rounded px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600">保存</button>
+      </div>
+      {/* 色編集ボタン */}
+      <div className="mb-6 flex items-center gap-3">
+        <span>色編集:</span>
+        <button
+          style={{ background: buttonColor, border: '2px solid #888' }}
+          className="w-10 h-10 rounded-full shadow hover:scale-105 transition"
+          title="色を変更"
+          onClick={() => {
+            const color = prompt('色コードを入力（例: #38bdf8）', buttonColor) || buttonColor;
+            handleColorChange(color);
+          }}
+        />
+        <span className="text-xs text-zinc-500">全員に同期されます</span>
       </div>
       <div className="overflow-auto border rounded-xl bg-white">
         <table className="min-w-full border-collapse">
