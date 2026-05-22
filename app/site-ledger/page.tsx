@@ -811,11 +811,8 @@ export default function SiteLedgerPage() {
             </div>
             <button
               type="button"
-              onClick={() => router.push(workSlipHref)}
               className="rounded-2xl border border-sky-500 bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(14,165,233,0.24)] transition hover:bg-sky-600 dark:border-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
-            >
-              作業伝票
-            </button>
+            />
           </div>
         </div>
 
