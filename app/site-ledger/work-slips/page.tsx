@@ -375,9 +375,60 @@ export default function SiteWorkSlipsPage() {
     }
   }, [load, loadWorkSlips, selectedSiteId, workSlipDate]);
 
+  // テンプレート情報
+  const templates = [
+    {
+      file: '/work-slip-templates/template1.xlsx',
+      label: '作業伝票テンプレートA',
+      icon: '📄',
+      desc: '標準作業伝票（Aパターン）',
+    },
+    {
+      file: '/work-slip-templates/template2.xlsx',
+      label: '作業伝票テンプレートB',
+      icon: '📊',
+      desc: '日報型伝票（Bパターン）',
+    },
+    {
+      file: '/work-slip-templates/template3.xlsx',
+      label: '作業伝票テンプレートC',
+      icon: '📝',
+      desc: '簡易伝票（Cパターン）',
+    },
+    {
+      file: '/work-slip-templates/template4.xlsx',
+      label: '作業伝票テンプレートD',
+      icon: '📁',
+      desc: 'カスタム伝票（Dパターン）',
+    },
+  ];
+
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-4 lg:px-6">
       <div className="space-y-4">
+        {/* テンプレートダウンロードセクション */}
+        <section className="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-cyan-50/80 p-5 shadow-sm dark:border-emerald-900/70 dark:bg-gradient-to-br dark:from-emerald-900/30 dark:to-cyan-900/20">
+          <div className="mb-2 text-base font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+            <span className="text-xl">🧩</span> 作業伝票テンプレート
+          </div>
+          <div className="mb-2 text-xs text-zinc-600 dark:text-zinc-300">よく使う伝票の雛形をダウンロードできます。ここから複製・流用して新規伝票を作成してください。</div>
+          <div className="flex flex-wrap gap-4 mt-3">
+            {templates.map((tpl) => (
+              <a
+                key={tpl.file}
+                href={tpl.file}
+                download
+                className="group flex flex-col items-center justify-center w-36 h-36 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:bg-emerald-50 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-emerald-900/30 transition"
+                title={tpl.label}
+              >
+                <span className="text-4xl mb-2">{tpl.icon}</span>
+                <span className="font-semibold text-sm text-zinc-800 dark:text-zinc-100 mb-1 text-center">{tpl.label}</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-300 text-center">{tpl.desc}</span>
+                <span className="mt-2 text-[10px] text-emerald-600 group-hover:underline">ダウンロード</span>
+              </a>
+            ))}
+          </div>
+        </section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">作業伝票</h1>
