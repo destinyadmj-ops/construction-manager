@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StoredDocumentKind" ADD VALUE IF NOT EXISTS 'WORK_SLIP';
