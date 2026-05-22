@@ -1383,9 +1383,9 @@ export default function AppHeader() {
     >
       <div className="bg-white/60 dark:bg-black/60">
         <div
-          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 items-center py-2 sm:py-3 ${
+          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 items-center py-2 sm:py-3 overflow-visible ${
             isElectronShell
-              ? 'mh-scrollbar-hidden justify-start gap-2 overflow-x-auto overflow-y-hidden whitespace-nowrap px-0.5 sm:px-1.5 lg:px-2.5'
+              ? 'mh-scrollbar-hidden justify-start gap-2 overflow-x-auto whitespace-nowrap px-0.5 sm:px-1.5 lg:px-2.5'
               : 'flex-wrap justify-between gap-2 px-3 sm:px-4 lg:flex-nowrap lg:px-6'
           }`}
         >
@@ -1458,7 +1458,7 @@ export default function AppHeader() {
                   <div
                     data-color-edit-id="header:notifications-panel"
                     data-color-edit-slot="border"
-                    className="absolute left-0 top-full z-50 mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                    className="absolute left-0 top-full z-[9999] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                   >
                     <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                       <span>個人通知</span>
@@ -1522,7 +1522,7 @@ export default function AppHeader() {
                 <div
                   data-color-edit-id="header:settings-panel"
                   data-color-edit-slot="border"
-                  className="absolute left-0 top-full mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                  className="absolute left-0 top-full z-[9999] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                 >
                   <div className="max-h-[70vh] overflow-auto overscroll-contain">
                     <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
