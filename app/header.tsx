@@ -3,6 +3,7 @@
 import { useOutsidePointerDown } from './use-outside-pointerdown';
 
 import Link from 'next/link';
+import { getButtonColorClass } from '@/shared/button-colors';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -91,13 +92,14 @@ function versionId(info: AppVersionInfo): string {
   return `${info.version}|${info.gitSha ?? ''}|${info.buildTime ?? ''}`;
 }
 
-function navLinkClass(active: boolean, displayClass = 'inline-flex') {
-  return `${displayClass} min-w-[4.5rem] shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-[11px] sm:min-w-20 sm:px-4 ${
-    active
-      ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-      : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-  }`;
-}
+const navLinkClass = (
+  label: string,
+  active: boolean,
+  displayClass = 'inline-flex',
+) =>
+  `${displayClass} min-w-[4.5rem] shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-[11px] sm:min-w-20 sm:px-4 ${
+    getButtonColorClass(label)
+  } ${active ? 'ring-2 ring-offset-2 ring-zinc-400' : ''}`;
 
 type HoverPreviewNumberDropdownProps = {
   label: string;
@@ -2252,7 +2254,7 @@ export default function AppHeader() {
                 setIsMultiMenuOpen(false);
                 setIsOverflowMenuOpen((v) => !v);
               }}
-              className={`${navLinkClass(false)} relative`}
+              className={`${navLinkClass('メニュー', false)} relative`}
               aria-expanded={isOverflowMenuOpen}
               title="主要メニュー"
             >
@@ -2499,7 +2501,7 @@ export default function AppHeader() {
                 }
               }
             }}
-            className={navLinkClass(isNormalWeek, isMobileBrowser ? 'hidden' : 'inline-flex')}
+            className={navLinkClass('週予定', isNormalWeek, isMobileBrowser ? 'hidden' : 'inline-flex')}
             title="週予定へ（週モードに戻す）"
             aria-current={isNormalWeek ? 'page' : undefined}
           >
@@ -2512,7 +2514,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isAccounting, 'hidden lg:inline-flex')}
+            className={navLinkClass('会計', isAccounting, 'hidden lg:inline-flex')}
             title="会計（PDF/CSV/テンプレ/一覧）へ"
             aria-current={isAccounting ? 'page' : undefined}
           >
@@ -2526,7 +2528,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isReports, 'hidden lg:inline-flex')}
+            className={navLinkClass('報告書', isReports, 'hidden lg:inline-flex')}
             title="報告書（送信/履歴/検索）へ"
             aria-current={isReports ? 'page' : undefined}
           >
@@ -2540,7 +2542,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isInvoices, 'hidden lg:inline-flex')}
+            className={navLinkClass('請求書', isInvoices, 'hidden lg:inline-flex')}
             title="請求書（送信/履歴/検索）へ"
             aria-current={isInvoices ? 'page' : undefined}
           >
@@ -2553,7 +2555,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isManagement, 'hidden lg:inline-flex')}
+            className={navLinkClass('管理', isManagement, 'hidden lg:inline-flex')}
             title="リピート/自動入力などの管理へ"
             aria-current={isManagement ? 'page' : undefined}
           >
@@ -2566,7 +2568,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isSiteLedger, 'hidden lg:inline-flex')}
+            className={navLinkClass('現場台帳', isSiteLedger, 'hidden lg:inline-flex')}
             title="現場台帳（追加/詳細）へ"
             aria-current={isSiteLedger ? 'page' : undefined}
           >
@@ -2579,7 +2581,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isPartners, 'hidden lg:inline-flex')}
+            className={navLinkClass('関係会社', isPartners, 'hidden lg:inline-flex')}
             title="関係会社へ"
             aria-current={isPartners ? 'page' : undefined}
           >
@@ -2593,7 +2595,7 @@ export default function AppHeader() {
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass(isDailyWeek, 'hidden lg:inline-flex')}
+            className={navLinkClass('日常', isDailyWeek, 'hidden lg:inline-flex')}
             title="日常予定へ"
             aria-current={isDailyWeek ? 'page' : undefined}
           >
@@ -2609,7 +2611,7 @@ export default function AppHeader() {
                 setIsOverflowMenuOpen(false);
                 setIsMultiMenuOpen((v) => !v);
               }}
-              className={navLinkClass(isMulti, 'hidden lg:inline-flex')}
+              className={navLinkClass('マルチ', isMulti, 'hidden lg:inline-flex')}
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
@@ -2674,19 +2676,19 @@ export default function AppHeader() {
               スケジュール
             </Link>
 
-          <Link
-            href="/schedule"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:schedule"
-            onClick={() => {
-              navIntentRef.current = 'push';
-            }}
-            className={navLinkClass(isSchedule, 'hidden lg:inline-flex')}
-            title="個人スケジュールへ"
-            aria-current={isSchedule ? 'page' : undefined}
-          >
-            スケジュール
-          </Link>
+            <Link
+              href="/schedule"
+              data-color-edit-slot="button"
+              data-color-edit-id="header:nav:schedule"
+              onClick={() => {
+                navIntentRef.current = 'push';
+              }}
+              className={navLinkClass('スケジュール', isSchedule, 'hidden lg:inline-flex')}
+              title="個人スケジュールへ"
+              aria-current={isSchedule ? 'page' : undefined}
+            >
+              スケジュール
+            </Link>
 
         </div>
       </div>
