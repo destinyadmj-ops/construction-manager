@@ -14,19 +14,19 @@ type PortalMenuProps = {
 };
 
 export default function PortalMenu({ anchorRef, isOpen, onClose, children, width, offset, className }: PortalMenuProps) {
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  const [pos, setPos] = useState({ left: 0, top: 0, w: width ?? 320 });
+  const container: HTMLElement | null = typeof document !== 'undefined'
+    ? (() => {
+        let el = document.getElementById('mh-portal-root') as HTMLElement | null;
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'mh-portal-root';
+          document.body.appendChild(el);
+        }
+        return el;
+      })()
+    : null;
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    let el = document.getElementById('mh-portal-root') as HTMLElement | null;
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'mh-portal-root';
-      document.body.appendChild(el);
-    }
-    setContainer(el);
-  }, []);
+  const [pos, setPos] = useState({ left: 0, top: 0, w: width ?? 320 });
 
   useEffect(() => {
     if (!isOpen) return;

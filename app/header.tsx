@@ -1,215 +1,206 @@
 "use client";
 
 import { useOutsidePointerDown } from './use-outside-pointerdown';
-import PortalMenu from './components/portal-menu';
 
 import Link from 'next/link';
 import { getButtonColorClass } from '@/shared/button-colors';
-              {isSettingsOpen ? (
-                <PortalMenu
-                  anchorRef={settingsRef}
-                  isOpen={isSettingsOpen}
-                  onClose={() => setIsSettingsOpen(false)}
-                  width={320}
-                  className="rounded-md"
-                >
-                  <div
-                    data-color-edit-id="header:settings-panel"
-                    data-color-edit-slot="border"
-                    className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-                  >
-                    <div className="max-h-[70vh] overflow-auto overscroll-contain">
-                      <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        文字サイズ（予定セル）
-                      </div>
-                      <div className="p-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-14"
-                          onClick={() => void savePageFontSize(14)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 14
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          小
-                        </button>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-16"
-                          onClick={() => void savePageFontSize(16)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 16
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          標準
-                        </button>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-18"
-                          onClick={() => void savePageFontSize(18)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 18
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          大
-                        </button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          現在: {(pageFontSize ?? 12)}px
-                        </div>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={10}
-                          max={30}
-                          value={pageFontSizeDraft}
-                          onChange={(e) => setPageFontSizeDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            const n = Number(pageFontSizeDraft);
-                            if (!Number.isFinite(n)) return;
-                            void savePageFontSize(n);
-                          }}
-                          onBlur={() => {
-                            const n = Number(pageFontSizeDraft);
-                            if (!Number.isFinite(n)) {
-                              setPageFontSizeDraft(pageFontSize == null ? '' : String(pageFontSize));
-                              return;
-                            }
-                            void savePageFontSize(n);
-                          }}
-                          className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                          aria-label="文字サイズ（px）"
-                        />
-                      </div>
-                      {!headerUserId ? (
-                        <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          ユーザー未設定のため、この端末内のみ保存されます
-                        </div>
-                      ) : null}
-                      </div>
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  buildLegacyWeekGridPrefsSettingsKey,
+  buildWeekGridPrefsSettingsKey,
+  buildWeekGridPrefsLocalStorageKey,
+  WEEK_GRID_BG_OPTIONS,
+  WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS,
+  WEEK_GRID_COMPACT_HEIGHT_OPTIONS,
+  WEEK_GRID_DAY_WIDTH_OPTIONS,
+  WEEK_GRID_NAME_WIDTH_OPTIONS,
+  WEEK_GRID_PREFS_VERSION,
+  WEEK_GRID_TEXT_COLOR_OPTIONS,
+  defaultWeekGridPrefs,
+  isWeekGridCellBg,
+  isWeekGridTextColor,
+  normalizeWeekGridPrefs,
+  type WeekGridPrefs,
+} from '@/shared/week-grid-prefs';
+import { useHeaderActions } from './header-actions';
+import { readColorEditMode, writeColorEditMode } from './color-edit';
+import {
+  applyUiTheme,
+  defaultUiTheme,
+  normalizeUiTheme,
+  readLocalUiTheme,
+  UI_THEME_SETTING_KEY,
+  writeLocalUiTheme,
+} from './ui-theme';
+import { markForceDesktopWeekHomeOnce, readStoredScheduleReturn } from '@/shared/schedule-return';
 
-                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        ユーザー
-                      </div>
-                      <div className="p-2">
-                      <button
-                        type="button"
-                        onClick={openUserGate}
-                        className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                      >
-                        初回登録 / 切替
-                      </button>
-                      </div>
+type JsonObject = Record<string, unknown>;
 
-                      {pathname === '/' ? (
-                        <>
-                          <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                            予定編集
-                          </div>
-                          <div className="p-2 space-y-2">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (actions.save) {
-                                  await actions.save.onClick();
-                                  return;
-                                }
-                                await actions.add?.onClick();
-                              }}
-                              disabled={scheduleEditButtonDisabled}
-                              className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                              title={scheduleEditHelpText}
-                            >
-                              {scheduleEditButtonLabel}
-                            </button>
-                            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              {actions.save
-                                ? '右クリックで予定セルの従来メニューを開けます。色変更はセル操作の「色」を使います。終了すると通常表示へ戻ります。'
-                                : '編集を開始すると、右クリックメニューとセル操作が使えます。色変更はセル操作の「色」を使います。'}
-                            </div>
-                          </div>
-                        </>
-                      ) : null}
+function asObject(v: unknown): JsonObject | null {
+  return v && typeof v === 'object' ? (v as JsonObject) : null;
+}
 
-                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        線（個人）
-                      </div>
-                      <div className="p-2 space-y-2">
-                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">グリッド線</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: false })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              !uiTheme.gridStrongLines
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            標準
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: true })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              uiTheme.gridStrongLines
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            強
-                          </button>
-                        </div>
-                      </div>
+function toMonthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
-                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">枠線</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: false })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              !uiTheme.borderStrong
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            標準
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: true })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              uiTheme.borderStrong
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            強
-                          </button>
-                        </div>
-                      </div>
+type MonthLegendState = {
+  invoiceMissing: boolean;
+  reportMissing: boolean;
+  unassigned: boolean;
+};
 
-                      {!headerUserId ? (
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          ユーザー未設定のため、この端末内のみ保存されます
-                        </div>
-                      ) : null}
-                      </div>
+type AppVersionInfo = {
+  name: string;
+  version: string;
+  gitSha: string | null;
+  buildTime: string | null;
+  nodeEnv: string;
+};
 
-                    </div>
-                  </PortalMenu>
-                ) : null}
+type DesktopReleaseInfo = {
+  version: string;
+  downloadUrl: string | null;
+  notes: string | null;
+  publishedAt: string | null;
+  channel: string;
+};
+
+type PersonalNotification = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+};
+
+function formatNotificationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('ja-JP', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function versionId(info: AppVersionInfo): string {
+  return `${info.version}|${info.gitSha ?? ''}|${info.buildTime ?? ''}`;
+}
+
+const navLinkClass = (
+  label: string,
+  active: boolean,
+  displayClass = 'inline-flex',
+) =>
+  `${displayClass} min-w-[4.5rem] shrink-0 items-center justify-center rounded-lg border px-3 py-2 text-[11px] sm:min-w-20 sm:px-4 ${
+    getButtonColorClass(label)
+  } ${active ? 'ring-2 ring-offset-2 ring-zinc-400' : ''}`;
+
+type HoverPreviewNumberDropdownProps = {
+  label: string;
+  value: number;
+  options: readonly number[];
+  onPreview: (value: number) => void;
+  onCommit: (value: number) => void;
+};
+
+function HoverPreviewNumberDropdown({
+  label,
+  value,
+  options,
+  onPreview,
+  onCommit,
+}: HoverPreviewNumberDropdownProps) {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [baselineValue, setBaselineValue] = useState<number | null>(null);
+  const openRef = useRef(false);
+  const baselineRef = useRef<number | null>(null);
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    openRef.current = isOpen;
+    baselineRef.current = baselineValue;
+  }, [baselineValue, isOpen]);
+
+  useEffect(
+    () => () => {
+      if (!openRef.current) return;
+      const previousValue = baselineRef.current;
+      if (previousValue === null || previousValue === valueRef.current) return;
+      onPreview(previousValue);
+    },
+    [onPreview],
+  );
+
+  const closeDropdown = useCallback(
+    (commit: boolean) => {
+      const previousValue = baselineRef.current;
+      if (!commit && previousValue !== null && previousValue !== valueRef.current) {
+        onPreview(previousValue);
+      }
+      openRef.current = false;
+      baselineRef.current = null;
+      setIsOpen(false);
+      setBaselineValue(null);
+    },
+    [onPreview],
+  );
+
+  const handleToggle = useCallback(() => {
+    if (isOpen) {
+      closeDropdown(false);
+      return;
+    }
+    openRef.current = true;
+    baselineRef.current = value;
+    setBaselineValue(value);
+    setIsOpen(true);
+  }, [closeDropdown, isOpen, value]);
+
+  const handlePreview = useCallback(
+    (nextValue: number) => {
+      if (!isOpen || valueRef.current === nextValue) return;
+      onPreview(nextValue);
+    },
+    [isOpen, onPreview],
+  );
+
+  const handleCommit = useCallback(
+    (nextValue: number) => {
+      onCommit(nextValue);
+      openRef.current = false;
+      baselineRef.current = null;
+      setIsOpen(false);
+      setBaselineValue(null);
+    },
+    [onCommit],
+  );
+
+  useOutsidePointerDown({
+    open: isOpen,
+    refs: [triggerRef, menuRef],
+    onOutside: () => closeDropdown(false),
+    capture: true,
+  });
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDropdown(false);
       }
     };
 
@@ -1464,60 +1455,52 @@ export default function AppHeader() {
                 </button>
 
                 {isNotificationsOpen ? (
-                  <PortalMenu
-                    anchorRef={notificationsRef}
-                    isOpen={isNotificationsOpen}
-                    onClose={() => setIsNotificationsOpen(false)}
-                    width={320}
-                    className="rounded-md"
+                  <div
+                    data-color-edit-id="header:notifications-panel"
+                    data-color-edit-slot="border"
+                    className="absolute left-0 top-full z-[10050] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                   >
-                    <div
-                      data-color-edit-id="header:notifications-panel"
-                      data-color-edit-slot="border"
-                      className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-                    >
-                      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        <span>個人通知</span>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:notifications-mark-all-read"
-                          onClick={() => void markAllNotificationsRead()}
-                          className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                        >
-                          すべて既読
-                        </button>
-                      </div>
-                      <div className="max-h-[320px] overflow-auto overscroll-contain">
-                        {notificationLoading ? (
-                          <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">読み込み中…</div>
-                        ) : notifications.length === 0 ? (
-                          <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">通知はありません</div>
-                        ) : (
-                          notifications.map((notification) => (
-                            <div
-                              key={notification.id}
-                              className={`border-b border-zinc-200 px-3 py-3 text-[11px] last:border-b-0 dark:border-zinc-800 ${
-                                notification.isRead ? 'bg-transparent' : 'bg-red-50/50 dark:bg-red-950/20'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="font-medium text-zinc-800 dark:text-zinc-100">{notification.title}</div>
-                                {!notification.isRead ? (
-                                  <span className="mt-1 inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
-                                ) : null}
-                              </div>
-                              {notification.body ? (
-                                <div className="mt-1 break-words text-zinc-600 dark:text-zinc-300">{notification.body}</div>
-                              ) : null}
-                              <div className="mt-1 text-zinc-400 dark:text-zinc-500">
-                                {formatNotificationTime(notification.createdAt)}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                    <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      <span>個人通知</span>
+                      <button
+                        type="button"
+                        data-color-edit-id="header:notifications-mark-all-read"
+                        onClick={() => void markAllNotificationsRead()}
+                        className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      >
+                        すべて既読
+                      </button>
                     </div>
-                  </PortalMenu>
+                    <div className="max-h-[320px] overflow-auto overscroll-contain">
+                      {notificationLoading ? (
+                        <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">読み込み中…</div>
+                      ) : notifications.length === 0 ? (
+                        <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">通知はありません</div>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`border-b border-zinc-200 px-3 py-3 text-[11px] last:border-b-0 dark:border-zinc-800 ${
+                              notification.isRead ? 'bg-transparent' : 'bg-red-50/50 dark:bg-red-950/20'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-medium text-zinc-800 dark:text-zinc-100">{notification.title}</div>
+                              {!notification.isRead ? (
+                                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
+                              ) : null}
+                            </div>
+                            {notification.body ? (
+                              <div className="mt-1 break-words text-zinc-600 dark:text-zinc-300">{notification.body}</div>
+                            ) : null}
+                            <div className="mt-1 text-zinc-400 dark:text-zinc-500">
+                              {formatNotificationTime(notification.createdAt)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 ) : null}
               </div>
             ) : null}

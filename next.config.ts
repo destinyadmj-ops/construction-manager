@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const devAllowedOrigins = ["127.0.0.1", "localhost", "192.168.1.24"];
+const devAllowedOrigins = ["127.0.0.1", "localhost", "192.168.1.24", "192.168.1.10"];
 
 const nextConfig: NextConfig = {
   // Next.js dev (Turbopack) の cross-origin (_next/*) ブロックを抑止
