@@ -60,6 +60,8 @@ const ELEMENT_THEME_VAR_NAMES = [
   '--mh-grid-line-dark',
 ] as const;
 
+const GLOBAL_UI_SETTINGS_USER_ID = '__MASTER_HUB_GLOBAL__';
+
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
@@ -345,14 +347,17 @@ export default function ColorEditController() {
 
     if (globalSaveTimerRef.current) window.clearTimeout(globalSaveTimerRef.current);
     globalSaveTimerRef.current = window.setTimeout(() => {
-      const userId = userIdRef.current;
       const pending = pendingGlobalOverrideRef.current;
       globalSaveTimerRef.current = null;
-      if (!userId || !pending) return;
+      if (!pending) return;
       void fetch('/api/ui-settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId, key: globalThemeOverrideDbKey(), value: pending }),
+        body: JSON.stringify({
+          userId: GLOBAL_UI_SETTINGS_USER_ID,
+          key: globalThemeOverrideDbKey(),
+          value: pending,
+        }),
       }).catch(() => null);
     }, 450);
   }, []);
@@ -446,6 +451,36 @@ export default function ColorEditController() {
     setPageOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
     setGlobalOverride(readLocalGlobalThemeOverride(userIdRef.current));
   }, [pathname, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return undefined;
+
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/ui-settings?userId=${encodeURIComponent(GLOBAL_UI_SETTINGS_USER_ID)}&key=${encodeURIComponent(
+            globalThemeOverrideDbKey(),
+          )}`,
+        );
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = asObject(j);
+        if (!r.ok || obj?.ok !== true) return;
+        if (cancelled) return;
+
+        const raw = obj.value;
+        const next = normalizePageThemeOverrides(raw);
+        setGlobalOverride(next);
+        writeLocalGlobalThemeOverride(userIdRef.current, next);
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     const onPageUpdated = (e: Event) => {

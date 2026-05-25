@@ -147,8 +147,8 @@ export function pageThemeOverrideDbKey(pathname: string): string {
   return `${PAGE_THEME_OVERRIDE_DB_KEY_PREFIX}${p}`;
 }
 
-export function globalThemeOverrideLocalKey(userId: string | null): string {
-  return `masterHub.ui:globalThemeOverride:${userId ?? 'anon'}`;
+export function globalThemeOverrideLocalKey(_userId: string | null): string {
+  return `masterHub.ui:globalThemeOverride`;
 }
 
 export function pageThemeOverrideLocalKey(userId: string | null, pathname: string): string {
