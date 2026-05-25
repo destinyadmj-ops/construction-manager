@@ -147,7 +147,7 @@ export function pageThemeOverrideDbKey(pathname: string): string {
   return `${PAGE_THEME_OVERRIDE_DB_KEY_PREFIX}${p}`;
 }
 
-export function globalThemeOverrideLocalKey(_userId: string | null): string {
+export function globalThemeOverrideLocalKey(): string {
   return `masterHub.ui:globalThemeOverride`;
 }
 
@@ -156,9 +156,9 @@ export function pageThemeOverrideLocalKey(userId: string | null, pathname: strin
   return `masterHub.ui:pageThemeOverride:${userId ?? 'anon'}:${p}`;
 }
 
-export function readLocalGlobalThemeOverride(userId: string | null): PageThemeOverrides {
+export function readLocalGlobalThemeOverride(): PageThemeOverrides {
   try {
-    const raw = window.localStorage.getItem(globalThemeOverrideLocalKey(userId));
+    const raw = window.localStorage.getItem(globalThemeOverrideLocalKey());
     if (!raw) return emptyPageThemeOverrides();
     return normalizePageThemeOverrides(JSON.parse(raw) as unknown);
   } catch {
@@ -176,12 +176,12 @@ export function readLocalPageThemeOverride(userId: string | null, pathname: stri
   }
 }
 
-export function writeLocalGlobalThemeOverride(userId: string | null, next: PageThemeOverrides): void {
+export function writeLocalGlobalThemeOverride(next: PageThemeOverrides): void {
   try {
-    window.localStorage.setItem(globalThemeOverrideLocalKey(userId), JSON.stringify(next));
+    window.localStorage.setItem(globalThemeOverrideLocalKey(), JSON.stringify(next));
     window.dispatchEvent(
       new CustomEvent('masterHub:globalThemeOverrideUpdated', {
-        detail: { userId: userId ?? 'anon' },
+        detail: { userId: 'global' },
       }),
     );
   } catch {
