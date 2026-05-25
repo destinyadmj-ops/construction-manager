@@ -4,274 +4,129 @@ import { useOutsidePointerDown } from './use-outside-pointerdown';
 import PortalMenu from './components/portal-menu';
 
 import Link from 'next/link';
-import { getButtonColorClass } from '@/shared/button-colors';
-              {isSettingsOpen ? (
-                <PortalMenu
-                  anchorRef={settingsRef}
-                  isOpen={isSettingsOpen}
-                  onClose={() => setIsSettingsOpen(false)}
-                  width={320}
-                  className="rounded-md"
-                >
-                  <div
-                    data-color-edit-id="header:settings-panel"
-                    data-color-edit-slot="border"
-                    className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-                  >
-                    <div className="max-h-[70vh] overflow-auto overscroll-contain">
-                      <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        文字サイズ（予定セル）
-                      </div>
-                      <div className="p-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-14"
-                          onClick={() => void savePageFontSize(14)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 14
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          小
-                        </button>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-16"
-                          onClick={() => void savePageFontSize(16)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 16
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          標準
-                        </button>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:settings-font-size-18"
-                          onClick={() => void savePageFontSize(18)}
-                          className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                            (pageFontSize ?? 16) === 18
-                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                          }`}
-                        >
-                          大
-                        </button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          現在: {(pageFontSize ?? 12)}px
-                        </div>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={10}
-                          max={30}
-                          value={pageFontSizeDraft}
-                          onChange={(e) => setPageFontSizeDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            const n = Number(pageFontSizeDraft);
-                            if (!Number.isFinite(n)) return;
-                            void savePageFontSize(n);
-                          }}
-                          onBlur={() => {
-                            const n = Number(pageFontSizeDraft);
-                            if (!Number.isFinite(n)) {
-                              setPageFontSizeDraft(pageFontSize == null ? '' : String(pageFontSize));
-                              return;
-                            }
-                            void savePageFontSize(n);
-                          }}
-                          className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                          aria-label="文字サイズ（px）"
-                        />
-                      </div>
-                      {!headerUserId ? (
-                        <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          ユーザー未設定のため、この端末内のみ保存されます
-                        </div>
-                      ) : null}
-                      </div>
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useHeaderActions } from './header-actions';
+import { readColorEditMode, writeColorEditMode } from './color-edit';
+import { normalizeThemeShade } from './color-ramp';
+import {
+  applyUiTheme,
+  defaultUiTheme,
+  normalizeUiTheme,
+  readLocalUiTheme,
+  UI_THEME_COLORS,
+  UI_THEME_SETTING_KEY,
+  type UiThemeColor,
+  writeLocalUiTheme,
+} from './ui-theme';
 
-                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        ユーザー
-                      </div>
-                      <div className="p-2">
-                      <button
-                        type="button"
-                        onClick={openUserGate}
-                        className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                      >
-                        初回登録 / 切替
-                      </button>
-                      </div>
+type JsonObject = Record<string, unknown>;
 
-                      {pathname === '/' ? (
-                        <>
-                          <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                            予定編集
-                          </div>
-                          <div className="p-2 space-y-2">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (actions.save) {
-                                  await actions.save.onClick();
-                                  return;
-                                }
-                                await actions.add?.onClick();
-                              }}
-                              disabled={scheduleEditButtonDisabled}
-                              className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                              title={scheduleEditHelpText}
-                            >
-                              {scheduleEditButtonLabel}
-                            </button>
-                            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              {actions.save
-                                ? '右クリックで予定セルの従来メニューを開けます。色変更はセル操作の「色」を使います。終了すると通常表示へ戻ります。'
-                                : '編集を開始すると、右クリックメニューとセル操作が使えます。色変更はセル操作の「色」を使います。'}
-                            </div>
-                          </div>
-                        </>
-                      ) : null}
+function asObject(v: unknown): JsonObject | null {
+  return v && typeof v === 'object' ? (v as JsonObject) : null;
+}
 
-                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        線（個人）
-                      </div>
-                      <div className="p-2 space-y-2">
-                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">グリッド線</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: false })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              !uiTheme.gridStrongLines
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            標準
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: true })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              uiTheme.gridStrongLines
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            強
-                          </button>
-                        </div>
-                      </div>
+function toMonthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
-                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">枠線</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: false })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              !uiTheme.borderStrong
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            標準
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: true })}
-                            className={`rounded-md border px-2 py-2 text-[11px] ${
-                              uiTheme.borderStrong
-                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                            }`}
-                          >
-                            強
-                          </button>
-                        </div>
-                      </div>
+type WeekGridPrefs = {
+  gridLayout: 'compact' | 'comfortable';
+  cellTextColor: UiThemeColor;
+  cellTextShade: number;
+  cellBgColor: UiThemeColor;
+  cellBgShade: number;
+  cellMinW: number;
+  cellMinHCompact: number;
+  cellMinHComfortable: number;
+};
 
-                      {!headerUserId ? (
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          ユーザー未設定のため、この端末内のみ保存されます
-                        </div>
-                      ) : null}
-                      </div>
+function clampInt(n: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
 
-                    </div>
-                  </PortalMenu>
-                ) : null}
-      }
-    };
+function isUiThemeColor(value: string): value is UiThemeColor {
+  return UI_THEME_COLORS.includes(value as UiThemeColor);
+}
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [closeDropdown, isOpen]);
+function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
+  const o = asObject(raw);
+  const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
+  const rawTextColor = typeof o?.cellTextColor === 'string' ? o.cellTextColor : '';
+  const cellTextColor = isUiThemeColor(rawTextColor) ? rawTextColor : 'default';
+  const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
 
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={handleToggle}
-        aria-label={label}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        className={`flex w-full items-center justify-between border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black ${
-          isOpen ? 'rounded-t-md rounded-b-none border-b-transparent' : 'rounded-md'
-        }`}
-      >
-        <span>{value}px</span>
-        <span className={`ml-2 text-[10px] text-zinc-500 transition-transform dark:text-zinc-400 ${isOpen ? 'rotate-180' : ''}`}>
-          ▼
-        </span>
-      </button>
-      {isOpen ? (
-        <div
-          ref={menuRef}
-          role="listbox"
-          aria-label={label}
-          className="absolute left-0 top-full z-50 -mt-px max-h-56 w-full overflow-auto rounded-b-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-black"
-        >
-          {options.map((option) => {
-            const active = value === option;
-            return (
-              <button
-                key={`${label}:${option}`}
-                type="button"
-                role="option"
-                aria-selected={active}
-                onPointerEnter={() => handlePreview(option)}
-                onFocus={() => handlePreview(option)}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  handleCommit(option);
-                }}
-                className={`block w-full px-2 py-2 text-left text-[11px] ${
-                  active
-                    ? 'bg-blue-600 text-white'
-                    : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900'
-                }`}
-              >
-                {option}px
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+  const rawBgColor = typeof o?.cellBgColor === 'string' ? o.cellBgColor : '';
+  const cellBgColor = isUiThemeColor(rawBgColor) ? rawBgColor : 'default';
+  const cellBgShade = (() => {
+    if (typeof o?.cellBgShade === 'number') return normalizeThemeShade(o.cellBgShade, 0);
+    // v1 compatibility
+    if (o?.cellBg === 'soft') return 25;
+    return 0;
+  })();
+  const cellMinW = clampInt(typeof o?.cellMinW === 'number' ? (o.cellMinW as number) : NaN, 60, 240, 112);
+  const cellMinHCompact = clampInt(
+    typeof o?.cellMinHCompact === 'number' ? (o.cellMinHCompact as number) : NaN,
+    32,
+    120,
+    48,
   );
+  const cellMinHComfortable = clampInt(
+    typeof o?.cellMinHComfortable === 'number' ? (o.cellMinHComfortable as number) : NaN,
+    32,
+    120,
+    64,
+  );
+  return {
+    gridLayout,
+    cellTextColor,
+    cellTextShade,
+    cellBgColor,
+    cellBgShade,
+    cellMinW,
+    cellMinHCompact,
+    cellMinHComfortable,
+  };
+}
+
+function defaultWeekGridPrefs(): WeekGridPrefs {
+  return {
+    gridLayout: 'compact',
+    cellTextColor: 'default',
+    cellTextShade: 50,
+    cellBgColor: 'default',
+    cellBgShade: 0,
+    cellMinW: 112,
+    cellMinHCompact: 48,
+    cellMinHComfortable: 64,
+  };
+}
+
+type MonthLegendState = {
+  invoiceMissing: boolean;
+  reportMissing: boolean;
+  unassigned: boolean;
+};
+
+type AppVersionInfo = {
+  name: string;
+  version: string;
+  gitSha: string | null;
+  buildTime: string | null;
+  nodeEnv: string;
+};
+
+function versionId(info: AppVersionInfo): string {
+  return `${info.version}|${info.gitSha ?? ''}|${info.buildTime ?? ''}`;
+}
+
+function navLinkClass(active: boolean) {
+  return `inline-flex min-w-24 items-center justify-center rounded-lg border px-6 py-2 text-xs ${
+    active
+      ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+      : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+  }`;
 }
 
 export default function AppHeader() {
@@ -280,17 +135,7 @@ export default function AppHeader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
-  const scheduleKind = useMemo(() => {
-    const kindParam = (searchParams.get('kind') ?? '').trim().toLowerCase();
-    return kindParam === 'daily' ? 'daily' : 'normal';
-  }, [searchParams]);
   const { actions } = useHeaderActions();
-
-  const managementHref = useMemo(() => `/management?kind=${scheduleKind}`, [scheduleKind]);
-  const siteLedgerHref = useMemo(() => `/site-ledger?kind=${scheduleKind}`, [scheduleKind]);
-
-  // 現場リストの開閉状態
-  const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 
   const [headerUserId, setHeaderUserId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -298,10 +143,8 @@ export default function AppHeader() {
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
-  const [isElectronShell, setIsElectronShell] = useState(false);
-  const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
-  const [, setMonthLegend] = useState<MonthLegendState>({
+  const [monthLegend, setMonthLegend] = useState<MonthLegendState>({
     invoiceMissing: false,
     reportMissing: false,
     unassigned: false,
@@ -313,74 +156,37 @@ export default function AppHeader() {
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
   const [, setAppVersionBase] = useState<string | null>(null);
   const [appVersionError, setAppVersionError] = useState<string | null>(null);
-  const [desktopRelease, setDesktopRelease] = useState<DesktopReleaseInfo | null>(null);
-  const [desktopReleaseError, setDesktopReleaseError] = useState<string | null>(null);
   const [isUpdateAvailableByVersion, setIsUpdateAvailableByVersion] = useState(false);
   const [isUpdateAvailableBySw, setIsUpdateAvailableBySw] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   const [alertCount, setAlertCount] = useState<number>(0);
   const [alertLoading, setAlertLoading] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const notificationsRef = useRef<HTMLDivElement | null>(null);
-  const [notifications, setNotifications] = useState<PersonalNotification[]>([]);
-  const [notificationLoading, setNotificationLoading] = useState(false);
-  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
 
   const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
 
-  const isWeekHubRoot = pathname === '/';
-  const isMobileWeekHub = pathname === '/mobile/week-hub';
-  const isWeekHubPage = isWeekHubRoot || isMobileWeekHub;
-  const isWeek = isWeekHubRoot && (!mode || mode === 'week');
+  const isWeek = pathname === '/' && (!mode || mode === 'week');
 
   const weekModeKey = useMemo(() => {
-    if (isMobileWeekHub) return 'week';
     if (pathname !== '/') return null;
     const m = (mode ?? '').trim();
     if (m === 'month' || m === 'year' || m === 'week') return m;
     return 'week';
-  }, [isMobileWeekHub, mode, pathname]);
+  }, [mode, pathname]);
 
   const weekScheduleKindKey = useMemo(() => {
-    if (!isWeekHubPage) return null;
+    if (pathname !== '/') return null;
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
     return k === 'daily' ? 'daily' : 'normal';
-  }, [isWeekHubPage, searchParams]);
-
-  const isDailyWeek = isWeek && weekScheduleKindKey === 'daily';
-  const isNormalWeek = isWeek && weekScheduleKindKey !== 'daily';
-  const weekGridPrefsTarget = useMemo(() => (isMobileWeekHub ? 'mobile' : 'desktop'), [isMobileWeekHub]);
+  }, [pathname, searchParams]);
 
   const weekGridPrefsKey = useMemo(() => {
-    if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
-    return buildWeekGridPrefsSettingsKey(weekScheduleKindKey, weekModeKey, weekGridPrefsTarget);
-  }, [isWeekHubPage, weekGridPrefsTarget, weekModeKey, weekScheduleKindKey]);
-  const legacyWeekGridPrefsKey = useMemo(() => {
-    if (!isWeekHubPage || !weekModeKey || !weekScheduleKindKey) return null;
-    return buildLegacyWeekGridPrefsSettingsKey(weekScheduleKindKey, weekModeKey);
-  }, [isWeekHubPage, weekModeKey, weekScheduleKindKey]);
-  const weekGridPrefsLocalStorageKey = useMemo(
-    () => (weekGridPrefsKey ? buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId) : null),
-    [headerUserId, weekGridPrefsKey],
-  );
-  const legacyWeekGridPrefsLocalStorageKey = useMemo(
-    () => (legacyWeekGridPrefsKey ? buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, headerUserId) : null),
-    [headerUserId, legacyWeekGridPrefsKey],
-  );
+    if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
+    return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
+  }, [pathname, weekModeKey, weekScheduleKindKey]);
 
-  const defaultWeekGridPrefsForPage = useMemo(
-    () => defaultWeekGridPrefs(isMobileWeekHub ? 'mobile' : 'desktop'),
-    [isMobileWeekHub],
-  );
-  const defaultWeekHubCellFontSize = isMobileWeekHub ? 10 : 12;
-
-  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() =>
-    defaultWeekGridPrefs(isMobileWeekHub ? 'mobile' : 'desktop'),
-  );
+  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
-  const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
-  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const readWeekColorPickMode = useCallback(() => {
     return readColorEditMode();
@@ -394,25 +200,10 @@ export default function AppHeader() {
     [],
   );
 
-  const exitColorEditMode = useCallback(() => {
-    writeWeekColorPickMode(false);
-  }, [writeWeekColorPickMode]);
-
   useEffect(() => {
     // 通常時は必ずOFF（編集中のみONを維持したい）
-    exitColorEditMode();
-  }, [exitColorEditMode]);
-
-  useEffect(() => {
-    if (typeof navigator === 'undefined') return;
-
-    const userAgent = navigator.userAgent;
-    const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
-    const nextIsElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
-    const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-
-    setIsElectronShell(nextIsElectronShell);
-    setIsMobileBrowser(isMobileUa && !nextIsElectronShell);
+    writeColorEditMode(false);
+    setWeekColorPickMode(false);
   }, []);
 
   const fetchAppVersion = useCallback(async () => {
@@ -447,33 +238,10 @@ export default function AppHeader() {
     }
   }, []);
 
-  const fetchDesktopRelease = useCallback(async () => {
-    try {
-      setDesktopReleaseError(null);
-      const r = await fetch('/api/desktop-release', { cache: 'no-store' });
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      const release = obj?.release && typeof obj.release === 'object' ? (obj.release as Record<string, unknown>) : null;
-      if (!r.ok || obj?.ok !== true || !release) throw new Error('bad_response');
-
-      setDesktopRelease({
-        version: typeof release.version === 'string' ? release.version : '0.0.0',
-        downloadUrl: typeof release.downloadUrl === 'string' ? release.downloadUrl : null,
-        notes: typeof release.notes === 'string' ? release.notes : null,
-        publishedAt: typeof release.publishedAt === 'string' ? release.publishedAt : null,
-        channel: typeof release.channel === 'string' ? release.channel : 'stable',
-      });
-    } catch {
-      setDesktopRelease(null);
-      setDesktopReleaseError('取得に失敗しました');
-    }
-  }, []);
-
   useEffect(() => {
     if (!isSettingsOpen) return;
     void fetchAppVersion();
-    void fetchDesktopRelease();
-  }, [fetchAppVersion, fetchDesktopRelease, isSettingsOpen]);
+  }, [fetchAppVersion, isSettingsOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -513,11 +281,10 @@ export default function AppHeader() {
         if (reg?.waiting) setIsUpdateAvailableBySw(true);
       }
       await fetchAppVersion();
-      await fetchDesktopRelease();
     } finally {
       setIsCheckingUpdate(false);
     }
-  }, [fetchAppVersion, fetchDesktopRelease]);
+  }, [fetchAppVersion]);
 
   const applyUpdateAndReload = useCallback(async () => {
     try {
@@ -559,121 +326,48 @@ export default function AppHeader() {
     };
   }, []);
 
-  const readWeekGridPrefs = useCallback((localStorageKey: string | null, fallbackLocalStorageKey: string | null = null): WeekGridPrefs => {
+  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
     try {
-      for (const key of [localStorageKey, fallbackLocalStorageKey]) {
-        if (!key) continue;
-        const txt = window.localStorage.getItem(key);
-        if (!txt) continue;
-        const parsed = JSON.parse(txt) as unknown;
-        return normalizeWeekGridPrefs(parsed, defaultWeekGridPrefsForPage);
-      }
-      return defaultWeekGridPrefsForPage;
+      const localKey = `masterHub.ui:${key}`;
+      const txt = window.localStorage.getItem(localKey);
+      if (!txt) return defaultWeekGridPrefs();
+      const parsed = JSON.parse(txt) as unknown;
+      return normalizeWeekGridPrefs(parsed);
     } catch {
-      return defaultWeekGridPrefsForPage;
-    }
-  }, [defaultWeekGridPrefsForPage]);
-
-  const readWeekGridPrefsRaw = useCallback((localStorageKey: string | null, fallbackLocalStorageKey: string | null = null): JsonObject => {
-    try {
-      for (const key of [localStorageKey, fallbackLocalStorageKey]) {
-        if (!key) continue;
-        const txt = window.localStorage.getItem(key);
-        if (!txt) continue;
-        return asObject(JSON.parse(txt) as unknown) ?? {};
-      }
-      return {};
-    } catch {
-      return {};
+      return defaultWeekGridPrefs();
     }
   }, []);
 
-  const applyWeekGridPrefsPatch = useCallback(
-    (patch: Partial<WeekGridPrefs>, options?: { persist?: boolean; storeLocal?: boolean }) => {
-      if (!weekGridPrefsKey || !weekGridPrefsLocalStorageKey) return;
+  const writeWeekGridPrefsPatch = useCallback(
+    (patch: Partial<WeekGridPrefs>) => {
+      if (!weekGridPrefsKey) return;
       try {
-        const localKey = weekGridPrefsLocalStorageKey;
-        const current = readWeekGridPrefs(localKey, legacyWeekGridPrefsLocalStorageKey);
-        const currentRaw = readWeekGridPrefsRaw(localKey, legacyWeekGridPrefsLocalStorageKey);
-        const next = normalizeWeekGridPrefs({ ...currentRaw, ...current, ...patch }, defaultWeekGridPrefsForPage);
-        const payload = { ...currentRaw, ...next, v: WEEK_GRID_PREFS_VERSION };
-        if (options?.storeLocal !== false) {
-          const nextTxt = JSON.stringify(payload);
-          const prevTxt = window.localStorage.getItem(localKey);
-          if (prevTxt !== nextTxt) {
-            window.localStorage.setItem(localKey, nextTxt);
-          }
+        const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+        const current = readWeekGridPrefs(weekGridPrefsKey);
+        const next = normalizeWeekGridPrefs({ ...current, ...patch });
+        const payload = { v: 2, ...next };
+        const nextTxt = JSON.stringify(payload);
+        const prevTxt = window.localStorage.getItem(localKey);
+        if (prevTxt !== nextTxt) {
+          window.localStorage.setItem(localKey, nextTxt);
+          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key: weekGridPrefsKey } }));
         }
-        window.dispatchEvent(
-          new CustomEvent('masterHub:gridPrefsUpdated', {
-            detail: { key: weekGridPrefsKey, storageKey: localKey, value: payload },
-          }),
-        );
 
         setWeekGridPrefs(next);
 
-        if ((options?.persist ?? true) && headerUserId) {
+        if (headerUserId) {
           void fetch('/api/ui-settings', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId: headerUserId, key: weekGridPrefsKey, value: payload }),
+            body: JSON.stringify({ userId: headerUserId, key: weekGridPrefsKey, value: { v: 2, ...next } }),
           }).catch(() => null);
         }
       } catch {
         // ignore
       }
     },
-    [
-      defaultWeekGridPrefsForPage,
-      headerUserId,
-      legacyWeekGridPrefsLocalStorageKey,
-      readWeekGridPrefs,
-      readWeekGridPrefsRaw,
-      weekGridPrefsKey,
-      weekGridPrefsLocalStorageKey,
-    ],
+    [headerUserId, readWeekGridPrefs, weekGridPrefsKey],
   );
-
-  const writeWeekGridPrefsPatch = useCallback(
-    (patch: Partial<WeekGridPrefs>) => {
-      applyWeekGridPrefsPatch(patch, { persist: true });
-    },
-    [applyWeekGridPrefsPatch],
-  );
-
-  useEffect(() => {
-    if (!weekGridPrefsKey) return;
-
-    const apply = (event?: Event) => {
-      if (event instanceof StorageEvent) {
-        if (event.key && event.key !== weekGridPrefsLocalStorageKey) return;
-      }
-
-      if (event instanceof CustomEvent) {
-        const detail = asObject(event.detail);
-        if (typeof detail?.storageKey === 'string' && detail.storageKey !== weekGridPrefsLocalStorageKey) return;
-        if (detail?.value) {
-          setWeekGridPrefs(normalizeWeekGridPrefs(detail.value, defaultWeekGridPrefsForPage));
-          return;
-        }
-      }
-
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
-    };
-
-    window.addEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
-    window.addEventListener('storage', apply as EventListener);
-    return () => {
-      window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
-      window.removeEventListener('storage', apply as EventListener);
-    };
-  }, [
-    defaultWeekGridPrefsForPage,
-    legacyWeekGridPrefsLocalStorageKey,
-    readWeekGridPrefs,
-    weekGridPrefsKey,
-    weekGridPrefsLocalStorageKey,
-  ]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -681,79 +375,46 @@ export default function AppHeader() {
     if (!weekGridPrefsKey) return;
     // Load (DB -> local fallback)
     if (!headerUserId) {
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
+      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
       return;
     }
 
     let cancelled = false;
     void (async () => {
       try {
-        const keysToLoad = [weekGridPrefsKey, legacyWeekGridPrefsKey].filter(
-          (key, index, values): key is string => !!key && values.indexOf(key) === index,
+        const r = await fetch(
+          `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(weekGridPrefsKey)}`,
         );
+        const j = (await r.json().catch(() => null)) as unknown;
+        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+        if (!r.ok || obj?.ok !== true) throw new Error('not ok');
 
-        let loaded = false;
-        for (const key of keysToLoad) {
-          const r = await fetch(
-            `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(key)}`,
-          );
-          const j = (await r.json().catch(() => null)) as unknown;
-          const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-          if (!r.ok || obj?.ok !== true) continue;
+        const raw = (obj as { value?: unknown }).value;
+        const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+        if (cancelled) return;
+        setWeekGridPrefs(next);
 
-          const raw = (obj as { value?: unknown }).value;
-          const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-          const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw, defaultWeekGridPrefsForPage);
-          if (cancelled) return;
-          setWeekGridPrefs(next);
-          loaded = true;
-
-          try {
-            const localKey = weekGridPrefsLocalStorageKey;
-            if (!localKey) return;
-            window.localStorage.setItem(
-              localKey,
-              JSON.stringify({ ...(vObj ?? {}), ...next, v: WEEK_GRID_PREFS_VERSION }),
-            );
-          } catch {
-            // ignore
-          }
-          break;
+        try {
+          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+          window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
+        } catch {
+          // ignore
         }
-
-        if (!loaded) throw new Error('not ok');
       } catch {
         if (cancelled) return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsLocalStorageKey, legacyWeekGridPrefsLocalStorageKey));
+        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    defaultWeekGridPrefsForPage,
-    headerUserId,
-    isSettingsOpen,
-    legacyWeekGridPrefsKey,
-    legacyWeekGridPrefsLocalStorageKey,
-    pathname,
-    readWeekColorPickMode,
-    readWeekGridPrefs,
-    weekGridPrefsKey,
-    weekGridPrefsLocalStorageKey,
-  ]);
+  }, [headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
   const routeKey = useMemo(() => {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
   }, [pathname, searchParams]);
-  const [storedScheduleBackHref, setStoredScheduleBackHref] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = readStoredScheduleReturn();
-    setStoredScheduleBackHref(stored?.href && stored.href !== routeKey ? stored.href : null);
-  }, [routeKey]);
 
   const navIntentRef = useRef<'push' | 'back' | 'forward' | null>(null);
   const didInitNavRef = useRef(false);
@@ -761,8 +422,7 @@ export default function AppHeader() {
   const [navStack, setNavStack] = useState<string[]>([]);
   const [navIndex, setNavIndex] = useState(0);
   const [navLen, setNavLen] = useState(1);
-  const [historyOpenMode, setHistoryOpenMode] = useState<'preview' | 'panel' | null>(null);
-  const [historyPreviewPosition, setHistoryPreviewPosition] = useState<{ left: number; top: number } | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -782,152 +442,26 @@ export default function AppHeader() {
   const openUserGate = useCallback(() => {
     try {
       window.dispatchEvent(new Event('masterHub:openUserGate'));
-      setIsNotificationsOpen(false);
       setIsSettingsOpen(false);
     } catch {
       // ignore
     }
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!headerUserId || isMobileBrowser) {
-      setNotifications([]);
-      setNotificationUnreadCount(0);
-      return;
-    }
-
-    setNotificationLoading(true);
-    try {
-      const res = await fetch('/api/notifications', { cache: 'no-store' });
-      const json = (await res.json().catch(() => null)) as unknown;
-      const obj = asObject(json);
-      if (!res.ok || obj?.ok !== true) return;
-
-      const items = Array.isArray(obj.notifications) ? obj.notifications : [];
-      const parsed: PersonalNotification[] = items
-        .map((item) => asObject(item))
-        .map((item) => {
-          const id = typeof item?.id === 'string' ? item.id : null;
-          const title = typeof item?.title === 'string' ? item.title : null;
-          const createdAt = typeof item?.createdAt === 'string' ? item.createdAt : null;
-          if (!id || !title || !createdAt) return null;
-          return {
-            id,
-            kind: typeof item?.kind === 'string' ? item.kind : 'LOGIN',
-            title,
-            body: typeof item?.body === 'string' ? item.body : null,
-            isRead: item?.isRead === true,
-            readAt: typeof item?.readAt === 'string' ? item.readAt : null,
-            createdAt,
-          } satisfies PersonalNotification;
-        })
-        .filter((item): item is PersonalNotification => !!item);
-
-      setNotifications(parsed);
-      setNotificationUnreadCount(typeof obj.unreadCount === 'number' ? obj.unreadCount : 0);
-    } finally {
-      setNotificationLoading(false);
-    }
-  }, [headerUserId, isMobileBrowser]);
-
-  const markAllNotificationsRead = useCallback(async () => {
-    if (!headerUserId) return;
-    try {
-      const res = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ markAllRead: true }),
-      });
-      const json = (await res.json().catch(() => null)) as unknown;
-      const obj = asObject(json);
-      if (!res.ok || obj?.ok !== true) return;
-
-      const readAt = new Date().toISOString();
-      setNotifications((current) => current.map((item) => ({ ...item, isRead: true, readAt })));
-      setNotificationUnreadCount(typeof obj.unreadCount === 'number' ? obj.unreadCount : 0);
-    } catch {
-      // ignore
-    }
-  }, [headerUserId]);
-
-  const isHistoryOpen = historyOpenMode !== null;
-  const isHistoryPanelOpen = historyOpenMode === 'panel';
-
-  const updateHistoryPreviewPosition = useCallback(() => {
-    const headerRect = headerRef.current?.getBoundingClientRect();
-    const buttonRect = historyButtonRef.current?.getBoundingClientRect();
-    if (!headerRect || !buttonRect) return;
-    setHistoryPreviewPosition({
-      left: Math.max(8, Math.round(headerRect.left + 8)),
-      top: Math.round(buttonRect.bottom + 6),
-    });
-  }, []);
-
-  const closeHistoryPopover = useCallback(() => {
-    actions.historyMenu?.onHover?.(null);
-    setHistoryOpenMode(null);
-    setHistoryPreviewPosition(null);
-  }, [actions.historyMenu]);
-
-  const openHistoryPreview = useCallback(() => {
-    if (!actions.historyMenu || historyOpenMode === 'panel') return;
-    if (!actions.historyMenu.loaded && !actions.historyMenu.loading) {
-      void actions.history?.onClick();
-    }
-    updateHistoryPreviewPosition();
-    setHistoryOpenMode('preview');
-  }, [actions.history, actions.historyMenu, historyOpenMode, updateHistoryPreviewPosition]);
-
   useEffect(() => {
-    if (historyOpenMode !== 'preview') return;
-
-    const update = () => updateHistoryPreviewPosition();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [historyOpenMode, updateHistoryPreviewPosition]);
-
-  useEffect(() => {
-    setHistoryOpenMode(null);
-  }, [routeKey]);
-
-  useEffect(() => {
-    setIsOverflowMenuOpen(false);
-  }, [routeKey]);
-
-  useEffect(() => {
-    setIsNotificationsOpen(false);
+    setIsHistoryOpen(false);
   }, [routeKey]);
 
   useOutsidePointerDown({
     open: isHistoryOpen,
     refs: [historyButtonRef, historyMenuRef],
-    onOutside: closeHistoryPopover,
+    onOutside: () => setIsHistoryOpen(false),
     capture: true,
   });
 
   useEffect(() => {
     setIsMultiMenuOpen(false);
   }, [routeKey]);
-
-  useEffect(() => {
-    if (!isOverflowMenuOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = overflowMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsOverflowMenuOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isOverflowMenuOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -944,22 +478,6 @@ export default function AppHeader() {
       document.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [isSettingsOpen]);
-
-  useEffect(() => {
-    if (!isNotificationsOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = notificationsRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsNotificationsOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isNotificationsOpen]);
 
   useEffect(() => {
     if (!isMultiMenuOpen) return;
@@ -980,35 +498,17 @@ export default function AppHeader() {
   // アラート数を取得
   useEffect(() => {
     let mounted = true;
-    let initialTimer: number | null = null;
 
     const fetchAlertCount = async () => {
       setAlertLoading(true);
       try {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const res = await fetch('/api/alerts/count', { cache: 'no-store' });
-            if (!res.ok) {
-              if (attempt === 0 && (res.status === 500 || res.status === 503)) {
-                await new Promise((resolve) => window.setTimeout(resolve, 350));
-                continue;
-              }
-              return;
-            }
-
-            const data = await res.json();
-            if (mounted && data.ok && typeof data.total === 'number') {
-              setAlertCount(data.total);
-            }
-            return;
-          } catch (error) {
-            if (attempt === 0) {
-              await new Promise((resolve) => window.setTimeout(resolve, 350));
-              continue;
-            }
-            console.error('Failed to fetch alert count:', error);
-          }
+        const res = await fetch('/api/alerts/count');
+        const data = await res.json();
+        if (mounted && data.ok && typeof data.total === 'number') {
+          setAlertCount(data.total);
         }
+      } catch (error) {
+        console.error('Failed to fetch alert count:', error);
       } finally {
         if (mounted) {
           setAlertLoading(false);
@@ -1016,9 +516,7 @@ export default function AppHeader() {
       }
     };
 
-    initialTimer = window.setTimeout(() => {
-      void fetchAlertCount();
-    }, 350);
+    void fetchAlertCount();
 
     // 5分ごとに更新
     const interval = setInterval(() => {
@@ -1027,9 +525,6 @@ export default function AppHeader() {
 
     return () => {
       mounted = false;
-      if (initialTimer !== null) {
-        window.clearTimeout(initialTimer);
-      }
       clearInterval(interval);
     };
   }, []);
@@ -1067,23 +562,6 @@ export default function AppHeader() {
   }, []);
 
   useEffect(() => {
-    if (!headerUserId || isMobileBrowser) {
-      setNotifications([]);
-      setNotificationUnreadCount(0);
-      return;
-    }
-
-    void fetchNotifications();
-    const interval = window.setInterval(() => {
-      void fetchNotifications();
-    }, 60 * 1000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [fetchNotifications, headerUserId, isMobileBrowser]);
-
-  useEffect(() => {
     if (pathname !== '/') return;
 
     const now = new Date();
@@ -1092,7 +570,7 @@ export default function AppHeader() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(`/api/sites?month=${encodeURIComponent(month)}&kind=${encodeURIComponent(scheduleKind)}`);
+        const r = await fetch(`/api/sites?month=${encodeURIComponent(month)}`);
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = asObject(j);
         const rawSites = Array.isArray(obj?.sites) ? (obj?.sites as unknown[]) : [];
@@ -1125,7 +603,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [pathname, scheduleKind]);
+  }, [pathname]);
 
   const pageFontKey = useMemo(() => {
     return `fontSize:${pathname}`;
@@ -1173,19 +651,19 @@ export default function AppHeader() {
   const applyFontSize = useCallback(
     (px: number | null) => {
       // 予定セルのみ適用（全体のフォントサイズは変えない）
-      if (!isWeekHubPage) {
+      if (pathname !== '/') {
         document.documentElement.style.removeProperty('--weekhub-cell-font-size');
         return;
       }
-      const v = px && Number.isFinite(px) ? Math.max(10, Math.min(30, Math.round(px))) : defaultWeekHubCellFontSize;
+      const v = px && Number.isFinite(px) ? Math.max(10, Math.min(30, Math.round(px))) : 12;
       document.documentElement.style.setProperty('--weekhub-cell-font-size', `${v}px`);
     },
-    [defaultWeekHubCellFontSize, isWeekHubPage],
+    [pathname],
   );
 
   useEffect(() => {
     // Apply on navigation (local first)
-    const local = readLocalPageFontSize(headerUserId) ?? (isWeekHubPage ? defaultWeekHubCellFontSize : null);
+    const local = readLocalPageFontSize(headerUserId);
     setPageFontSize(local);
     setPageFontSizeDraft(local == null ? '' : String(local));
     applyFontSize(local);
@@ -1204,14 +682,14 @@ export default function AppHeader() {
         if (cancelled) return;
 
         const raw = obj.value;
-        const n = typeof raw === 'number' ? raw : isWeekHubPage ? defaultWeekHubCellFontSize : null;
+        const n = typeof raw === 'number' ? raw : null;
         setPageFontSize(n);
         setPageFontSizeDraft(n == null ? '' : String(n));
         applyFontSize(n);
         writeLocalPageFontSize(headerUserId, n);
       } catch {
         if (cancelled) return;
-        const fallback = readLocalPageFontSize(headerUserId) ?? (isWeekHubPage ? defaultWeekHubCellFontSize : null);
+        const fallback = readLocalPageFontSize(headerUserId);
         setPageFontSize(fallback);
         setPageFontSizeDraft(fallback == null ? '' : String(fallback));
         applyFontSize(fallback);
@@ -1220,7 +698,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [applyFontSize, defaultWeekHubCellFontSize, headerUserId, isWeekHubPage, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
+  }, [applyFontSize, headerUserId, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
 
   const savePageFontSize = useCallback(
     async (px: number) => {
@@ -1343,8 +821,8 @@ export default function AppHeader() {
 
   const canBack = useMemo(() => {
     if (actions.undo) return !actions.undo.disabled;
-    return navIndex > 0 || pathname !== '/' || Boolean(storedScheduleBackHref);
-  }, [actions.undo, navIndex, pathname, storedScheduleBackHref]);
+    return navIndex > 0 || !isWeek;
+  }, [actions.undo, isWeek, navIndex]);
 
   const canForward = useMemo(() => {
     if (actions.redo) return !actions.redo.disabled;
@@ -1372,17 +850,10 @@ export default function AppHeader() {
   const isManagement = pathname === '/management';
   const isSiteLedger = pathname === '/site-ledger';
   const isPartners = pathname === '/partners';
-  const isSchedule = pathname === '/schedule';
   const isMulti = pathname === '/multi';
   const isReports = pathname === '/reports';
   const isInvoices = pathname === '/invoices';
   const isAlerts = pathname === '/alerts';
-  const isHistoryButtonEnabled = Boolean(actions.historyPanel || actions.historyMenu || actions.history || navStack.length > 0);
-  const scheduleEditButtonLabel = actions.save ? '編集終了' : actions.add ? '編集開始' : '編集準備中';
-  const scheduleEditButtonDisabled = actions.save ? Boolean(actions.save.disabled) : actions.add ? Boolean(actions.add.disabled) : true;
-  const scheduleEditHelpText = actions.save
-    ? actions.save.title ?? '編集モード中です。右クリックメニューとセル操作を使えます。'
-    : actions.add?.title ?? '予定編集の準備中です。';
 
   return (
     <header
@@ -1390,143 +861,18 @@ export default function AppHeader() {
       data-color-edit-slot="panel"
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
-      <div className="bg-white/60 dark:bg-black/60 overflow-visible">
-        <div
-          className={`mx-auto flex w-full max-w-screen-2xl min-w-0 items-center py-2 sm:py-3 overflow-visible ${
-            isElectronShell
-              ? 'mh-scrollbar-hidden justify-start gap-2 overflow-x-auto whitespace-nowrap px-0.5 sm:px-1.5 lg:px-2.5'
-              : 'flex-wrap justify-between gap-2 px-3 sm:px-4 lg:flex-nowrap lg:px-6'
-          }`}
-        >
-
-          <div
-            className={`flex items-center ${
-              isElectronShell
-                ? 'shrink-0 flex-nowrap gap-1 sm:gap-1.5'
-                : 'min-w-0 flex-1 flex-wrap gap-2 sm:-ml-2'
-            }`}
-          >
+      <div className="bg-white/60 dark:bg-black/60">
+        <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
+          <div className="flex items-center gap-3">
             {/* Left small banner area (future: settings/alerts/notifications) */}
-            <Link
-              href="/"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:home-title"
-              className="text-sm font-medium tracking-tight"
-            >
+            <Link href="/" className="text-sm font-medium tracking-tight">
               Master Hub
             </Link>
 
-            {/* 現場リスト三角ボタン */}
-            <button
-              type="button"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:site-list-toggle"
-              aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
-              className={`${isElectronShell ? 'ml-0' : 'ml-1'} flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900`}
-              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-              onClick={() => setIsSiteListCollapsed((v) => !v)}
-            >
-              {isSiteListCollapsed ? <span>&#9654;</span> : <span>&#9664;</span>}
-            </button>
-
-          <div className="flex min-w-0 items-center gap-2">
-            {!isMobileBrowser ? (
-              <div ref={notificationsRef} className="relative">
-                <button
-                  type="button"
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:notifications-toggle"
-                  onClick={() => {
-                    setIsSettingsOpen(false);
-                    setIsNotificationsOpen((current) => {
-                      const next = !current;
-                      if (next) {
-                        void fetchNotifications();
-                      }
-                      return next;
-                    });
-                  }}
-                  aria-expanded={isNotificationsOpen}
-                  className="relative rounded-md border border-zinc-200 bg-white/60 px-2.5 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                  title="個人通知"
-                >
-                  <span className="flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path d="M12 4a4 4 0 0 0-4 4v2.4c0 .6-.2 1.1-.6 1.5L6 13.3V15h12v-1.7l-1.4-1.4c-.4-.4-.6-.9-.6-1.5V8a4 4 0 0 0-4-4Z" />
-                      <path d="M10 18a2 2 0 0 0 4 0" />
-                    </svg>
-                  </span>
-                  {notificationUnreadCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                      {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
-                    </span>
-                  ) : null}
-                </button>
-
-                {isNotificationsOpen ? (
-                  <PortalMenu
-                    anchorRef={notificationsRef}
-                    isOpen={isNotificationsOpen}
-                    onClose={() => setIsNotificationsOpen(false)}
-                    width={320}
-                    className="rounded-md"
-                  >
-                    <div
-                      data-color-edit-id="header:notifications-panel"
-                      data-color-edit-slot="border"
-                      className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-                    >
-                      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        <span>個人通知</span>
-                        <button
-                          type="button"
-                          data-color-edit-id="header:notifications-mark-all-read"
-                          onClick={() => void markAllNotificationsRead()}
-                          className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[10px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                        >
-                          すべて既読
-                        </button>
-                      </div>
-                      <div className="max-h-[320px] overflow-auto overscroll-contain">
-                        {notificationLoading ? (
-                          <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">読み込み中…</div>
-                        ) : notifications.length === 0 ? (
-                          <div className="px-3 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">通知はありません</div>
-                        ) : (
-                          notifications.map((notification) => (
-                            <div
-                              key={notification.id}
-                              className={`border-b border-zinc-200 px-3 py-3 text-[11px] last:border-b-0 dark:border-zinc-800 ${
-                                notification.isRead ? 'bg-transparent' : 'bg-red-50/50 dark:bg-red-950/20'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="font-medium text-zinc-800 dark:text-zinc-100">{notification.title}</div>
-                                {!notification.isRead ? (
-                                  <span className="mt-1 inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
-                                ) : null}
-                              </div>
-                              {notification.body ? (
-                                <div className="mt-1 break-words text-zinc-600 dark:text-zinc-300">{notification.body}</div>
-                              ) : null}
-                              <div className="mt-1 text-zinc-400 dark:text-zinc-500">
-                                {formatNotificationTime(notification.createdAt)}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </PortalMenu>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div ref={settingsRef} className="relative" data-color-edit-keep>
+          <div className="flex items-center gap-2">
+            <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
               <button
                 type="button"
-                data-color-edit-slot="button"
-                data-color-edit-id="header:settings-toggle"
                 onClick={() => setIsSettingsOpen((v) => !v)}
                 aria-expanded={isSettingsOpen}
                 className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
@@ -1537,9 +883,8 @@ export default function AppHeader() {
 
               {isSettingsOpen ? (
                 <div
-                  data-color-edit-id="header:settings-panel"
                   data-color-edit-slot="border"
-                  className="absolute left-0 top-full z-[10050] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                  className="absolute left-0 top-full mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                 >
                   <div className="max-h-[70vh] overflow-auto overscroll-contain">
                     <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
@@ -1549,7 +894,6 @@ export default function AppHeader() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
-                        data-color-edit-id="header:settings-font-size-14"
                         onClick={() => void savePageFontSize(14)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 14
@@ -1561,7 +905,6 @@ export default function AppHeader() {
                       </button>
                       <button
                         type="button"
-                        data-color-edit-id="header:settings-font-size-16"
                         onClick={() => void savePageFontSize(16)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 16
@@ -1573,7 +916,6 @@ export default function AppHeader() {
                       </button>
                       <button
                         type="button"
-                        data-color-edit-id="header:settings-font-size-18"
                         onClick={() => void savePageFontSize(18)}
                         className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
                           (pageFontSize ?? 16) === 18
@@ -1632,36 +974,6 @@ export default function AppHeader() {
                       初回登録 / 切替
                     </button>
                     </div>
-
-                    {pathname === '/' ? (
-                      <>
-                        <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                          予定編集
-                        </div>
-                        <div className="p-2 space-y-2">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (actions.save) {
-                                await actions.save.onClick();
-                                return;
-                              }
-                              await actions.add?.onClick();
-                            }}
-                            disabled={scheduleEditButtonDisabled}
-                            className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-                            title={scheduleEditHelpText}
-                          >
-                            {scheduleEditButtonLabel}
-                          </button>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {actions.save
-                              ? '右クリックで予定セルの従来メニューを開けます。色変更はセル操作の「色」を使います。終了すると通常表示へ戻ります。'
-                              : '編集を開始すると、右クリックメニューとセル操作が使えます。色変更はセル操作の「色」を使います。'}
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
 
                     <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                       線（個人）
@@ -1762,56 +1074,16 @@ export default function AppHeader() {
                         </div>
                       </div>
                       <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        ONの間、各ボタンや枠、背景を右クリックして色（＋濃淡）を編集します。右クリックした要素ごとに保存でき、必要なら共通設定へ戻せます。
+                        ONの間、画面の任意箇所をクリックして色（＋濃淡）を編集します（このページごと・アカウント別に保存）。
                       </div>
                     </div>
 
-                  {isWeekHubPage && weekGridPrefsKey ? (
+                  {pathname === '/' && weekGridPrefsKey ? (
                     <>
                       <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                        表示（セル）
+                        セル（週予定）
                       </div>
                       <div className="p-2 space-y-2">
-                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">背景</div>
-                          <select
-                            value={weekGridPrefs.cellBg}
-                            onChange={(e) =>
-                              writeWeekGridPrefsPatch({
-                                cellBg: isWeekGridCellBg(e.target.value) ? e.target.value : 'default',
-                              })
-                            }
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="背景"
-                          >
-                            {WEEK_GRID_BG_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">文字色</div>
-                          <select
-                            value={weekGridPrefs.cellTextColor}
-                            onChange={(e) =>
-                              writeWeekGridPrefsPatch({
-                                cellTextColor: isWeekGridTextColor(e.target.value) ? e.target.value : 'default',
-                              })
-                            }
-                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
-                            aria-label="文字色"
-                          >
-                            {WEEK_GRID_TEXT_COLOR_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                           <div className="text-[11px] text-zinc-600 dark:text-zinc-400">表示密度</div>
                           <div className="grid grid-cols-2 gap-2">
@@ -1841,60 +1113,88 @@ export default function AppHeader() {
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">名前幅(px)</div>
-                          <HoverPreviewNumberDropdown
-                            label="名前幅(px)"
-                            value={weekGridPrefs.nameColW}
-                            options={WEEK_GRID_NAME_WIDTH_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ nameColW: nextValue }, { persist: false, storeLocal: false })}
-                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ nameColW: nextValue })}
-                          />
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[84, 112, 140].map((w) => (
+                              <button
+                                key={w}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinW: w })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinW === w
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {w === 84 ? '狭' : w === 112 ? '標準' : '広'}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">日幅(px)</div>
-                          <HoverPreviewNumberDropdown
-                            label="日幅(px)"
-                            value={weekGridPrefs.cellMinW}
-                            options={WEEK_GRID_DAY_WIDTH_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinW: nextValue }, { persist: false, storeLocal: false })}
-                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinW: nextValue })}
-                          />
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(狭)</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[40, 48, 56].map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinHCompact: h })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinHCompact === h
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {h === 40 ? '低' : h === 48 ? '標準' : '高'}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">低(px)</div>
-                          <HoverPreviewNumberDropdown
-                            label="低(px)"
-                            value={weekGridPrefs.cellMinHCompact}
-                            options={WEEK_GRID_COMPACT_HEIGHT_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHCompact: nextValue }, { persist: false, storeLocal: false })}
-                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHCompact: nextValue })}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高(px)</div>
-                          <HoverPreviewNumberDropdown
-                            label="高(px)"
-                            value={weekGridPrefs.cellMinHComfortable}
-                            options={WEEK_GRID_COMFORTABLE_HEIGHT_OPTIONS}
-                            onPreview={(nextValue) => applyWeekGridPrefsPatch({ cellMinHComfortable: nextValue }, { persist: false, storeLocal: false })}
-                            onCommit={(nextValue) => writeWeekGridPrefsPatch({ cellMinHComfortable: nextValue })}
-                          />
-                        </div>
-
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          現在: 名前 {weekGridPrefs.nameColW}px / 日幅 {weekGridPrefs.cellMinW}px / 低 {weekGridPrefs.cellMinHCompact}px / 高 {weekGridPrefs.cellMinHComfortable}px
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(広)</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[56, 64, 72].map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinHComfortable: h })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinHComfortable === h
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {h === 56 ? '低' : h === 64 ? '標準' : '高'}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </>
                   ) : null}
 
                     <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                      更新（アプデ）
+                      アプリ
                     </div>
                     <div className="p-2 space-y-2">
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        {appVersion ? (
+                          <>
+                            <div>
+                              {appVersion.name} v{appVersion.version}
+                            </div>
+                            {appVersion.gitSha ? <div className="break-all">{appVersion.gitSha}</div> : null}
+                            {appVersion.buildTime ? <div className="break-all">{appVersion.buildTime}</div> : null}
+                          </>
+                        ) : appVersionError ? (
+                          <div>{appVersionError}</div>
+                        ) : (
+                          <div>取得中…</div>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -1917,57 +1217,6 @@ export default function AppHeader() {
                       {isUpdateAvailable ? (
                         <div className="text-[11px] text-zinc-500 dark:text-zinc-400">新しいバージョンがあります。</div>
                       ) : null}
-
-                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                        {appVersion ? (
-                          <>
-                            <div>
-                              {appVersion.name} v{appVersion.version}
-                            </div>
-                            {appVersion.gitSha ? <div className="break-all">{appVersion.gitSha}</div> : null}
-                            {appVersion.buildTime ? <div className="break-all">{appVersion.buildTime}</div> : null}
-                          </>
-                        ) : appVersionError ? (
-                          <div>{appVersionError}</div>
-                        ) : (
-                          <div>取得中…</div>
-                        )}
-                      </div>
-
-                      <div className="rounded-md border border-zinc-200 bg-white/50 p-2 text-[11px] dark:border-zinc-800 dark:bg-black/40">
-                        <div className="font-medium text-zinc-700 dark:text-zinc-200">PCパッケージアプリ</div>
-                        <div className="mt-1 text-zinc-600 dark:text-zinc-400">
-                          {desktopRelease ? (
-                            <>
-                              <div>
-                                配布版 v{desktopRelease.version}
-                                {desktopRelease.channel ? ` / ${desktopRelease.channel}` : ''}
-                              </div>
-                              {desktopRelease.publishedAt ? <div>{desktopRelease.publishedAt}</div> : null}
-                              {desktopRelease.notes ? <div className="mt-1 break-words">{desktopRelease.notes}</div> : null}
-                              {desktopRelease.downloadUrl ? (
-                                <>
-                                  <a
-                                    href={desktopRelease.downloadUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 inline-flex rounded-md border border-zinc-200 bg-white px-3 py-2 text-[11px] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-                                  >
-                                    PCアプリをダウンロード
-                                  </a>
-                                  <div className="mt-2 break-all">{desktopRelease.downloadUrl}</div>
-                                </>
-                              ) : (
-                                <div className="mt-2">ダウンロードリンク未設定</div>
-                              )}
-                            </>
-                          ) : desktopReleaseError ? (
-                            <div>{desktopReleaseError}</div>
-                          ) : (
-                            <div>取得中…</div>
-                          )}
-                        </div>
-                      </div>
                     </div>
 
                   </div>
@@ -1976,10 +1225,9 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className={`${isElectronShell ? 'flex' : 'hidden'} ml-1 shrink-0 flex-nowrap items-center gap-1`}>
+          <div className="flex items-center gap-1">
             <button
               type="button"
-              data-color-edit-id="header-action-back"
               data-testid="header-action-back"
               onClick={() => {
                 if (actions.undo && !actions.undo.disabled) {
@@ -1992,41 +1240,35 @@ export default function AppHeader() {
                   return;
                 }
 
-                if (storedScheduleBackHref) {
+                if (!isWeek) {
                   navIntentRef.current = 'push';
-                  router.push(storedScheduleBackHref);
-                  return;
-                }
-
-                if (pathname !== '/') {
-                  navIntentRef.current = 'back';
-                  router.back();
+                  router.push('/?mode=week');
                 }
               }}
               disabled={!canBack}
               title={actions.undo ? actions.undo.title ?? '入力を取り消し' : 'ロールバック'}
-              className={`${canBack ? '' : 'hidden xl:inline-flex'} mh-btn`}
+              className="mh-btn"
             >
               戻る
             </button>
 
             <button
               type="button"
-              data-color-edit-id="header-action-add"
               data-testid="header-action-save"
-              onClick={async () => {
-                await actions.save?.onClick();
+              onClick={() => {
+                writeColorEditMode(false);
+                setWeekColorPickMode(false);
+                void actions.save?.onClick();
               }}
               disabled={!actions.save || actions.save.disabled}
               title={actions.save?.title ?? '作業や入力'}
-              className={`${actions.save && !actions.save.disabled ? '' : 'hidden xl:inline-flex'} mh-btn-primary`}
+              className="mh-btn-primary"
             >
               保存
             </button>
 
             <button
               type="button"
-              data-color-edit-id="header-action-forward"
               data-testid="header-action-forward"
               onClick={() => {
                 if (actions.redo && !actions.redo.disabled) {
@@ -2039,60 +1281,29 @@ export default function AppHeader() {
               }}
               disabled={!canForward}
               title={actions.redo ? actions.redo.title ?? '入力をやり直し' : 'ロールフォワード'}
-              className={`${canForward ? '' : 'hidden xl:inline-flex'} mh-btn`}
+              className="mh-btn"
             >
               進む
             </button>
 
             <button
               type="button"
-              data-color-edit-id="header-action-add"
               data-testid="header-action-add"
-              onClick={() => {
-                void actions.add?.onClick();
-              }}
+              onClick={() => void actions.add?.onClick()}
               disabled={!actions.add || actions.add.disabled}
               title={actions.add?.title ?? '編集'}
-              className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden xl:ml-1 xl:inline-flex'} mh-btn`}
+              className="ml-1 mh-btn"
             >
               編集
             </button>
 
-            <div
-              className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}
-              onPointerEnter={() => {
-                if (!isHistoryButtonEnabled) return;
-                openHistoryPreview();
-              }}
-            >
+            <div className="relative">
               <button
                 type="button"
                 ref={historyButtonRef}
-                data-color-edit-id="header-action-history"
                 data-testid="header-action-history"
-                onClick={() => {
-                  if (actions.historyPanel) {
-                    void actions.history?.onClick();
-                    if (isHistoryPanelOpen) {
-                      closeHistoryPopover();
-                      return;
-                    }
-                    setHistoryOpenMode('panel');
-                    return;
-                  }
-
-                  const nextOpen = !isHistoryOpen;
-                  if (nextOpen && actions.historyMenu && !actions.historyMenu.loaded && !actions.historyMenu.loading) {
-                    void actions.history?.onClick();
-                  }
-                  if (!nextOpen) {
-                    closeHistoryPopover();
-                    return;
-                  }
-                  updateHistoryPreviewPosition();
-                  setHistoryOpenMode('preview');
-                }}
-                disabled={!isHistoryButtonEnabled}
+                onClick={() => setIsHistoryOpen((v) => !v)}
+                disabled={!(actions.historyMenu || actions.history || navStack.length > 0)}
                 title="履歴"
                 className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
               >
@@ -2103,24 +1314,14 @@ export default function AppHeader() {
                 <div
                   ref={historyMenuRef}
                   data-color-edit-slot="border"
-                  className={`${isHistoryPanelOpen ? 'absolute left-0 top-full mt-1' : 'fixed z-[90]'} overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
-                    isHistoryPanelOpen ? (actions.historyPanel?.widthClassName ?? 'w-[480px]') : 'w-[560px] max-w-[min(calc(100vw-16px),560px)]'
-                  }`}
-                  style={
-                    isHistoryPanelOpen || !historyPreviewPosition
-                      ? undefined
-                      : {
-                          left: historyPreviewPosition.left,
-                          top: historyPreviewPosition.top,
-                        }
-                  }
+                  className="absolute left-0 top-full mt-1 w-[480px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                 >
-                  {actions.history && !actions.historyPanel ? (
+                  {actions.history ? (
                     <button
                       type="button"
                       onClick={() => {
                         void actions.history?.onClick();
-                        closeHistoryPopover();
+                        setIsHistoryOpen(false);
                       }}
                       disabled={actions.history.disabled}
                       className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
@@ -2130,121 +1331,108 @@ export default function AppHeader() {
                     </button>
                   ) : null}
 
-                  {isHistoryPanelOpen && actions.historyPanel ? (
-                    actions.historyPanel.content
-                  ) : (
-                    <div className="max-h-[32rem] overflow-auto py-1">
-                      {actions.historyMenu ? (
-                        <div className="flex flex-col gap-1 px-2 pb-1">
-                          {actions.historyMenu.loading || !actions.historyMenu.loaded ? (
-                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">履歴を読み込み中...</div>
-                          ) : null}
-                          {actions.historyMenu.loaded && actions.historyMenu.items.length === 0 ? (
-                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">{actions.historyMenu.emptyLabel ?? '編集履歴はありません。'}</div>
-                          ) : null}
-                          {actions.historyMenu.items.slice(0, 12).map((it) => (
-                            <div
-                              key={it.key}
-                              data-color-edit-slot="border"
-                              className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 hover:border-red-300 hover:bg-red-50/40 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:border-red-800 dark:hover:bg-red-950/20"
-                              onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
-                              onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
-                            >
-                              <div className="grid grid-cols-[84px_minmax(0,0.55fr)_minmax(0,0.55fr)_46px] items-center gap-2 text-[11px]">
-                                <div className="min-w-0 truncate text-zinc-500 dark:text-zinc-400" title={it.targetLabel ?? ''}>
-                                  {it.targetLabel ?? ''}
-                                </div>
-                                <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
-                                  {it.beforeLabel}
-                                </div>
-                                <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.afterLabel}>
-                                  {it.afterLabel}
-                                </div>
-                                <div className="truncate text-zinc-500 dark:text-zinc-400" title={it.editorLabel}>{it.editorLabel}</div>
+                  <div className="max-h-[32rem] overflow-auto py-1">
+                    {actions.historyMenu ? (
+                      <div className="flex flex-col gap-1 px-2 pb-1">
+                        {actions.historyMenu.items.length === 0 ? (
+                          <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">編集履歴はありません。</div>
+                        ) : null}
+                        {actions.historyMenu.items.slice(0, 40).map((it) => (
+                          <div
+                            key={it.key}
+                            data-color-edit-slot="border"
+                            className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                            onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
+                            onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
+                          >
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                              <div className="text-zinc-500 dark:text-zinc-400">
+                                {new Date(it.at).toLocaleString()}
                               </div>
+                              <div
+                                className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-200"
+                                title={it.targetLabel ?? it.beforeLabel ?? it.afterLabel ?? it.key}
+                              >
+                                {it.targetLabel ?? it.beforeLabel ?? it.afterLabel ?? it.key}
+                              </div>
+                              <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        navStack
-                          .map((key, idx) => {
-                            let label = key;
-                            if (key.includes('mode=week')) {
-                              label = '週予定';
-                            } else if (key.includes('mode=month')) {
-                              label = '月予定';
-                            } else if (key.includes('mode=year')) {
-                              label = '年予定';
-                            } else if (key.startsWith('/site-ledger/')) {
-                              label = '現場台帳';
-                            } else if (key === '/management') {
-                              label = '管理画面';
-                            } else if (key === '/partners') {
-                              label = '取引先管理';
-                            } else if (key === '/reports') {
-                              label = '報告書';
-                            } else if (key === '/accounting') {
-                              label = '会計連携';
-                            } else if (key === '/invoices') {
-                              label = '請求書';
-                            } else if (key === '/alerts') {
-                              label = 'アラート';
-                            } else if (key === '/multi') {
-                              label = '複数選択';
-                            } else if (key === '/') {
-                              label = 'ホーム';
-                            }
-                            return { key, idx, label };
-                          })
-                          .slice(-20)
-                          .reverse()
-                          .map((it) => (
-                            <div
-                              key={`${it.idx}-${it.key}`}
-                              className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
-                              {it.label}
-                            </div>
-                          ))
-                      )}
-                    </div>
-                  )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      navStack
+                        .map((key, idx) => {
+                          let label = key;
+                          if (key.includes('mode=week')) {
+                            label = '週予定';
+                          } else if (key.includes('mode=month')) {
+                            label = '月予定';
+                          } else if (key.includes('mode=year')) {
+                            label = '年予定';
+                          } else if (key.startsWith('/site-ledger/')) {
+                            label = '現場台帳';
+                          } else if (key === '/management') {
+                            label = '管理画面';
+                          } else if (key === '/partners') {
+                            label = '取引先管理';
+                          } else if (key === '/reports') {
+                            label = '報告書';
+                          } else if (key === '/accounting') {
+                            label = '会計連携';
+                          } else if (key === '/invoices') {
+                            label = '請求書';
+                          } else if (key === '/alerts') {
+                            label = 'アラート';
+                          } else if (key === '/multi') {
+                            label = '複数選択';
+                          } else if (key === '/') {
+                            label = 'ホーム';
+                          }
+                          return { key, idx, label };
+                        })
+                        .slice(-20)
+                        .reverse()
+                        .map((it) => (
+                          <div
+                            key={`${it.idx}-${it.key}`}
+                            className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
+                          >
+                            <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
+                            <span className="break-all">{it.label}</span>
+                          </div>
+                        ))
+                    )}
+                  </div>
                 </div>
               ) : null}
             </div>
 
-            {pathname === '/' && !isElectronShell ? (
-              <div className="ml-0 hidden min-w-0 shrink-0 flex-nowrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:invoice"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
+            {pathname === '/' ? (
+              <div className="ml-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-600 dark:text-zinc-400" aria-label="当月アラート凡例">
+                <div className="flex items-center gap-1">
                   <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
+                    className={`mh-alert-dot mh-alert-dot-invoice ${
+                      monthLegend.invoiceMissing ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
+                    }`}
                     aria-hidden="true"
                   />
                   <span>請求未</span>
                 </div>
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:report"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
+                <div className="flex items-center gap-1">
                   <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
+                    className={`mh-alert-dot mh-alert-dot-report ${
+                      monthLegend.reportMissing ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
+                    }`}
                     aria-hidden="true"
                   />
                   <span>報告未</span>
                 </div>
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:unassigned"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
+                <div className="flex items-center gap-1">
                   <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
+                    className={`mh-alert-dot mh-alert-dot-unassigned ${
+                      monthLegend.unassigned ? 'mh-alert-dot-active' : 'mh-alert-dot-inactive'
+                    }`}
                     aria-hidden="true"
                   />
                   <span>未配置</span>
@@ -2255,283 +1443,44 @@ export default function AppHeader() {
         </div>
 
         {/* Right-side hub actions */}
-          <div
-            className={`flex ${
-              isElectronShell
-                ? 'ml-1 shrink-0 flex-nowrap items-end gap-1'
-                : `${isMobileBrowser ? 'ml-auto shrink-0 flex-nowrap justify-end' : 'min-w-0'} max-w-full items-center gap-1`
-            }`}
-          >
-          <div ref={overflowMenuRef} className={`${isMobileBrowser ? 'hidden' : 'relative lg:hidden'}`}>
-            <button
-              type="button"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:overflow-menu-toggle"
-              onClick={() => {
-                setIsMultiMenuOpen(false);
-                setIsOverflowMenuOpen((v) => !v);
-              }}
-              className={`${navLinkClass('メニュー', false)} relative`}
-              aria-expanded={isOverflowMenuOpen}
-              title="主要メニュー"
-            >
-              メニュー
-              {!alertLoading && alertCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                  {alertCount > 99 ? '99+' : alertCount}
-                </span>
-              ) : null}
-            </button>
-
-            {isOverflowMenuOpen ? (
-              <div
-                data-color-edit-slot="border"
-                className="absolute right-0 top-full z-50 mt-1 w-[220px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-              >
-                <div className="max-h-[70vh] overflow-auto py-1">
-                  <Link
-                    href="/alerts"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isAlerts ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isAlerts ? 'page' : undefined}
-                  >
-                    アラート
-                  </Link>
-                  <Link
-                    href="/accounting"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isAccounting ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isAccounting ? 'page' : undefined}
-                  >
-                    会計
-                  </Link>
-                  <Link
-                    href="/reports"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isReports ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isReports ? 'page' : undefined}
-                  >
-                    報告書
-                  </Link>
-                  <Link
-                    href="/invoices"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isInvoices ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isInvoices ? 'page' : undefined}
-                  >
-                    請求書
-                  </Link>
-                  <Link
-                    href={managementHref}
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isManagement ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isManagement ? 'page' : undefined}
-                  >
-                    管理
-                  </Link>
-                  <Link
-                    href={siteLedgerHref}
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isSiteLedger ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isSiteLedger ? 'page' : undefined}
-                  >
-                    現場台帳
-                  </Link>
-                  <Link
-                    href="/partners"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isPartners ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isPartners ? 'page' : undefined}
-                  >
-                    関係会社
-                  </Link>
-                  <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=graph');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（グラフ）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=net');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（収支）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=sales');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（売上）
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {isElectronShell && pathname === '/' ? (
-            <div className="flex shrink-0 flex-col items-start gap-0.5">
-              <div className="flex shrink-0 flex-nowrap items-center gap-1 text-[11px]" aria-label="当月アラート凡例">
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:invoice"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
-                    aria-hidden="true"
-                  />
-                  <span>請求未</span>
-                </div>
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:report"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
-                    aria-hidden="true"
-                  />
-                  <span>報告未</span>
-                </div>
-                <div
-                  data-color-edit-slot="button"
-                  data-color-edit-id="header:alert-legend:unassigned"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900"
-                >
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
-                    aria-hidden="true"
-                  />
-                  <span>未配置</span>
-                </div>
-              </div>
-              <Link
-                href="/alerts"
-                data-color-edit-slot="button"
-                data-color-edit-id="header:nav:alerts"
-                onClick={() => {
-                  navIntentRef.current = 'push';
-                }}
-                className={`relative inline-flex rounded-md border px-3 py-2 text-[11px] ${
-                  isAlerts
-                    ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
-                    : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
-                }`}
-                title="アラート（通知/現場単価/送信失敗）へ"
-                aria-current={isAlerts ? 'page' : undefined}
-              >
-                アラート
-                {!alertLoading && alertCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                    {alertCount > 99 ? '99+' : alertCount}
-                  </span>
-                )}
-              </Link>
-            </div>
-          ) : (
-            <Link
-              href="/alerts"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:nav:alerts"
-              onClick={() => {
-                navIntentRef.current = 'push';
-              }}
-              className={`relative hidden rounded-md border px-3 py-2 text-[11px] lg:inline-flex ${
-                isAlerts
-                  ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
-                  : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
-              }`}
-              title="アラート（通知/現場単価/送信失敗）へ"
-              aria-current={isAlerts ? 'page' : undefined}
-            >
-              アラート
-              {!alertLoading && alertCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                  {alertCount > 99 ? '99+' : alertCount}
-                </span>
-              )}
-            </Link>
-          )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
-            href="/?mode=week&kind=normal"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:week"
+            href="/alerts"
             onClick={() => {
               navIntentRef.current = 'push';
-              markForceDesktopWeekHomeOnce();
-              if (pathname === '/') {
-                try {
-                  window.dispatchEvent(new CustomEvent('masterHub:jumpCurrentWeek'));
-                } catch {
-                  // ignore
-                }
-              }
             }}
-            className={navLinkClass('週予定', isNormalWeek, isMobileBrowser ? 'hidden' : 'inline-flex')}
+            className={`relative rounded-md border px-3 py-2 text-[11px] ${
+              isAlerts
+                ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950/60 dark:text-red-300'
+                : 'border-red-300 bg-white/60 text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-black/60 dark:text-red-300 dark:hover:bg-red-950/60'
+            }`}
+            title="アラート（通知/現場単価/送信失敗）へ"
+            aria-current={isAlerts ? 'page' : undefined}
+          >
+            アラート
+            {!alertLoading && alertCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                {alertCount > 99 ? '99+' : alertCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/?mode=week"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={navLinkClass(isWeek)}
             title="週予定へ（週モードに戻す）"
-            aria-current={isNormalWeek ? 'page' : undefined}
+            aria-current={isWeek ? 'page' : undefined}
           >
             週予定
           </Link>
           <Link
             href="/accounting"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:accounting"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('会計', isAccounting, 'hidden lg:inline-flex')}
+            className={navLinkClass(isAccounting)}
             title="会計（PDF/CSV/テンプレ/一覧）へ"
             aria-current={isAccounting ? 'page' : undefined}
           >
@@ -2540,12 +1489,10 @@ export default function AppHeader() {
 
           <Link
             href="/reports"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:reports"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('報告書', isReports, 'hidden lg:inline-flex')}
+            className={navLinkClass(isReports)}
             title="報告書（送信/履歴/検索）へ"
             aria-current={isReports ? 'page' : undefined}
           >
@@ -2554,38 +1501,32 @@ export default function AppHeader() {
 
           <Link
             href="/invoices"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:invoices"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('請求書', isInvoices, 'hidden lg:inline-flex')}
+            className={navLinkClass(isInvoices)}
             title="請求書（送信/履歴/検索）へ"
             aria-current={isInvoices ? 'page' : undefined}
           >
             請求書
           </Link>
           <Link
-            href={managementHref}
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:management"
+            href="/management"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('管理', isManagement, 'hidden lg:inline-flex')}
+            className={navLinkClass(isManagement)}
             title="リピート/自動入力などの管理へ"
             aria-current={isManagement ? 'page' : undefined}
           >
             管理
           </Link>
           <Link
-            href={siteLedgerHref}
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:site-ledger"
+            href="/site-ledger"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('現場台帳', isSiteLedger, 'hidden lg:inline-flex')}
+            className={navLinkClass(isSiteLedger)}
             title="現場台帳（追加/詳細）へ"
             aria-current={isSiteLedger ? 'page' : undefined}
           >
@@ -2593,42 +1534,21 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/partners"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:partners"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
-            className={navLinkClass('関係会社', isPartners, 'hidden lg:inline-flex')}
+            className={navLinkClass(isPartners)}
             title="関係会社へ"
             aria-current={isPartners ? 'page' : undefined}
           >
             関係会社
           </Link>
 
-          <Link
-            href="/?mode=week&kind=daily"
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:daily"
-            onClick={() => {
-              navIntentRef.current = 'push';
-            }}
-            className={navLinkClass('日常', isDailyWeek, 'hidden lg:inline-flex')}
-            title="日常予定へ"
-            aria-current={isDailyWeek ? 'page' : undefined}
-          >
-            日常
-          </Link>
-
           <div ref={multiMenuRef} className="relative">
             <button
               type="button"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:nav:multi"
-              onClick={() => {
-                setIsOverflowMenuOpen(false);
-                setIsMultiMenuOpen((v) => !v);
-              }}
-              className={navLinkClass('マルチ', isMulti, 'hidden lg:inline-flex')}
+              onClick={() => setIsMultiMenuOpen((v) => !v)}
+              className={navLinkClass(isMulti)}
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
@@ -2675,40 +1595,8 @@ export default function AppHeader() {
               </div>
             ) : null}
           </div>
-
-            <Link
-              href="/schedule"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:nav:schedule-mobile"
-              onClick={() => {
-                navIntentRef.current = 'push';
-              }}
-              className={`lg:hidden rounded-md border px-3 py-2 text-[11px] ${
-                isSchedule
-                  ? 'border-blue-300 bg-blue-500 text-white dark:border-blue-700'
-                  : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/80 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60'
-              }`}
-              aria-current={isSchedule ? 'page' : undefined}
-            >
-              スケジュール
-            </Link>
-
-            <Link
-              href="/schedule"
-              data-color-edit-slot="button"
-              data-color-edit-id="header:nav:schedule"
-              onClick={() => {
-                navIntentRef.current = 'push';
-              }}
-              className={navLinkClass('スケジュール', isSchedule, 'hidden lg:inline-flex')}
-              title="個人スケジュールへ"
-              aria-current={isSchedule ? 'page' : undefined}
-            >
-              スケジュール
-            </Link>
-
+          </div>
         </div>
-      </div>
       </div>
     </header>
   );
