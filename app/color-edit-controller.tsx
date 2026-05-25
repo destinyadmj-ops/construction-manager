@@ -449,7 +449,7 @@ export default function ColorEditController() {
   useEffect(() => {
     // Keep local override in state so UI controls (range input, etc.) behave as controlled components.
     setPageOverride(readLocalPageThemeOverride(userIdRef.current, pathname));
-    setGlobalOverride(readLocalGlobalThemeOverride(userIdRef.current));
+    setGlobalOverride(readLocalGlobalThemeOverride());
   }, [pathname, userId]);
 
   useEffect(() => {
@@ -471,7 +471,7 @@ export default function ColorEditController() {
         const raw = obj.value;
         const next = normalizePageThemeOverrides(raw);
         setGlobalOverride(next);
-        writeLocalGlobalThemeOverride(userIdRef.current, next);
+        writeLocalGlobalThemeOverride(next);
       } catch {
         // ignore
       }
@@ -500,13 +500,14 @@ export default function ColorEditController() {
       const detail = asObject(ce.detail);
       const detailUser = typeof detail?.userId === 'string' ? (detail.userId as string) : null;
 
-      if (detailUser && detailUser !== (userIdRef.current ?? 'anon')) return;
+      if (detailUser && detailUser !== 'global' && detailUser !== (userIdRef.current ?? 'anon')) return;
 
-      setGlobalOverride(readLocalGlobalThemeOverride(userIdRef.current));
+      setGlobalOverride(readLocalGlobalThemeOverride());
     };
 
     window.addEventListener('masterHub:pageThemeOverrideUpdated', onPageUpdated as EventListener);
     window.addEventListener('masterHub:globalThemeOverrideUpdated', onGlobalUpdated as EventListener);
+
     return () => {
       window.removeEventListener('masterHub:pageThemeOverrideUpdated', onPageUpdated as EventListener);
       window.removeEventListener('masterHub:globalThemeOverrideUpdated', onGlobalUpdated as EventListener);
@@ -515,7 +516,7 @@ export default function ColorEditController() {
 
   useEffect(() => {
     const currentPageOverride = readLocalPageThemeOverride(userIdRef.current, pathname);
-    const currentGlobalOverride = readLocalGlobalThemeOverride(userIdRef.current);
+    const currentGlobalOverride = readLocalGlobalThemeOverride();
     const nextPageElements = { ...currentPageOverride.elements };
     const nextGlobalElements = { ...currentGlobalOverride.elements };
     let pageChanged = false;
@@ -560,7 +561,7 @@ export default function ColorEditController() {
 
     if (globalChanged) {
       globalOverrideRef.current = nextGlobalOverride;
-      writeLocalGlobalThemeOverride(userIdRef.current, nextGlobalOverride);
+      writeLocalGlobalThemeOverride(nextGlobalOverride);
       queueGlobalSave(nextGlobalOverride);
     }
 
@@ -626,7 +627,7 @@ export default function ColorEditController() {
     (next: PageThemeOverrides) => {
       globalOverrideRef.current = next;
       setGlobalOverride(next);
-      writeLocalGlobalThemeOverride(userIdRef.current, next);
+      writeLocalGlobalThemeOverride(next);
       applyThemeOverride(pageOverrideRef.current, next);
       queueGlobalSave(next);
     },
