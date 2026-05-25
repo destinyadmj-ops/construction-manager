@@ -22,6 +22,7 @@ export default function WorkSlipExcelEditor({ params }: { params: { id: string }
       try {
         const res = await fetch(`/api/work-slip-color?id=${encodeURIComponent(id)}`);
         const json = await res.json();
+        if (stopped) return;
         if (json.ok && typeof json.color === 'string') setButtonColor(json.color);
       } catch {}
     }
