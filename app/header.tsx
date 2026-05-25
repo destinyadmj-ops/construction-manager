@@ -1458,7 +1458,7 @@ export default function AppHeader() {
                   <div
                     data-color-edit-id="header:notifications-panel"
                     data-color-edit-slot="border"
-                    className="absolute left-0 top-full z-[9999] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                    className="absolute left-0 top-full z-[10050] mt-1 w-[320px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
                   >
                     <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                       <span>個人通知</span>
