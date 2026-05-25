@@ -11,102 +11,102 @@ import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { normalizeThemeShade } from './color-ramp';
 import {
   applyUiTheme,
-  defaultUiTheme,
-  normalizeUiTheme,
-  readLocalUiTheme,
-  UI_THEME_COLORS,
-  UI_THEME_SETTING_KEY,
-  type UiThemeColor,
-  writeLocalUiTheme,
-} from './ui-theme';
+              <PortalMenu anchorRef={historyButtonRef} isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} width={480}>
+                <div
+                  ref={historyMenuRef}
+                  data-color-edit-slot="border"
+                  className="w-[480px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+                >
+                  {actions.history ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void actions.history?.onClick();
+                        setIsHistoryOpen(false);
+                      }}
+                      disabled={actions.history.disabled}
+                      className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      title={actions.history.title ?? '編集履歴'}
+                    >
+                      {actions.history.title ?? '編集履歴'}
+                    </button>
+                  ) : null}
 
-type JsonObject = Record<string, unknown>;
-
-function asObject(v: unknown): JsonObject | null {
-  return v && typeof v === 'object' ? (v as JsonObject) : null;
-}
-
-function toMonthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-type WeekGridPrefs = {
-  gridLayout: 'compact' | 'comfortable';
-  cellTextColor: UiThemeColor;
-  cellTextShade: number;
-  cellBgColor: UiThemeColor;
-  cellBgShade: number;
-  cellMinW: number;
-  cellMinHCompact: number;
-  cellMinHComfortable: number;
-};
-
-function clampInt(n: number, min: number, max: number, fallback: number) {
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(n)));
-}
-
-function isUiThemeColor(value: string): value is UiThemeColor {
-  return UI_THEME_COLORS.includes(value as UiThemeColor);
-}
-
-function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
-  const o = asObject(raw);
-  const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
-  const rawTextColor = typeof o?.cellTextColor === 'string' ? o.cellTextColor : '';
-  const cellTextColor = isUiThemeColor(rawTextColor) ? rawTextColor : 'default';
-  const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
-
-  const rawBgColor = typeof o?.cellBgColor === 'string' ? o.cellBgColor : '';
-  const cellBgColor = isUiThemeColor(rawBgColor) ? rawBgColor : 'default';
-  const cellBgShade = (() => {
-    if (typeof o?.cellBgShade === 'number') return normalizeThemeShade(o.cellBgShade, 0);
-    // v1 compatibility
-    if (o?.cellBg === 'soft') return 25;
-    return 0;
-  })();
-  const cellMinW = clampInt(typeof o?.cellMinW === 'number' ? (o.cellMinW as number) : NaN, 60, 240, 112);
-  const cellMinHCompact = clampInt(
-    typeof o?.cellMinHCompact === 'number' ? (o.cellMinHCompact as number) : NaN,
-    32,
-    120,
-    48,
-  );
-  const cellMinHComfortable = clampInt(
-    typeof o?.cellMinHComfortable === 'number' ? (o.cellMinHComfortable as number) : NaN,
-    32,
-    120,
-    64,
-  );
-  return {
-    gridLayout,
-    cellTextColor,
-    cellTextShade,
-    cellBgColor,
-    cellBgShade,
-    cellMinW,
-    cellMinHCompact,
-    cellMinHComfortable,
-  };
-}
-
-function defaultWeekGridPrefs(): WeekGridPrefs {
-  return {
-    gridLayout: 'compact',
-    cellTextColor: 'default',
-    cellTextShade: 50,
-    cellBgColor: 'default',
-    cellBgShade: 0,
-    cellMinW: 112,
-    cellMinHCompact: 48,
-    cellMinHComfortable: 64,
-  };
-}
-
-type MonthLegendState = {
-  invoiceMissing: boolean;
-  reportMissing: boolean;
-  unassigned: boolean;
+                  <div className="max-h-[32rem] overflow-auto py-1">
+                    {actions.historyMenu ? (
+                      <div className="flex flex-col gap-1 px-2 pb-1">
+                        {actions.historyMenu.items.length === 0 ? (
+                          <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">編集履歴はありません。</div>
+                        ) : null}
+                        {actions.historyMenu.items.slice(0, 40).map((it) => (
+                          <div
+                            key={it.key}
+                            data-color-edit-slot="border"
+                            className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                            onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
+                            onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
+                          >
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                              <div className="text-zinc-500 dark:text-zinc-400">
+                                {new Date(it.at).toLocaleString()}
+                              </div>
+                              <div
+                                className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-200"
+                                title={it.targetLabel ?? it.beforeLabel ?? it.afterLabel ?? it.key}
+                              >
+                                {it.targetLabel ?? it.beforeLabel ?? it.afterLabel ?? it.key}
+                              </div>
+                              <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      navStack
+                        .map((key, idx) => {
+                          let label = key;
+                          if (key.includes('mode=week')) {
+                            label = '週予定';
+                          } else if (key.includes('mode=month')) {
+                            label = '月予定';
+                          } else if (key.includes('mode=year')) {
+                            label = '年予定';
+                          } else if (key.startsWith('/site-ledger/')) {
+                            label = '現場台帳';
+                          } else if (key === '/management') {
+                            label = '管理画面';
+                          } else if (key === '/partners') {
+                            label = '取引先管理';
+                          } else if (key === '/reports') {
+                            label = '報告書';
+                          } else if (key === '/accounting') {
+                            label = '会計連携';
+                          } else if (key === '/invoices') {
+                            label = '請求書';
+                          } else if (key === '/alerts') {
+                            label = 'アラート';
+                          } else if (key === '/multi') {
+                            label = '複数選択';
+                          } else if (key === '/') {
+                            label = 'ホーム';
+                          }
+                          return { key, idx, label };
+                        })
+                        .slice(-20)
+                        .reverse()
+                        .map((it) => (
+                          <div
+                            key={`${it.idx}-${it.key}`}
+                            className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
+                          >
+                            <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
+                            <span className="break-all">{it.label}</span>
+                          </div>
+                        ))}
+                    )}
+                  </div>
+                </div>
+              </PortalMenu>
 };
 
 type AppVersionInfo = {

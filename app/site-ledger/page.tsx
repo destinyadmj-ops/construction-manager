@@ -225,13 +225,6 @@ export default function SiteLedgerPage() {
     return /^\d{4}-\d{2}$/.test(value) ? value : null;
   }, [searchParams]);
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
-  const workSlipHref = useMemo(() => {
-    const sp = new URLSearchParams();
-    sp.set('kind', scheduleKind);
-    if (monthParam) sp.set('month', monthParam);
-    const query = sp.toString();
-    return query ? `/site-ledger/work-slips?${query}` : '/site-ledger/work-slips';
-  }, [monthParam, scheduleKind]);
 
   const [deprMonthByKind, setDeprMonthByKind] = useState<{ normal: string; daily: string }>(() => {
     const fallbackMonth = currentMonthKey();
