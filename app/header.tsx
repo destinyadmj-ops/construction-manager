@@ -1381,7 +1381,7 @@ export default function AppHeader() {
       data-color-edit-slot="panel"
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
-      <div className="bg-white/60 dark:bg-black/60">
+      <div className="bg-white/60 dark:bg-black/60 overflow-visible">
         <div
           className={`mx-auto flex w-full max-w-screen-2xl min-w-0 items-center py-2 sm:py-3 overflow-visible ${
             isElectronShell
