@@ -11,7 +11,7 @@ type PortalMenuProps = {
   width?: number;
   offset?: { x?: number; y?: number };
   className?: string;
-  menuRef?: React.Ref<HTMLDivElement> | React.RefObject<HTMLDivElement> | null;
+  menuRef?: React.Ref<HTMLDivElement> | null;
   align?: 'left' | 'right';
 };
 
@@ -45,7 +45,7 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
       }
       const top = Math.round(rect.bottom + (offset?.y ?? 0) + window.scrollY);
       setPos({ left, top, w });
-    }
+    };
     update();
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
@@ -53,7 +53,7 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
-  }, [isOpen, anchorRef, width, offset]);
+  }, [isOpen, anchorRef, width, offset, align]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -76,7 +76,7 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
   };
 
   return createPortal(
-    <div ref={menuRef as any} style={style} className={className}>
+    <div ref={menuRef ?? undefined} style={style} className={className}>
       {children}
     </div>,
     container,
