@@ -5,6 +5,7 @@ import { useOutsidePointerDown } from './use-outside-pointerdown';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PortalMenu from './components/portal-menu';
 import { useHeaderActions } from './header-actions';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { normalizeThemeShade } from './color-ramp';
@@ -143,388 +144,387 @@ export default function AppHeader() {
   const [headerUserId, setHeaderUserId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
-  const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
-  const [isElectronShell, setIsElectronShell] = useState(false);
-  const [isMobileBrowser, setIsMobileBrowser] = useState(false);
+            <div ref={settingsRef} className="relative" data-color-edit-keep data-color-edit-ui>
+              <button
+                type="button"
+                ref={settingsButtonRef}
+                onClick={() => setIsSettingsOpen((v) => !v)}
+                aria-expanded={isSettingsOpen}
+                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                title="設定"
+              >
+                設定
+              </button>
 
-  const [, setMonthLegend] = useState<MonthLegendState>({
-    invoiceMissing: false,
-    reportMissing: false,
-    unassigned: false,
-  });
+              <PortalMenu anchorRef={settingsButtonRef} isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} width={320} offset={{ y: 8 }}>
+                <div data-color-edit-slot="border" className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black">
+                  <div className="max-h-[70vh] overflow-auto overscroll-contain">
+                    <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      文字サイズ（予定セル）
+                    </div>
+                    <div className="p-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void savePageFontSize(14)}
+                        className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                          (pageFontSize ?? 16) === 14
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        小
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void savePageFontSize(16)}
+                        className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                          (pageFontSize ?? 16) === 16
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        標準
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void savePageFontSize(18)}
+                        className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                          (pageFontSize ?? 16) === 18
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        大
+                      </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        現在: {(pageFontSize ?? 12)}px
+                      </div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={10}
+                        max={30}
+                        value={pageFontSizeDraft}
+                        onChange={(e) => setPageFontSizeDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          const n = Number(pageFontSizeDraft);
+                          if (!Number.isFinite(n)) return;
+                          void savePageFontSize(n);
+                        }}
+                        onBlur={() => {
+                          const n = Number(pageFontSizeDraft);
+                          if (!Number.isFinite(n)) {
+                            setPageFontSizeDraft(pageFontSize == null ? '' : String(pageFontSize));
+                            return;
+                          }
+                          void savePageFontSize(n);
+                        }}
+                        className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                        aria-label="文字サイズ（px）"
+                      />
+                    </div>
+                    {!headerUserId ? (
+                      <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        ユーザー未設定のため、この端末内のみ保存されます
+                      </div>
+                    ) : null}
+                    </div>
 
-  const [isMultiMenuOpen, setIsMultiMenuOpen] = useState(false);
-  const multiMenuRef = useRef<HTMLDivElement | null>(null);
+                    <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      ユーザー
+                    </div>
+                    <div className="p-2">
+                    <button
+                      type="button"
+                      onClick={openUserGate}
+                      className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                    >
+                      初回登録 / 切替
+                    </button>
+                    </div>
 
-  const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
-  const [, setAppVersionBase] = useState<string | null>(null);
-  const [appVersionError, setAppVersionError] = useState<string | null>(null);
-  const [isUpdateAvailableByVersion, setIsUpdateAvailableByVersion] = useState(false);
-  const [isUpdateAvailableBySw, setIsUpdateAvailableBySw] = useState(false);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+                    {pathname === '/' ? (
+                      <>
+                        <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                          予定編集
+                        </div>
+                        <div className="p-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (actions.save) {
+                                writeColorEditMode(false);
+                                setWeekColorPickMode(false);
+                                void actions.save.onClick();
+                                return;
+                              }
+                              void actions.add?.onClick();
+                            }}
+                            disabled={scheduleEditButtonDisabled}
+                            className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                            title={scheduleEditHelpText}
+                          >
+                            {scheduleEditButtonLabel}
+                          </button>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{scheduleEditHelpText}</div>
+                        </div>
+                      </>
+                    ) : null}
 
-  const [alertCount, setAlertCount] = useState<number>(0);
-  const [alertLoading, setAlertLoading] = useState(false);
+                    <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      線（個人）
+                    </div>
+                    <div className="p-2 space-y-2">
+                    <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">グリッド線</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: false })}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            !uiTheme.gridStrongLines
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          標準
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: true })}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            uiTheme.gridStrongLines
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          強
+                        </button>
+                      </div>
+                    </div>
 
-  const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
+                    <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">枠線</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: false })}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            !uiTheme.borderStrong
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          標準
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: true })}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            uiTheme.borderStrong
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          強
+                        </button>
+                      </div>
+                    </div>
 
-  const isWeek = pathname === '/' && (!mode || mode === 'week');
+                    {!headerUserId ? (
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        ユーザー未設定のため、この端末内のみ保存されます
+                      </div>
+                    ) : null}
+                    </div>
 
-  const weekModeKey = useMemo(() => {
-    if (pathname !== '/') return null;
-    const m = (mode ?? '').trim();
-    if (m === 'month' || m === 'year' || m === 'week') return m;
-    return 'week';
-  }, [mode, pathname]);
+                    <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      カラー編集（全画面）
+                    </div>
+                    <div className="p-2 space-y-2">
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">編集モード</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => writeWeekColorPickMode(false)}
+                            className={`rounded-md border px-2 py-2 text-[11px] ${
+                              !weekColorPickMode
+                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                            }`}
+                          >
+                            OFF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => writeWeekColorPickMode(true)}
+                            className={`rounded-md border px-2 py-2 text-[11px] ${
+                              weekColorPickMode
+                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                            }`}
+                          >
+                            ON
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        ONの間、画面の任意箇所をクリックして色（＋濃淡）を編集します（このページごと・アカウント別に保存）。
+                      </div>
+                    </div>
 
-  const weekScheduleKindKey = useMemo(() => {
-    if (pathname !== '/') return null;
-    const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
-    return k === 'daily' ? 'daily' : 'normal';
-  }, [pathname, searchParams]);
+                  {pathname === '/' && weekGridPrefsKey ? (
+                    <>
+                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                        セル（週予定）
+                      </div>
+                      <div className="p-2 space-y-2">
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">表示密度</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => writeWeekGridPrefsPatch({ gridLayout: 'compact' })}
+                              className={`rounded-md border px-2 py-2 text-[11px] ${
+                                weekGridPrefs.gridLayout === 'compact'
+                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                              }`}
+                            >
+                              コンパクト
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => writeWeekGridPrefsPatch({ gridLayout: 'comfortable' })}
+                              className={`rounded-md border px-2 py-2 text-[11px] ${
+                                weekGridPrefs.gridLayout === 'comfortable'
+                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                              }`}
+                            >
+                              ゆったり
+                            </button>
+                          </div>
+                        </div>
 
-  const weekGridPrefsKey = useMemo(() => {
-    if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
-    return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
-  }, [pathname, weekModeKey, weekScheduleKindKey]);
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[84, 112, 140].map((w) => (
+                              <button
+                                key={w}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinW: w })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinW === w
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {w === 84 ? '狭' : w === 112 ? '標準' : '広'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-  const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
-  const [weekColorPickMode, setWeekColorPickMode] = useState(false);
-  const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState(false);
-  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(狭)</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[40, 48, 56].map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinHCompact: h })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinHCompact === h
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {h === 40 ? '低' : h === 48 ? '標準' : '高'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-  const readWeekColorPickMode = useCallback(() => {
-    return readColorEditMode();
-  }, []);
+                        <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                          <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(広)</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[56, 64, 72].map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => writeWeekGridPrefsPatch({ cellMinHComfortable: h })}
+                                className={`rounded-md border px-2 py-2 text-[11px] ${
+                                  weekGridPrefs.cellMinHComfortable === h
+                                    ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                    : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                                }`}
+                              >
+                                {h === 56 ? '低' : h === 64 ? '標準' : '高'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
 
-  const writeWeekColorPickMode = useCallback(
-    (next: boolean) => {
-      writeColorEditMode(next);
-      setWeekColorPickMode(next);
-    },
-    [],
-  );
+                    <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      更新（アプデ）
+                    </div>
+                    <div className="p-2 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void checkForUpdate()}
+                          disabled={isCheckingUpdate}
+                          className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                        >
+                          更新確認
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void applyUpdateAndReload()}
+                          disabled={!isUpdateAvailable}
+                          className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                        >
+                          更新して再読み込み
+                        </button>
+                      </div>
 
-  useEffect(() => {
-    // 通常時は必ずOFF（編集中のみONを維持したい）
-    writeColorEditMode(false);
-    setWeekColorPickMode(false);
-  }, []);
+                      {isUpdateAvailable ? (
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">新しいバージョンがあります。</div>
+                      ) : null}
 
-  useEffect(() => {
-    if (typeof navigator === 'undefined') return;
-
-    const userAgent = navigator.userAgent;
-    const isWorkbenchShell = /\bCode\/\d+/i.test(userAgent);
-    const nextIsElectronShell = /\bElectron\/\d+/i.test(userAgent) && !isWorkbenchShell;
-    const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-
-    setIsElectronShell(nextIsElectronShell);
-    setIsMobileBrowser(isMobileUa && !nextIsElectronShell);
-  }, []);
-
-  const fetchAppVersion = useCallback(async () => {
-    try {
-      setAppVersionError(null);
-      const r = await fetch('/api/version', { cache: 'no-store' });
-      const j = (await r.json().catch(() => null)) as unknown;
-      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-      const info = obj && typeof obj.info === 'object' ? (obj.info as Record<string, unknown>) : null;
-
-      if (!r.ok || obj?.ok !== true || !info) throw new Error('bad_response');
-
-      const parsed: AppVersionInfo = {
-        name: typeof info.name === 'string' ? info.name : 'master-hub',
-        version: typeof info.version === 'string' ? info.version : '0.0.0',
-        gitSha: typeof info.gitSha === 'string' ? info.gitSha : null,
-        buildTime: typeof info.buildTime === 'string' ? info.buildTime : null,
-        nodeEnv: typeof info.nodeEnv === 'string' ? info.nodeEnv : 'unknown',
-      };
-
-      setAppVersion(parsed);
-
-      const id = versionId(parsed);
-      setAppVersionBase((base) => {
-        // first fetch becomes the baseline for detecting updates.
-        const nextBase = base ?? id;
-        setIsUpdateAvailableByVersion(nextBase !== id);
-        return nextBase;
-      });
-    } catch {
-      setAppVersionError('取得に失敗しました');
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isSettingsOpen) return;
-    void fetchAppVersion();
-  }, [fetchAppVersion, isSettingsOpen]);
-
-  useEffect(() => {
-    if (!isSettingsOpen) return;
-    if (!('serviceWorker' in navigator)) return;
-
-    let cleanup: (() => void) | null = null;
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (cancelled) return;
-        if (reg?.waiting) setIsUpdateAvailableBySw(true);
-
-        const onUpdateFound = () => {
-          setIsUpdateAvailableBySw(true);
-        };
-        reg?.addEventListener('updatefound', onUpdateFound);
-        cleanup = () => reg?.removeEventListener('updatefound', onUpdateFound);
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
-  }, [isSettingsOpen]);
-
-  const checkForUpdate = useCallback(async () => {
-    setIsCheckingUpdate(true);
-    try {
-      if ('serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        await reg?.update().catch(() => null);
-        if (reg?.waiting) setIsUpdateAvailableBySw(true);
-      }
-      await fetchAppVersion();
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  }, [fetchAppVersion]);
-
-  const applyUpdateAndReload = useCallback(async () => {
-    try {
-      if (!('serviceWorker' in navigator)) {
-        window.location.reload();
-        return;
-      }
-
-      const reg = await navigator.serviceWorker.getRegistration();
-      let reloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloading) return;
-        reloading = true;
-        window.location.reload();
-      });
-
-      if (reg?.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        return;
-      }
-
-      // If there's no waiting worker, a reload still picks up latest assets/server.
-      window.location.reload();
-    } catch {
-      window.location.reload();
-    }
-  }, []);
-
-  useEffect(() => {
-    const apply = () => {
-      const v = readColorEditMode();
-      setWeekColorPickMode(v);
-    };
-    window.addEventListener('masterHub:colorEditModeUpdated', apply as EventListener);
-    window.addEventListener('storage', apply as EventListener);
-    return () => {
-      window.removeEventListener('masterHub:colorEditModeUpdated', apply as EventListener);
-      window.removeEventListener('storage', apply as EventListener);
-    };
-  }, []);
-
-  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
-    try {
-      const localKey = `masterHub.ui:${key}`;
-      const txt = window.localStorage.getItem(localKey);
-      if (!txt) return defaultWeekGridPrefs();
-      const parsed = JSON.parse(txt) as unknown;
-      return normalizeWeekGridPrefs(parsed);
-    } catch {
-      return defaultWeekGridPrefs();
-    }
-  }, []);
-
-  const writeWeekGridPrefsPatch = useCallback(
-    (patch: Partial<WeekGridPrefs>) => {
-      if (!weekGridPrefsKey) return;
-      try {
-        const localKey = `masterHub.ui:${weekGridPrefsKey}`;
-        const current = readWeekGridPrefs(weekGridPrefsKey);
-        const next = normalizeWeekGridPrefs({ ...current, ...patch });
-        const payload = { v: 2, ...next };
-        const nextTxt = JSON.stringify(payload);
-        const prevTxt = window.localStorage.getItem(localKey);
-        if (prevTxt !== nextTxt) {
-          window.localStorage.setItem(localKey, nextTxt);
-          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key: weekGridPrefsKey } }));
-        }
-
-        setWeekGridPrefs(next);
-
-        if (headerUserId) {
-          void fetch('/api/ui-settings', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ userId: headerUserId, key: weekGridPrefsKey, value: { v: 2, ...next } }),
-          }).catch(() => null);
-        }
-      } catch {
-        // ignore
-      }
-    },
-    [headerUserId, readWeekGridPrefs, weekGridPrefsKey],
-  );
-
-  useEffect(() => {
-    if (!isSettingsOpen) return;
-    setWeekColorPickMode(readWeekColorPickMode());
-    if (!weekGridPrefsKey) return;
-    // Load (DB -> local fallback)
-    if (!headerUserId) {
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const r = await fetch(
-          `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(weekGridPrefsKey)}`,
-        );
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) throw new Error('not ok');
-
-        const raw = (obj as { value?: unknown }).value;
-        const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
-        if (cancelled) return;
-        setWeekGridPrefs(next);
-
-        try {
-          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
-          window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
-        } catch {
-          // ignore
-        }
-      } catch {
-        if (cancelled) return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
-  const routeKey = useMemo(() => {
-    const qs = searchParams.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchParams]);
-
-  const navIntentRef = useRef<'push' | 'back' | 'forward' | null>(null);
-  const didInitNavRef = useRef(false);
-  const navStateRef = useRef<{ stack: string[]; index: number }>({ stack: [], index: 0 });
-  const [navStack, setNavStack] = useState<string[]>([]);
-  const [navIndex, setNavIndex] = useState(0);
-  const [navLen, setNavLen] = useState(1);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const historyButtonRef = useRef<HTMLButtonElement | null>(null);
-  const historyMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const setNavState = useCallback((stack: string[], index: number) => {
-    navStateRef.current = { stack, index };
-    setNavStack(stack);
-    setNavIndex(index);
-    setNavLen(stack.length || 1);
-    try {
-      window.sessionStorage.setItem('masterHub.navStack', JSON.stringify(stack));
-      window.sessionStorage.setItem('masterHub.navIndex', String(index));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const openUserGate = useCallback(() => {
-    try {
-      window.dispatchEvent(new Event('masterHub:openUserGate'));
-      setIsSettingsOpen(false);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    setIsHistoryOpen(false);
-  }, [routeKey]);
-
-  useEffect(() => {
-    setIsOverflowMenuOpen(false);
-  }, [routeKey]);
-
-  useOutsidePointerDown({
-    open: isHistoryOpen,
-    refs: [historyButtonRef, historyMenuRef],
-    onOutside: () => setIsHistoryOpen(false),
-    capture: true,
-  });
-
-  useEffect(() => {
-    setIsMultiMenuOpen(false);
-  }, [routeKey]);
-
-  useEffect(() => {
-    if (!isOverflowMenuOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = overflowMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsOverflowMenuOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isOverflowMenuOpen]);
-
-  useEffect(() => {
-    if (!isSettingsOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = settingsRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsSettingsOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isSettingsOpen]);
-
-  useEffect(() => {
-    if (!isMultiMenuOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = multiMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        {appVersion ? (
+                          <>
+                            <div>
+                              {appVersion.name} v{appVersion.version}
+                            </div>
+                            {appVersion.gitSha ? <div className="break-all">{appVersion.gitSha}</div> : null}
+                            {appVersion.buildTime ? <div className="break-all">{appVersion.buildTime}</div> : null}
+                          </>
+                        ) : appVersionError ? (
+                          <div>{appVersionError}</div>
+                        ) : (
+                          <div>取得中…</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </PortalMenu>
+            </div>
       setIsMultiMenuOpen(false);
     };
 
