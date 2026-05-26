@@ -11,9 +11,11 @@ type PortalMenuProps = {
   width?: number;
   offset?: { x?: number; y?: number };
   className?: string;
+  menuRef?: React.Ref<HTMLDivElement> | React.RefObject<HTMLDivElement> | null;
+  align?: 'left' | 'right';
 };
 
-export default function PortalMenu({ anchorRef, isOpen, onClose, children, width, offset, className }: PortalMenuProps) {
+export default function PortalMenu({ anchorRef, isOpen, onClose, children, width, offset, className, menuRef, align }: PortalMenuProps) {
   const container: HTMLElement | null = typeof document !== 'undefined'
     ? (() => {
         let el = document.getElementById('mh-portal-root') as HTMLElement | null;
@@ -34,9 +36,14 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
       const anchor = anchorRef?.current;
       if (!anchor) return;
       const rect = anchor.getBoundingClientRect();
-      const left = Math.max(8, Math.round(rect.left + (offset?.x ?? 0)));
-      const top = Math.round(rect.bottom + (offset?.y ?? 0) + window.scrollY);
       const w = width ?? Math.min(420, Math.round(rect.width || 320));
+      // default: align left to anchor.left
+      let left = Math.max(8, Math.round(rect.left + (offset?.x ?? 0)));
+      // if align right, align menu's right edge to anchor's right edge
+      if (align === 'right') {
+        left = Math.max(8, Math.round(rect.right - w + (offset?.x ?? 0)));
+      }
+      const top = Math.round(rect.bottom + (offset?.y ?? 0) + window.scrollY);
       setPos({ left, top, w });
     }
     update();
@@ -69,7 +76,7 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
   };
 
   return createPortal(
-    <div style={style} className={className}>
+    <div ref={menuRef as any} style={style} className={className}>
       {children}
     </div>,
     container,
