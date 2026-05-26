@@ -48,17 +48,15 @@ function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
   const o = asObject(raw);
   const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
   const rawTextColor = typeof o?.cellTextColor === 'string' ? (o.cellTextColor as string) : '';
-  const cellTextColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawTextColor as UiThemeColor,
-  )
+  const _textAllowed = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+  const cellTextColor = (_textAllowed as readonly string[]).includes(rawTextColor)
     ? (rawTextColor as UiThemeColor)
     : 'default';
   const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
 
   const rawBgColor = typeof o?.cellBgColor === 'string' ? (o.cellBgColor as string) : '';
-  const cellBgColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawBgColor as UiThemeColor,
-  )
+  const _bgAllowed = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+  const cellBgColor = (_bgAllowed as readonly string[]).includes(rawBgColor)
     ? (rawBgColor as UiThemeColor)
     : 'default';
   const cellBgShade = (() => {
