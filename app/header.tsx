@@ -157,6 +157,10 @@ export default function AppHeader() {
 
   const [isMultiMenuOpen, setIsMultiMenuOpen] = useState(false);
   const multiMenuRef = useRef<HTMLDivElement | null>(null);
+  // portal menu refs (separate from wrapper/button refs)
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const overflowPortalRef = useRef<HTMLDivElement | null>(null);
+  const multiPortalRef = useRef<HTMLDivElement | null>(null);
 
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
   const [, setAppVersionBase] = useState<string | null>(null);
@@ -485,53 +489,26 @@ export default function AppHeader() {
     setIsMultiMenuOpen(false);
   }, [routeKey]);
 
-  useEffect(() => {
-    if (!isOverflowMenuOpen) return;
+  useOutsidePointerDown({
+    open: isOverflowMenuOpen,
+    refs: [overflowMenuRef, overflowPortalRef],
+    onOutside: () => setIsOverflowMenuOpen(false),
+    capture: true,
+  });
 
-    const onPointerDown = (e: PointerEvent) => {
-      const el = overflowMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsOverflowMenuOpen(false);
-    };
+  useOutsidePointerDown({
+    open: isSettingsOpen,
+    refs: [settingsRef, settingsMenuRef],
+    onOutside: () => setIsSettingsOpen(false),
+    capture: true,
+  });
 
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isOverflowMenuOpen]);
-
-  useEffect(() => {
-    if (!isSettingsOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = settingsRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsSettingsOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isSettingsOpen]);
-
-  useEffect(() => {
-    if (!isMultiMenuOpen) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      const el = multiMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setIsMultiMenuOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [isMultiMenuOpen]);
+  useOutsidePointerDown({
+    open: isMultiMenuOpen,
+    refs: [multiMenuRef, multiPortalRef],
+    onOutside: () => setIsMultiMenuOpen(false),
+    capture: true,
+  });
 
   // アラート数を取得
   useEffect(() => {
@@ -964,11 +941,369 @@ export default function AppHeader() {
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
                 width={320}
+                menuRef={settingsMenuRef}
                 className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
               >
                 <div className="max-h-[70vh] overflow-auto overscroll-contain">
-                  {/* ...existing code...（ここに従来の設定メニュー内容をそのまま移動） */}
-                  {/* 既存の設定メニュー内容は省略。差分最小化のため、内容はそのまま移動。 */}
+                  <div className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                    文字サイズ（予定セル）
+                  </div>
+                  <div className="p-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void savePageFontSize(14)}
+                      className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                        (pageFontSize ?? 16) === 14
+                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                      }`}
+                    >
+                      小
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void savePageFontSize(16)}
+                      className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                        (pageFontSize ?? 16) === 16
+                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                      }`}
+                    >
+                      標準
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void savePageFontSize(18)}
+                      className={`rounded-md border px-2 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                        (pageFontSize ?? 16) === 18
+                          ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                          : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                      }`}
+                    >
+                      大
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      現在: {(pageFontSize ?? 12)}px
+                    </div>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={10}
+                      max={30}
+                      value={pageFontSizeDraft}
+                      onChange={(e) => setPageFontSizeDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        const n = Number(pageFontSizeDraft);
+                        if (!Number.isFinite(n)) return;
+                        void savePageFontSize(n);
+                      }}
+                      onBlur={() => {
+                        const n = Number(pageFontSizeDraft);
+                        if (!Number.isFinite(n)) {
+                          setPageFontSizeDraft(pageFontSize == null ? '' : String(pageFontSize));
+                          return;
+                        }
+                        void savePageFontSize(n);
+                      }}
+                      className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                      aria-label="文字サイズ（px）"
+                    />
+                  </div>
+                  {!headerUserId ? (
+                    <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      ユーザー未設定のため、この端末内のみ保存されます
+                    </div>
+                  ) : null}
+                  </div>
+
+                  <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                    ユーザー
+                  </div>
+                  <div className="p-2">
+                  <button
+                    type="button"
+                    onClick={openUserGate}
+                    className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                  >
+                    初回登録 / 切替
+                  </button>
+                  </div>
+
+                  {pathname === '/' ? (
+                    <>
+                      <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                        予定編集
+                      </div>
+                      <div className="p-2 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (actions.save) {
+                              writeColorEditMode(false);
+                              setWeekColorPickMode(false);
+                              void actions.save.onClick();
+                              return;
+                            }
+                            void actions.add?.onClick();
+                          }}
+                          disabled={scheduleEditButtonDisabled}
+                          className="w-full rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          title={scheduleEditHelpText}
+                        >
+                          {scheduleEditButtonLabel}
+                        </button>
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{scheduleEditHelpText}</div>
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                    線（個人）
+                  </div>
+                  <div className="p-2 space-y-2">
+                  <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">グリッド線</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: false })}
+                        className={`rounded-md border px-2 py-2 text-[11px] ${
+                          !uiTheme.gridStrongLines
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        標準
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveUiTheme({ ...uiTheme, gridStrongLines: true })}
+                        className={`rounded-md border px-2 py-2 text-[11px] ${
+                          uiTheme.gridStrongLines
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        強
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">枠線</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: false })}
+                        className={`rounded-md border px-2 py-2 text-[11px] ${
+                          !uiTheme.borderStrong
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        標準
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveUiTheme({ ...uiTheme, borderStrong: true })}
+                        className={`rounded-md border px-2 py-2 text-[11px] ${
+                          uiTheme.borderStrong
+                            ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                            : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                        }`}
+                      >
+                        強
+                      </button>
+                    </div>
+                  </div>
+
+                  {!headerUserId ? (
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      ユーザー未設定のため、この端末内のみ保存されます
+                    </div>
+                  ) : null}
+                  </div>
+
+                  <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                    カラー編集（全画面）
+                  </div>
+                  <div className="p-2 space-y-2">
+                    <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">編集モード</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => writeWeekColorPickMode(false)}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            !weekColorPickMode
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          OFF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => writeWeekColorPickMode(true)}
+                          className={`rounded-md border px-2 py-2 text-[11px] ${
+                            weekColorPickMode
+                              ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                              : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                          }`}
+                        >
+                          ON
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      ONの間、画面の任意箇所をクリックして色（＋濃淡）を編集します（このページごと・アカウント別に保存）。
+                    </div>
+                  </div>
+
+                {pathname === '/' && weekGridPrefsKey ? (
+                  <>
+                    <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                      セル（週予定）
+                    </div>
+                    <div className="p-2 space-y-2">
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">表示密度</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => writeWeekGridPrefsPatch({ gridLayout: 'compact' })}
+                            className={`rounded-md border px-2 py-2 text-[11px] ${
+                              weekGridPrefs.gridLayout === 'compact'
+                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                            }`}
+                          >
+                            コンパクト
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => writeWeekGridPrefsPatch({ gridLayout: 'comfortable' })}
+                            className={`rounded-md border px-2 py-2 text-[11px] ${
+                              weekGridPrefs.gridLayout === 'comfortable'
+                                ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                            }`}
+                          >
+                            ゆったり
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[84, 112, 140].map((w) => (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={() => writeWeekGridPrefsPatch({ cellMinW: w })}
+                              className={`rounded-md border px-2 py-2 text-[11px] ${
+                                weekGridPrefs.cellMinW === w
+                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                              }`}
+                            >
+                              {w === 84 ? '狭' : w === 112 ? '標準' : '広'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(狭)</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[40, 48, 56].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => writeWeekGridPrefsPatch({ cellMinHCompact: h })}
+                              className={`rounded-md border px-2 py-2 text-[11px] ${
+                                weekGridPrefs.cellMinHCompact === h
+                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                              }`}
+                            >
+                              {h === 40 ? '低' : h === 48 ? '標準' : '高'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(広)</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[56, 64, 72].map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => writeWeekGridPrefsPatch({ cellMinHComfortable: h })}
+                              className={`rounded-md border px-2 py-2 text-[11px] ${
+                                weekGridPrefs.cellMinHComfortable === h
+                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
+                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
+                              }`}
+                            >
+                              {h === 56 ? '低' : h === 64 ? '標準' : '高'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
+                  <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                    更新（アプデ）
+                  </div>
+                  <div className="p-2 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void checkForUpdate()}
+                        disabled={isCheckingUpdate}
+                        className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      >
+                        更新確認
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyUpdateAndReload()}
+                        disabled={!isUpdateAvailable}
+                        className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                      >
+                        更新して再読み込み
+                      </button>
+                    </div>
+
+                    {isUpdateAvailable ? (
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">新しいバージョンがあります。</div>
+                    ) : null}
+
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                      {appVersion ? (
+                        <>
+                          <div>
+                            {appVersion.name} v{appVersion.version}
+                          </div>
+                          {appVersion.gitSha ? <div className="break-all">{appVersion.gitSha}</div> : null}
+                          {appVersion.buildTime ? <div className="break-all">{appVersion.buildTime}</div> : null}
+                        </>
+                      ) : appVersionError ? (
+                        <div>{appVersionError}</div>
+                      ) : (
+                        <div>取得中…</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </PortalMenu>
             </div>
@@ -1065,106 +1400,108 @@ export default function AppHeader() {
                 履歴
               </button>
 
-              {isHistoryOpen ? (
-                <div
-                  ref={historyMenuRef}
-                  data-color-edit-slot="border"
-                  className={`absolute left-0 top-full mt-1 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
-                    actions.historyPanel?.widthClassName ?? 'w-[480px]'
-                  }`}
-                >
-                  {actions.history && !actions.historyPanel ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void actions.history?.onClick();
-                        setIsHistoryOpen(false);
-                      }}
-                      disabled={actions.history.disabled}
-                      className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                      title={actions.history.title ?? '編集履歴'}
-                    >
-                      {actions.history.title ?? '編集履歴'}
-                    </button>
-                  ) : null}
+              <PortalMenu
+                anchorRef={historyButtonRef}
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+                menuRef={historyMenuRef}
+                width={480}
+                offset={{ y: 4 }}
+                className={`overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black ${
+                  actions.historyPanel?.widthClassName ?? ''
+                }`}
+              >
+                {actions.history && !actions.historyPanel ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void actions.history?.onClick();
+                      setIsHistoryOpen(false);
+                    }}
+                    disabled={actions.history.disabled}
+                    className="block w-full border-b border-zinc-200 px-3 py-2 text-left text-[11px] hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                    title={actions.history.title ?? '編集履歴'}
+                  >
+                    {actions.history.title ?? '編集履歴'}
+                  </button>
+                ) : null}
 
-                  {actions.historyPanel ? (
-                    actions.historyPanel.content
-                  ) : (
-                    <div className="max-h-[32rem] overflow-auto py-1">
-                      {actions.historyMenu ? (
-                        <div className="flex flex-col gap-1 px-2 pb-1">
-                          {actions.historyMenu.items.length === 0 ? (
-                            <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">編集履歴はありません。</div>
-                          ) : null}
-                          {actions.historyMenu.items.slice(0, 40).map((it) => (
-                            <div
-                              key={it.key}
-                              data-color-edit-slot="border"
-                              className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
-                              onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
-                              onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
-                            >
-                              <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
-                                <div className="text-zinc-500 dark:text-zinc-400">{new Date(it.at).toLocaleString()}</div>
-                                <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
-                                  {it.beforeLabel}
-                                </div>
-                                <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.afterLabel}>
-                                  {it.afterLabel}
-                                </div>
-                                <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
+                {actions.historyPanel ? (
+                  actions.historyPanel.content
+                ) : (
+                  <div className="max-h-[32rem] overflow-auto py-1">
+                    {actions.historyMenu ? (
+                      <div className="flex flex-col gap-1 px-2 pb-1">
+                        {actions.historyMenu.items.length === 0 ? (
+                          <div className="px-2 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">編集履歴はありません。</div>
+                        ) : null}
+                        {actions.historyMenu.items.slice(0, 40).map((it) => (
+                          <div
+                            key={it.key}
+                            data-color-edit-slot="border"
+                            className="rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300"
+                            onPointerEnter={() => actions.historyMenu?.onHover?.(it.hover)}
+                            onPointerLeave={() => actions.historyMenu?.onHover?.(null)}
+                          >
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
+                              <div className="text-zinc-500 dark:text-zinc-400">{new Date(it.at).toLocaleString()}</div>
+                              <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.beforeLabel}>
+                                {it.beforeLabel}
                               </div>
+                              <div className="min-w-0 truncate text-zinc-700 dark:text-zinc-200" title={it.afterLabel}>
+                                {it.afterLabel}
+                              </div>
+                              <div className="text-zinc-500 dark:text-zinc-400">{it.editorLabel}</div>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        navStack
-                          .map((key, idx) => {
-                            let label = key;
-                            if (key.includes('mode=week')) {
-                              label = '週予定';
-                            } else if (key.includes('mode=month')) {
-                              label = '月予定';
-                            } else if (key.includes('mode=year')) {
-                              label = '年予定';
-                            } else if (key.startsWith('/site-ledger/')) {
-                              label = '現場台帳';
-                            } else if (key === '/management') {
-                              label = '管理画面';
-                            } else if (key === '/partners') {
-                              label = '取引先管理';
-                            } else if (key === '/reports') {
-                              label = '報告書';
-                            } else if (key === '/accounting') {
-                              label = '会計連携';
-                            } else if (key === '/invoices') {
-                              label = '請求書';
-                            } else if (key === '/alerts') {
-                              label = 'アラート';
-                            } else if (key === '/multi') {
-                              label = '複数選択';
-                            } else if (key === '/') {
-                              label = 'ホーム';
-                            }
-                            return { key, idx, label };
-                          })
-                          .slice(-20)
-                          .reverse()
-                          .map((it) => (
-                            <div
-                              key={`${it.idx}-${it.key}`}
-                              className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
-                              {it.label}
-                            </div>
-                          ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      navStack
+                        .map((key, idx) => {
+                          let label = key;
+                          if (key.includes('mode=week')) {
+                            label = '週予定';
+                          } else if (key.includes('mode=month')) {
+                            label = '月予定';
+                          } else if (key.includes('mode=year')) {
+                            label = '年予定';
+                          } else if (key.startsWith('/site-ledger/')) {
+                            label = '現場台帳';
+                          } else if (key === '/management') {
+                            label = '管理画面';
+                          } else if (key === '/partners') {
+                            label = '取引先管理';
+                          } else if (key === '/reports') {
+                            label = '報告書';
+                          } else if (key === '/accounting') {
+                            label = '会計連携';
+                          } else if (key === '/invoices') {
+                            label = '請求書';
+                          } else if (key === '/alerts') {
+                            label = 'アラート';
+                          } else if (key === '/multi') {
+                            label = '複数選択';
+                          } else if (key === '/') {
+                            label = 'ホーム';
+                          }
+                          return { key, idx, label };
+                        })
+                        .slice(-20)
+                        .reverse()
+                        .map((it) => (
+                          <div
+                            key={`${it.idx}-${it.key}`}
+                            className="px-3 py-1 text-[11px] text-zinc-700 dark:text-zinc-300"
+                          >
+                            <span className="mr-2 text-zinc-400 dark:text-zinc-500">{it.idx === navIndex ? '●' : '○'}</span>
+                            {it.label}
+                          </div>
+                        ))
+                    )}
+                  </div>
+                )}
+              </PortalMenu>
             </div>
 
             {pathname === '/' ? (
@@ -1216,140 +1553,144 @@ export default function AppHeader() {
               ) : null}
             </button>
 
-            {isOverflowMenuOpen ? (
-              <div
-                data-color-edit-slot="border"
-                className="absolute right-0 top-full z-50 mt-1 w-[220px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-              >
-                <div className="max-h-[70vh] overflow-auto py-1">
-                  <Link
-                    href="/alerts"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isAlerts ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isAlerts ? 'page' : undefined}
-                  >
-                    アラート
-                  </Link>
-                  <Link
-                    href="/accounting"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isAccounting ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isAccounting ? 'page' : undefined}
-                  >
-                    会計
-                  </Link>
-                  <Link
-                    href="/reports"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isReports ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isReports ? 'page' : undefined}
-                  >
-                    報告書
-                  </Link>
-                  <Link
-                    href="/invoices"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isInvoices ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isInvoices ? 'page' : undefined}
-                  >
-                    請求書
-                  </Link>
-                  <Link
-                    href="/management"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isManagement ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isManagement ? 'page' : undefined}
-                  >
-                    管理
-                  </Link>
-                  <Link
-                    href="/site-ledger"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isSiteLedger ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isSiteLedger ? 'page' : undefined}
-                  >
-                    現場台帳
-                  </Link>
-                  <Link
-                    href="/partners"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                    }}
-                    className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                      isPartners ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
-                    }`}
-                    aria-current={isPartners ? 'page' : undefined}
-                  >
-                    関係会社
-                  </Link>
-                  <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=graph');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（グラフ）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=net');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（収支）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      setIsOverflowMenuOpen(false);
-                      router.push('/multi?tab=sales');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（売上）
-                  </button>
-                </div>
+            <PortalMenu
+              anchorRef={overflowMenuRef}
+              isOpen={isOverflowMenuOpen}
+              onClose={() => setIsOverflowMenuOpen(false)}
+              menuRef={overflowPortalRef}
+              width={220}
+              align="right"
+              offset={{ y: 4 }}
+              className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+            >
+              <div className="max-h-[70vh] overflow-auto py-1">
+                <Link
+                  href="/alerts"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isAlerts ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isAlerts ? 'page' : undefined}
+                >
+                  アラート
+                </Link>
+                <Link
+                  href="/accounting"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isAccounting ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isAccounting ? 'page' : undefined}
+                >
+                  会計
+                </Link>
+                <Link
+                  href="/reports"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isReports ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isReports ? 'page' : undefined}
+                >
+                  報告書
+                </Link>
+                <Link
+                  href="/invoices"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isInvoices ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isInvoices ? 'page' : undefined}
+                >
+                  請求書
+                </Link>
+                <Link
+                  href="/management"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isManagement ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isManagement ? 'page' : undefined}
+                >
+                  管理
+                </Link>
+                <Link
+                  href="/site-ledger"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isSiteLedger ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isSiteLedger ? 'page' : undefined}
+                >
+                  現場台帳
+                </Link>
+                <Link
+                  href="/partners"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isPartners ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isPartners ? 'page' : undefined}
+                >
+                  関係会社
+                </Link>
+                <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                    router.push('/multi?tab=graph');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（グラフ）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                    router.push('/multi?tab=net');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（収支）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                    router.push('/multi?tab=sales');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（売上）
+                </button>
               </div>
-            ) : null}
+            </PortalMenu>
           </div>
 
           <Link
@@ -1466,45 +1807,49 @@ export default function AppHeader() {
               マルチ
             </button>
 
-            {isMultiMenuOpen ? (
-              <div
-                data-color-edit-slot="border"
-                className="absolute right-0 top-full mt-1 w-[220px] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
-              >
-                <div className="py-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      router.push('/multi?tab=graph');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（グラフ）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      router.push('/multi?tab=net');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（収支）
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navIntentRef.current = 'push';
-                      router.push('/multi?tab=sales');
-                    }}
-                    className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    集計（売上）
-                  </button>
-                </div>
+            <PortalMenu
+              anchorRef={multiMenuRef}
+              isOpen={isMultiMenuOpen}
+              onClose={() => setIsMultiMenuOpen(false)}
+              menuRef={multiPortalRef}
+              width={220}
+              align="right"
+              offset={{ y: 4 }}
+              className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black"
+            >
+              <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    router.push('/multi?tab=graph');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（グラフ）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    router.push('/multi?tab=net');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（収支）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    router.push('/multi?tab=sales');
+                  }}
+                  className="block w-full px-3 py-2 text-left text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  集計（売上）
+                </button>
               </div>
-            ) : null}
+            </PortalMenu>
           </div>
         </div>
       </div>
