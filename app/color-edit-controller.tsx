@@ -454,7 +454,6 @@ export default function ColorEditController() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!userId) return undefined;
 
     let lastUpdatedAt: string | null = null;
     let pollId: number | null = null;
