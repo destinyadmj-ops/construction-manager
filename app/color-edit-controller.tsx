@@ -150,7 +150,7 @@ function resolveElementForSlot(source: Element, slot: EditSlot): HTMLElement | n
 }
 
 function inferEditScope(element: HTMLElement, slot: EditSlot): EditScope {
-  if (slot === 'button' && element.closest('header')) return 'global';
+  if (slot === 'button') return 'global';
   return 'page';
 }
 
