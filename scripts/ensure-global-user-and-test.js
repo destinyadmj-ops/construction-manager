@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), override: true });
@@ -43,7 +44,7 @@ function getPgAdapterConfig(connectionString) {
     } else {
       prisma = new PrismaClient();
     }
-  } catch (e) {
+  } catch {
     // Adapter not available; try default constructor
     try {
       prisma = new PrismaClient();
