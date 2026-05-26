@@ -456,7 +456,10 @@ export default function ColorEditController() {
     let cancelled = false;
     if (!userId) return undefined;
 
-    void (async () => {
+    let lastUpdatedAt: string | null = null;
+    let pollId: number | null = null;
+
+    const fetchOnce = async () => {
       try {
         const r = await fetch(
           `/api/ui-settings?userId=${encodeURIComponent(GLOBAL_UI_SETTINGS_USER_ID)}&key=${encodeURIComponent(
@@ -469,16 +472,25 @@ export default function ColorEditController() {
         if (cancelled) return;
 
         const raw = obj.value;
+        const updatedAt = typeof obj?.updatedAt === 'string' ? (obj.updatedAt as string) : null;
+        if (updatedAt && updatedAt === lastUpdatedAt) return;
+        lastUpdatedAt = updatedAt ?? lastUpdatedAt;
+
         const next = normalizePageThemeOverrides(raw);
         setGlobalOverride(next);
         writeLocalGlobalThemeOverride(next);
       } catch {
         // ignore
       }
-    })();
+    };
+
+    // initial fetch + periodic polling so other clients pick up changes
+    void fetchOnce();
+    pollId = window.setInterval(() => void fetchOnce(), 5000);
 
     return () => {
       cancelled = true;
+      if (pollId) window.clearInterval(pollId);
     };
   }, [userId]);
 
