@@ -48,18 +48,16 @@ function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
   const o = asObject(raw);
   const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
   const rawTextColor = typeof o?.cellTextColor === 'string' ? (o.cellTextColor as string) : '';
-  const cellTextColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawTextColor as UiThemeColor,
-  )
-    ? (rawTextColor as UiThemeColor)
+  const _allowedTextColors = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+  const cellTextColor = (_allowedTextColors as readonly string[]).includes(rawTextColor)
+    ? (rawTextColor as typeof _allowedTextColors[number])
     : 'default';
   const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
 
   const rawBgColor = typeof o?.cellBgColor === 'string' ? (o.cellBgColor as string) : '';
-  const cellBgColor = (['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const).includes(
-    rawBgColor as UiThemeColor,
-  )
-    ? (rawBgColor as UiThemeColor)
+  const _allowedBgColors = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+  const cellBgColor = (_allowedBgColors as readonly string[]).includes(rawBgColor)
+    ? (rawBgColor as typeof _allowedBgColors[number])
     : 'default';
   const cellBgShade = (() => {
     if (typeof o?.cellBgShade === 'number') return normalizeThemeShade(o.cellBgShade, 0);
