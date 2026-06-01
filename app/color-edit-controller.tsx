@@ -114,7 +114,11 @@ function describeElementSegment(el: Element): string {
   return `${el.tagName.toLowerCase()}${slotPart}${label}#${sameSlotSiblingIndex(el)}`;
 }
 
-function buildElementThemeKey(el: HTMLElement, slot: EditSlot): string {
+function getExplicitThemeTargetId(el: Element): string | null {
+  return normalizeKeyToken(el.getAttribute('data-color-edit-id'), 96);
+}
+
+function buildLegacyElementThemeKey(el: HTMLElement, slot: EditSlot): string {
   const segments: string[] = [slot];
   let cursor: Element | null = el;
   let depth = 0;
@@ -127,6 +131,18 @@ function buildElementThemeKey(el: HTMLElement, slot: EditSlot): string {
 
   segments.unshift('body');
   return segments.join('>');
+}
+
+function buildElementThemeKey(el: HTMLElement, slot: EditSlot): string {
+  const explicitId = getExplicitThemeTargetId(el);
+  if (explicitId) return `${slot}@${explicitId}`;
+
+  if (slot === 'button') {
+    const labelSeed = getElementLabelSeed(el);
+    if (labelSeed) return `${slot}@${labelSeed}`;
+  }
+
+  return buildLegacyElementThemeKey(el, slot);
 }
 
 function describeEditableTarget(el: HTMLElement, slot: EditSlot): string {
@@ -181,6 +197,7 @@ function findElementByOverrideKey(slot: EditSlot, targetKey: string): HTMLElemen
     const resolved = resolveElementForSlot(candidate, slot);
     if (!resolved) continue;
     if (buildElementThemeKey(resolved, slot) === targetKey) return resolved;
+    if (buildLegacyElementThemeKey(resolved, slot) === targetKey) return resolved;
   }
   return null;
 }
@@ -921,7 +938,7 @@ export default function ColorEditController() {
         <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
           {open.targetKey
             ? open.scope === 'global'
-              ? '※ このヘッダーボタンだけ全ページで保存（アカウント別）'
+              ? '※ このボタンだけ全ユーザー・全ページで同期保存されます'
               : `※ この要素だけ保存（ページ: ${pathname} / アカウント別）`
             : `※ このページ（${pathname}）にだけ保存（アカウント別）`}
         </div>

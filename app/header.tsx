@@ -1948,6 +1948,8 @@ export default function AppHeader() {
               <div className="max-h-[70vh] overflow-auto py-1">
                 <Link
                   href="/alerts"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:alerts"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -1961,6 +1963,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/accounting"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:accounting"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -1974,6 +1978,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/reports"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:reports"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -1987,6 +1993,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/invoices"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:invoices"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -2000,6 +2008,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/management"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:management"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -2013,6 +2023,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/site-ledger"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:site-ledger"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -2026,6 +2038,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/partners"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:partners"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -2039,6 +2053,8 @@ export default function AppHeader() {
                 </Link>
                 <Link
                   href="/schedule"
+                  data-color-edit-slot="button"
+                  data-color-edit-id="header:overflow:schedule"
                   onClick={() => {
                     navIntentRef.current = 'push';
                     setIsOverflowMenuOpen(false);
@@ -2090,6 +2106,8 @@ export default function AppHeader() {
 
           <Link
             href="/alerts"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:alerts"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2110,6 +2128,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/?mode=week"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:week"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2121,6 +2141,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/accounting"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:accounting"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2133,6 +2155,8 @@ export default function AppHeader() {
 
           <Link
             href="/reports"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:reports"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2145,6 +2169,8 @@ export default function AppHeader() {
 
           <Link
             href="/invoices"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:invoices"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2156,6 +2182,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/management"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:management"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2167,6 +2195,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/site-ledger"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:site-ledger"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2178,6 +2208,8 @@ export default function AppHeader() {
           </Link>
           <Link
             href="/partners"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:partners"
             onClick={() => {
               navIntentRef.current = 'push';
             }}
@@ -2191,6 +2223,7 @@ export default function AppHeader() {
           <div ref={multiMenuRef} className="relative">
             <button
               type="button"
+              data-color-edit-id="header:nav:multi"
               onClick={() => {
                 setIsNotificationsOpen(false);
                 setIsSettingsOpen(false);
@@ -2206,10 +2239,12 @@ export default function AppHeader() {
             href="/schedule"
             onClick={() => {
               navIntentRef.current = 'push';
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:schedule"
             }}
             className={navLinkClass(isSchedule, 'hidden lg:inline-flex')}
             title="個人スケジュールへ"
-            aria-current={isSchedule ? 'page' : undefined}
+            className={navLinkClass(isSchedule, 'hidden lg:ml-2 lg:inline-flex')}
           >
             スケジュール
           </Link>
