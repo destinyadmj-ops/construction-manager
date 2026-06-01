@@ -356,6 +356,11 @@ function resolveDefaultTone(stop: ShadeStop, mode: ThemeMode, tokens: ToneTokenM
   return themeScaleValue('default', tokens[mode][stop]);
 }
 
+function normalizeButtonStop(color: UiThemeColor, stop: ShadeStop): ShadeStop {
+  if (color !== 'default' && stop === 0) return 25;
+  return stop;
+}
+
 function resolveAccentTone(color: UiThemeColor, mode: ThemeMode, tokens: Record<ThemeMode, ThemeScaleToken>): string | null {
   if (color === 'default') return null;
   return themeScaleValue(color, tokens[mode]);
@@ -391,7 +396,7 @@ export function buildUiThemeSlotCssVars(
   shade: number,
 ): Record<string, string> {
   const vars: Record<string, string> = {};
-  const stop = shadeToStop(shade);
+  const stop = slot === 'button' ? normalizeButtonStop(color, shadeToStop(shade)) : shadeToStop(shade);
 
   switch (slot) {
     case 'surface':
@@ -721,7 +726,7 @@ export function applyUiTheme(theme: UiTheme): void {
   const t = normalizeUiTheme(theme);
   const surfaceStop = shadeToStop(t.surfaceShade);
   const panelStop = shadeToStop(t.panelShade);
-  const buttonStop = shadeToStop(t.buttonShade);
+  const buttonStop = normalizeButtonStop(t.buttonColor, shadeToStop(t.buttonShade));
   const cellBgStop = shadeToStop(t.cellBgShade);
   const cellTextStop = shadeToStop(t.cellTextShade);
   const gridStop = shadeToStop(t.gridShade);
