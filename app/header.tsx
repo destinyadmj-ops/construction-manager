@@ -1051,9 +1051,9 @@ export default function AppHeader() {
       <div className="bg-white/60 dark:bg-black/60">
         <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3 lg:flex-nowrap lg:px-6">
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:-ml-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:-ml-1 sm:flex-nowrap">
             {/* Left small banner area (future: settings/alerts/notifications) */}
-            <Link href="/" className="text-sm font-medium tracking-tight">
+            <Link href="/" className="shrink-0 whitespace-nowrap text-sm font-medium tracking-tight">
               Master Hub
             </Link>
 
@@ -1061,14 +1061,14 @@ export default function AppHeader() {
             <button
               type="button"
               aria-label={isSiteListCollapsed ? '現場リストを広げる' : '現場リストを畳む'}
-              className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
+              className="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-white shadow hover:bg-zinc-100 dark:bg-black dark:hover:bg-zinc-900"
               style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
               onClick={() => setIsSiteListCollapsed((v) => !v)}
             >
               {isSiteListCollapsed ? <span>&#9654;</span> : <span>&#9664;</span>}
             </button>
 
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             {!isMobileBrowser ? (
               <div ref={notificationsRef} className="relative">
                 <button
