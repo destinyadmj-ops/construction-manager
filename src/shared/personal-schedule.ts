@@ -55,6 +55,24 @@ export const PERSONAL_SCHEDULE_COLOR_OPTIONS: Array<{ value: PersonalScheduleCol
   { value: 'slate', label: '灰' },
 ];
 
+const PERSONAL_SCHEDULE_SURFACE_STYLE: Record<
+  PersonalScheduleColor,
+  { backgroundColor: string; borderColor: string; color: string }
+> = {
+  emerald: { backgroundColor: '#10b981', borderColor: '#047857', color: '#ffffff' },
+  sky: { backgroundColor: '#0ea5e9', borderColor: '#0369a1', color: '#ffffff' },
+  amber: { backgroundColor: '#fbbf24', borderColor: '#d97706', color: '#451a03' },
+  rose: { backgroundColor: '#f43f5e', borderColor: '#be123c', color: '#ffffff' },
+  violet: { backgroundColor: '#8b5cf6', borderColor: '#6d28d9', color: '#ffffff' },
+  orange: { backgroundColor: '#f97316', borderColor: '#c2410c', color: '#ffffff' },
+  teal: { backgroundColor: '#14b8a6', borderColor: '#0f766e', color: '#ffffff' },
+  cyan: { backgroundColor: '#22d3ee', borderColor: '#0e7490', color: '#083344' },
+  lime: { backgroundColor: '#a3e635', borderColor: '#4d7c0f', color: '#1a2e05' },
+  indigo: { backgroundColor: '#6366f1', borderColor: '#4338ca', color: '#ffffff' },
+  pink: { backgroundColor: '#ec4899', borderColor: '#be185d', color: '#ffffff' },
+  slate: { backgroundColor: '#64748b', borderColor: '#334155', color: '#ffffff' },
+};
+
 const PERSONAL_SCHEDULE_SURFACE_CLASS: Record<PersonalScheduleColor, string> = {
   emerald: 'border-emerald-700 bg-emerald-500 text-white hover:bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-500 dark:text-white dark:hover:bg-emerald-400',
   sky: 'border-sky-700 bg-sky-500 text-white hover:bg-sky-600 dark:border-sky-500 dark:bg-sky-500 dark:text-white dark:hover:bg-sky-400',
@@ -87,6 +105,10 @@ const PERSONAL_SCHEDULE_SWATCH_CLASS: Record<PersonalScheduleColor, string> = {
 
 export function personalScheduleSurfaceClass(color: PersonalScheduleColor) {
   return PERSONAL_SCHEDULE_SURFACE_CLASS[color] ?? PERSONAL_SCHEDULE_SURFACE_CLASS.emerald;
+}
+
+export function personalScheduleSurfaceStyle(color: PersonalScheduleColor) {
+  return PERSONAL_SCHEDULE_SURFACE_STYLE[color] ?? PERSONAL_SCHEDULE_SURFACE_STYLE.emerald;
 }
 
 export function personalScheduleSwatchClass(color: PersonalScheduleColor) {

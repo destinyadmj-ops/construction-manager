@@ -5,6 +5,7 @@ import {
   PERSONAL_SCHEDULE_COLOR_OPTIONS,
   PERSONAL_SCHEDULE_SLOT_COUNT,
   personalScheduleSurfaceClass,
+  personalScheduleSurfaceStyle,
   personalScheduleSwatchClass,
   type PersonalScheduleColor,
   type PersonalScheduleDay,
@@ -525,6 +526,7 @@ export default function PersonalSchedulePage() {
                           );
                         }}
                         className={`flex min-h-[24px] w-full items-center rounded-md border px-2 py-1 text-left text-[10px] font-semibold shadow-sm transition sm:text-[11px] ${personalScheduleSurfaceClass(item.color)} disabled:cursor-default disabled:opacity-70`}
+                        style={personalScheduleSurfaceStyle(item.color)}
                         title={isTouchLike ? undefined : item.title}
                       >
                         <span className="min-w-0 flex-1 truncate">{item.title}</span>
