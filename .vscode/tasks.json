@@ -277,6 +277,26 @@
 			}
 		},
 		{
+			"label": "git: sync agent (save-triggered)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-File",
+				"${workspaceFolder}/scripts/git-sync-launcher.ps1"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"presentation": {
+				"reveal": "never",
+				"panel": "shared"
+			}
+		},
+		{
 			"label": "git: auto-sync (once)",
 			"type": "shell",
 			"command": "pwsh",
