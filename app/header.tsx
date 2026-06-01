@@ -35,6 +35,7 @@ type WeekGridPrefs = {
   cellTextShade: number;
   cellBgColor: UiThemeColor;
   cellBgShade: number;
+  nameColW: number;
   cellMinW: number;
   cellMinHCompact: number;
   cellMinHComfortable: number;
@@ -66,6 +67,7 @@ function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
     if (o?.cellBg === 'soft') return 25;
     return 0;
   })();
+  const nameColW = clampInt(typeof o?.nameColW === 'number' ? (o.nameColW as number) : NaN, 80, 280, 96);
   const cellMinW = clampInt(typeof o?.cellMinW === 'number' ? (o.cellMinW as number) : NaN, 60, 240, 112);
   const cellMinHCompact = clampInt(
     typeof o?.cellMinHCompact === 'number' ? (o.cellMinHCompact as number) : NaN,
@@ -85,6 +87,7 @@ function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
     cellTextShade,
     cellBgColor,
     cellBgShade,
+    nameColW,
     cellMinW,
     cellMinHCompact,
     cellMinHComfortable,
@@ -98,6 +101,7 @@ function defaultWeekGridPrefs(): WeekGridPrefs {
     cellTextShade: 50,
     cellBgColor: 'default',
     cellBgShade: 0,
+    nameColW: 96,
     cellMinW: 112,
     cellMinHCompact: 48,
     cellMinHComfortable: 64,
@@ -170,6 +174,10 @@ export default function AppHeader() {
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const [pageFontSize, setPageFontSize] = useState<number | null>(null);
   const [pageFontSizeDraft, setPageFontSizeDraft] = useState<string>('');
+  const [nameColWDraft, setNameColWDraft] = useState<string>('');
+  const [cellMinWDraft, setCellMinWDraft] = useState<string>('');
+  const [cellMinHCompactDraft, setCellMinHCompactDraft] = useState<string>('');
+  const [cellMinHComfortableDraft, setCellMinHComfortableDraft] = useState<string>('');
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
   const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
@@ -417,6 +425,20 @@ export default function AppHeader() {
       }
     },
     [headerUserId, readWeekGridPrefs, weekGridPrefsKey],
+  );
+
+  useEffect(() => {
+    setNameColWDraft(String(weekGridPrefs.nameColW));
+    setCellMinWDraft(String(weekGridPrefs.cellMinW));
+    setCellMinHCompactDraft(String(weekGridPrefs.cellMinHCompact));
+    setCellMinHComfortableDraft(String(weekGridPrefs.cellMinHComfortable));
+  }, [weekGridPrefs]);
+
+  const commitWeekGridNumericPatch = useCallback(
+    (patch: Partial<WeekGridPrefs>) => {
+      writeWeekGridPrefsPatch(patch);
+    },
+    [writeWeekGridPrefsPatch],
   );
 
   useEffect(() => {
@@ -1412,62 +1434,146 @@ export default function AppHeader() {
                       </div>
 
                       <div className="grid grid-cols-[90px_1fr] items-center gap-2">
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">名前幅</div>
+                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="number"
+                            min={80}
+                            max={280}
+                            step={1}
+                            value={nameColWDraft}
+                            onChange={(e) => setNameColWDraft(e.target.value)}
+                            onBlur={() => {
+                              const next = Number(nameColWDraft);
+                              if (!Number.isFinite(next)) {
+                                setNameColWDraft(String(weekGridPrefs.nameColW));
+                                return;
+                              }
+                              commitWeekGridNumericPatch({ nameColW: next });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              const next = Number(nameColWDraft);
+                              if (!Number.isFinite(next)) return;
+                              commitWeekGridNumericPatch({ nameColW: next });
+                            }}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => commitWeekGridNumericPatch({ nameColW: weekGridPrefs.nameColW })}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            反映
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[84, 112, 140].map((w) => (
-                            <button
-                              key={w}
-                              type="button"
-                              onClick={() => writeWeekGridPrefsPatch({ cellMinW: w })}
-                              className={`rounded-md border px-2 py-2 text-[11px] ${
-                                weekGridPrefs.cellMinW === w
-                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                              }`}
-                            >
-                              {w === 84 ? '狭' : w === 112 ? '標準' : '広'}
-                            </button>
-                          ))}
+                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="number"
+                            min={60}
+                            max={240}
+                            step={1}
+                            value={cellMinWDraft}
+                            onChange={(e) => setCellMinWDraft(e.target.value)}
+                            onBlur={() => {
+                              const next = Number(cellMinWDraft);
+                              if (!Number.isFinite(next)) {
+                                setCellMinWDraft(String(weekGridPrefs.cellMinW));
+                                return;
+                              }
+                              commitWeekGridNumericPatch({ cellMinW: next });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              const next = Number(cellMinWDraft);
+                              if (!Number.isFinite(next)) return;
+                              commitWeekGridNumericPatch({ cellMinW: next });
+                            }}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => commitWeekGridNumericPatch({ cellMinW: weekGridPrefs.cellMinW })}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            反映
+                          </button>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(狭)</div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[40, 48, 56].map((h) => (
-                            <button
-                              key={h}
-                              type="button"
-                              onClick={() => writeWeekGridPrefsPatch({ cellMinHCompact: h })}
-                              className={`rounded-md border px-2 py-2 text-[11px] ${
-                                weekGridPrefs.cellMinHCompact === h
-                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                              }`}
-                            >
-                              {h === 40 ? '低' : h === 48 ? '標準' : '高'}
-                            </button>
-                          ))}
+                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="number"
+                            min={40}
+                            max={120}
+                            step={1}
+                            value={cellMinHCompactDraft}
+                            onChange={(e) => setCellMinHCompactDraft(e.target.value)}
+                            onBlur={() => {
+                              const next = Number(cellMinHCompactDraft);
+                              if (!Number.isFinite(next)) {
+                                setCellMinHCompactDraft(String(weekGridPrefs.cellMinHCompact));
+                                return;
+                              }
+                              commitWeekGridNumericPatch({ cellMinHCompact: next });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              const next = Number(cellMinHCompactDraft);
+                              if (!Number.isFinite(next)) return;
+                              commitWeekGridNumericPatch({ cellMinHCompact: next });
+                            }}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => commitWeekGridNumericPatch({ cellMinHCompact: weekGridPrefs.cellMinHCompact })}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            反映
+                          </button>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-[90px_1fr] items-center gap-2">
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400">高さ(広)</div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[56, 64, 72].map((h) => (
-                            <button
-                              key={h}
-                              type="button"
-                              onClick={() => writeWeekGridPrefsPatch({ cellMinHComfortable: h })}
-                              className={`rounded-md border px-2 py-2 text-[11px] ${
-                                weekGridPrefs.cellMinHComfortable === h
-                                  ? 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-black'
-                                  : 'border-zinc-200 bg-white/60 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black'
-                              }`}
-                            >
-                              {h === 56 ? '低' : h === 64 ? '標準' : '高'}
-                            </button>
-                          ))}
+                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                          <input
+                            type="number"
+                            min={56}
+                            max={180}
+                            step={1}
+                            value={cellMinHComfortableDraft}
+                            onChange={(e) => setCellMinHComfortableDraft(e.target.value)}
+                            onBlur={() => {
+                              const next = Number(cellMinHComfortableDraft);
+                              if (!Number.isFinite(next)) {
+                                setCellMinHComfortableDraft(String(weekGridPrefs.cellMinHComfortable));
+                                return;
+                              }
+                              commitWeekGridNumericPatch({ cellMinHComfortable: next });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              const next = Number(cellMinHComfortableDraft);
+                              if (!Number.isFinite(next)) return;
+                              commitWeekGridNumericPatch({ cellMinHComfortable: next });
+                            }}
+                            className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => commitWeekGridNumericPatch({ cellMinHComfortable: weekGridPrefs.cellMinHComfortable })}
+                            className="rounded-md border border-zinc-200 bg-white/60 px-2 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                          >
+                            反映
+                          </button>
                         </div>
                       </div>
                     </div>
