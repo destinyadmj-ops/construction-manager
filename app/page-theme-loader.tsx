@@ -2,11 +2,12 @@
 
 import { useEffect } from 'react';
 import { applyUiTheme, defaultUiTheme } from './ui-theme';
+import { mergeUiTheme, readLocalGlobalThemeOverride } from './page-theme';
 
 export default function PageThemeLoader() {
   useEffect(() => {
-    // 常にライトテーマを強制適用
-    applyUiTheme(defaultUiTheme());
+    // ページ初期化時にグローバル設定を反映する。
+    applyUiTheme(mergeUiTheme(defaultUiTheme(), readLocalGlobalThemeOverride()));
   }, []);
   return null;
 }
