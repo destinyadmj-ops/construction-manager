@@ -173,7 +173,7 @@ export default function AppHeader() {
   const [uiTheme, setUiTheme] = useState(() => defaultUiTheme());
   const [isMobileBrowser, setIsMobileBrowser] = useState(false);
 
-  const [, setMonthLegend] = useState<MonthLegendState>({
+  const [monthLegend, setMonthLegend] = useState<MonthLegendState>({
     invoiceMissing: false,
     reportMissing: false,
     unassigned: false,
@@ -1008,6 +1008,7 @@ export default function AppHeader() {
   const isManagement = pathname === '/management';
   const isSiteLedger = pathname === '/site-ledger';
   const isPartners = pathname === '/partners';
+  const isSchedule = pathname === '/schedule';
   const isMulti = pathname === '/multi';
   const isReports = pathname === '/reports';
   const isInvoices = pathname === '/invoices';
@@ -1521,7 +1522,7 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="hidden">
+          <div className="hidden items-center gap-1 lg:flex">
             <button
               type="button"
               data-testid="header-action-back"
@@ -1543,7 +1544,7 @@ export default function AppHeader() {
               }}
               disabled={!canBack}
               title={actions.undo ? actions.undo.title ?? '入力を取り消し' : 'ロールバック'}
-              className={`${canBack ? '' : 'hidden xl:inline-flex'} mh-btn`}
+              className={`${canBack ? '' : 'hidden lg:inline-flex'} mh-btn`}
             >
               戻る
             </button>
@@ -1558,7 +1559,7 @@ export default function AppHeader() {
               }}
               disabled={!actions.save || actions.save.disabled}
               title={actions.save?.title ?? '作業や入力'}
-              className={`${actions.save && !actions.save.disabled ? '' : 'hidden xl:inline-flex'} mh-btn-primary`}
+              className={`${actions.save && !actions.save.disabled ? '' : 'hidden lg:inline-flex'} mh-btn-primary`}
             >
               保存
             </button>
@@ -1577,7 +1578,7 @@ export default function AppHeader() {
               }}
               disabled={!canForward}
               title={actions.redo ? actions.redo.title ?? '入力をやり直し' : 'ロールフォワード'}
-              className={`${canForward ? '' : 'hidden xl:inline-flex'} mh-btn`}
+              className={`${canForward ? '' : 'hidden lg:inline-flex'} mh-btn`}
             >
               進む
             </button>
@@ -1588,12 +1589,12 @@ export default function AppHeader() {
               onClick={() => void actions.add?.onClick()}
               disabled={!actions.add || actions.add.disabled}
               title={actions.add?.title ?? '編集'}
-              className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden xl:ml-1 xl:inline-flex'} mh-btn`}
+              className={`${actions.add && !actions.add.disabled ? 'ml-1' : 'hidden lg:ml-1 lg:inline-flex'} mh-btn`}
             >
               編集
             </button>
 
-            <div className={`${isHistoryButtonEnabled ? '' : 'hidden xl:block'} relative`}>
+            <div className={`${isHistoryButtonEnabled ? '' : 'hidden lg:block'} relative`}>
               <button
                 type="button"
                 ref={historyButtonRef}
@@ -1717,22 +1718,43 @@ export default function AppHeader() {
             </div>
 
             {pathname === '/' ? (
-              <div className="ml-0 hidden min-w-0 flex-wrap items-center gap-1 text-[11px] xl:flex" aria-label="当月アラート凡例">
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+              <div className="ml-1 hidden min-w-0 flex-wrap items-center gap-1 text-[11px] lg:flex" aria-label="当月アラート凡例">
+                <div
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 ${
+                    monthLegend.invoiceMissing
+                      ? 'border-green-500 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/40 dark:text-green-200'
+                      : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-black dark:text-zinc-300'
+                  }`}
+                  title={monthLegend.invoiceMissing ? '当月の請求未発行あり' : '当月の請求未発行なし'}
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 dark:bg-green-600"
                     aria-hidden="true"
                   />
                   <span>請求未</span>
                 </div>
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+                <div
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 ${
+                    monthLegend.reportMissing
+                      ? 'border-orange-400 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-200'
+                      : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-black dark:text-zinc-300'
+                  }`}
+                  title={monthLegend.reportMissing ? '当月の報告未送信あり' : '当月の報告未送信なし'}
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 dark:bg-orange-500"
                     aria-hidden="true"
                   />
                   <span>報告未</span>
                 </div>
-                <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-900 bg-white px-1.5 py-0.5 text-zinc-900">
+                <div
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 ${
+                    monthLegend.unassigned
+                      ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200'
+                      : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-black dark:text-zinc-300'
+                  }`}
+                  title={monthLegend.unassigned ? '当月の未配置あり' : '当月の未配置なし'}
+                >
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-600"
                     aria-hidden="true"
@@ -1868,6 +1890,19 @@ export default function AppHeader() {
                   aria-current={isPartners ? 'page' : undefined}
                 >
                   関係会社
+                </Link>
+                <Link
+                  href="/schedule"
+                  onClick={() => {
+                    navIntentRef.current = 'push';
+                    setIsOverflowMenuOpen(false);
+                  }}
+                  className={`block px-3 py-2 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                    isSchedule ? 'bg-zinc-100 font-medium dark:bg-zinc-900' : ''
+                  }`}
+                  aria-current={isSchedule ? 'page' : undefined}
+                >
+                  スケジュール
                 </Link>
                 <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
                 <button
@@ -2020,6 +2055,18 @@ export default function AppHeader() {
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
+
+          <Link
+            href="/schedule"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={navLinkClass(isSchedule, 'hidden lg:inline-flex')}
+            title="個人スケジュールへ"
+            aria-current={isSchedule ? 'page' : undefined}
+          >
+            スケジュール
+          </Link>
               マルチ
             </button>
 
