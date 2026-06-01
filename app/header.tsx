@@ -441,6 +441,26 @@ export default function AppHeader() {
     [writeWeekGridPrefsPatch],
   );
 
+  const makeNumericDraftHandler = useCallback(
+    (
+      setter: (value: string) => void,
+      fallback: number,
+      patchKey: keyof WeekGridPrefs,
+      min: number,
+      max: number,
+    ) => {
+      return (nextText: string) => {
+        setter(nextText);
+        if (nextText.trim() === '') return;
+        const next = Number(nextText);
+        if (!Number.isFinite(next)) return;
+        const clamped = Math.max(min, Math.min(max, Math.round(next)));
+        commitWeekGridNumericPatch({ [patchKey]: clamped } as Partial<WeekGridPrefs>);
+      };
+    },
+    [commitWeekGridNumericPatch],
+  );
+
   useEffect(() => {
     if (!isSettingsOpen) return;
     setWeekColorPickMode(readWeekColorPickMode());
@@ -1442,7 +1462,12 @@ export default function AppHeader() {
                             max={280}
                             step={1}
                             value={nameColWDraft}
-                            onChange={(e) => setNameColWDraft(e.target.value)}
+                            onChange={(e) => {
+                              const nextText = e.target.value;
+                              setNameColWDraft(nextText);
+                              const next = Number(nextText);
+                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ nameColW: next });
+                            }}
                             onBlur={() => {
                               const next = Number(nameColWDraft);
                               if (!Number.isFinite(next)) {
@@ -1478,7 +1503,12 @@ export default function AppHeader() {
                             max={240}
                             step={1}
                             value={cellMinWDraft}
-                            onChange={(e) => setCellMinWDraft(e.target.value)}
+                            onChange={(e) => {
+                              const nextText = e.target.value;
+                              setCellMinWDraft(nextText);
+                              const next = Number(nextText);
+                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinW: next });
+                            }}
                             onBlur={() => {
                               const next = Number(cellMinWDraft);
                               if (!Number.isFinite(next)) {
@@ -1514,7 +1544,12 @@ export default function AppHeader() {
                             max={120}
                             step={1}
                             value={cellMinHCompactDraft}
-                            onChange={(e) => setCellMinHCompactDraft(e.target.value)}
+                            onChange={(e) => {
+                              const nextText = e.target.value;
+                              setCellMinHCompactDraft(nextText);
+                              const next = Number(nextText);
+                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinHCompact: next });
+                            }}
                             onBlur={() => {
                               const next = Number(cellMinHCompactDraft);
                               if (!Number.isFinite(next)) {
@@ -1550,7 +1585,12 @@ export default function AppHeader() {
                             max={180}
                             step={1}
                             value={cellMinHComfortableDraft}
-                            onChange={(e) => setCellMinHComfortableDraft(e.target.value)}
+                            onChange={(e) => {
+                              const nextText = e.target.value;
+                              setCellMinHComfortableDraft(nextText);
+                              const next = Number(nextText);
+                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinHComfortable: next });
+                            }}
                             onBlur={() => {
                               const next = Number(cellMinHComfortableDraft);
                               if (!Number.isFinite(next)) {
