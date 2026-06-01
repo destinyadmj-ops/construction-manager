@@ -1,5 +1,6 @@
 {
   "terminal.integrated.cwd": "${workspaceFolder}",
+  "task.allowAutomaticTasks": "on",
   "java.configuration.updateBuildConfiguration": "interactive",
   "python.envFile": "${workspaceFolder}/.env.local",
   "python.terminal.useEnvFile": true

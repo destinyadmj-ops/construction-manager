@@ -22,12 +22,21 @@
 - `fetch.prune=true`
 - `rerere.enabled=true`
 - ログオン時に `MasterHub Git Sync Agent` を起動するスタートアップショートカット
+- VS Code でこの workspace を開いたときに `git: sync agent (save-triggered)` task を自動起動する
 
 起動後の動作は以下。
 
 - 5分ごとに `fetch`
 - ワークツリーが安全なときだけ `pull --rebase --autostash`
 - 保存後 90 秒間変更が落ち着いたら、自動 `commit` と `push`
+- 現在の branch が `main` の場合、push 後に GitHub Actions の production deploy が走り、本番 `https://masterhubapp.org/` へ反映される
+
+#### VS Code 保存から本番までの流れ
+
+- VS Code で workspace を開くと、`.vscode/tasks.json` の `git: sync agent (save-triggered)` が自動起動する
+- 保存で差分が発生すると `scripts/git-save-sync.ps1` が検知し、90 秒静止後に自動 `commit` と `push` を行う
+- `main` への push は `.github/workflows/deploy.yml` を起動し、build が通れば `https://masterhubapp.org/` にデプロイされる
+- つまりこの workspace では、保存した変更がそのまま本番反映の対象になる
 
 手動起動する場合:
 
