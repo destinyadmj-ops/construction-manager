@@ -647,39 +647,6 @@ export default function ColorEditController() {
 
   const setSlotColor = useCallback(
     (scope: EditScope, slot: EditSlot, targetKey: string | null, targetLabel: string, nextColor: UiThemeColor) => {
-      if (slot === 'button') {
-        const currentGlobal = globalOverrideRef.current;
-        const nextGlobalElements = { ...currentGlobal.elements };
-        if (targetKey && nextGlobalElements[targetKey]) delete nextGlobalElements[targetKey];
-
-        if (targetKey) {
-          const currentPage = pageOverrideRef.current;
-          if (currentPage.elements[targetKey]) {
-            const nextPageElements = { ...currentPage.elements };
-            delete nextPageElements[targetKey];
-            commitPageOverride(
-              normalizePageThemeOverrides({
-                schemaVersion: 2,
-                overrides: currentPage.overrides,
-                elements: nextPageElements,
-              }),
-            );
-          }
-        }
-
-        commitGlobalOverride(
-          normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: {
-              ...currentGlobal.overrides,
-              buttonColor: nextColor,
-            },
-            elements: nextGlobalElements,
-          }),
-        );
-        return;
-      }
-
       if (targetKey && scope === 'global') {
         const currentGlobal = globalOverrideRef.current;
         const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), currentGlobal);
@@ -754,6 +721,7 @@ export default function ColorEditController() {
             ...currentPage.overrides,
             ...(slot === 'surface' ? { surfaceColor: nextColor } : null),
             ...(slot === 'panel' ? { panelColor: nextColor } : null),
+            ...(slot === 'button' ? { buttonColor: nextColor } : null),
             ...(slot === 'cellBg' ? { cellBgColor: nextColor } : null),
             ...(slot === 'cellText' ? { cellTextColor: nextColor } : null),
             ...(slot === 'border' ? { borderColor: nextColor } : null),
@@ -769,39 +737,6 @@ export default function ColorEditController() {
   const setSlotShade = useCallback(
     (scope: EditScope, slot: EditSlot, targetKey: string | null, targetLabel: string, nextShade: number) => {
       const shade = normalizeThemeShade(nextShade, 0);
-      if (slot === 'button') {
-        const currentGlobal = globalOverrideRef.current;
-        const nextGlobalElements = { ...currentGlobal.elements };
-        if (targetKey && nextGlobalElements[targetKey]) delete nextGlobalElements[targetKey];
-
-        if (targetKey) {
-          const currentPage = pageOverrideRef.current;
-          if (currentPage.elements[targetKey]) {
-            const nextPageElements = { ...currentPage.elements };
-            delete nextPageElements[targetKey];
-            commitPageOverride(
-              normalizePageThemeOverrides({
-                schemaVersion: 2,
-                overrides: currentPage.overrides,
-                elements: nextPageElements,
-              }),
-            );
-          }
-        }
-
-        commitGlobalOverride(
-          normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: {
-              ...currentGlobal.overrides,
-              buttonShade: shade,
-            },
-            elements: nextGlobalElements,
-          }),
-        );
-        return;
-      }
-
       if (targetKey && scope === 'global') {
         const currentGlobal = globalOverrideRef.current;
         const merged = mergeUiTheme(readLocalUiTheme(userIdRef.current), currentGlobal);
@@ -876,6 +811,7 @@ export default function ColorEditController() {
             ...currentPage.overrides,
             ...(slot === 'surface' ? { surfaceShade: shade } : null),
             ...(slot === 'panel' ? { panelShade: shade } : null),
+            ...(slot === 'button' ? { buttonShade: shade } : null),
             ...(slot === 'cellBg' ? { cellBgShade: shade } : null),
             ...(slot === 'cellText' ? { cellTextShade: shade } : null),
             ...(slot === 'border' ? { borderShade: shade } : null),
@@ -891,37 +827,6 @@ export default function ColorEditController() {
   const resetElementOverride = useCallback(() => {
     const targetKey = open?.targetKey;
     if (!targetKey) return;
-
-    if (open?.slot === 'button') {
-      const currentGlobal = globalOverrideRef.current;
-      const nextOverrides = { ...currentGlobal.overrides };
-      delete nextOverrides.buttonColor;
-      delete nextOverrides.buttonShade;
-      const nextGlobalElements = { ...currentGlobal.elements };
-      if (nextGlobalElements[targetKey]) delete nextGlobalElements[targetKey];
-
-      const currentPage = pageOverrideRef.current;
-      if (currentPage.elements[targetKey]) {
-        const nextPageElements = { ...currentPage.elements };
-        delete nextPageElements[targetKey];
-        commitPageOverride(
-          normalizePageThemeOverrides({
-            schemaVersion: 2,
-            overrides: currentPage.overrides,
-            elements: nextPageElements,
-          }),
-        );
-      }
-
-      commitGlobalOverride(
-        normalizePageThemeOverrides({
-          schemaVersion: 2,
-          overrides: nextOverrides,
-          elements: nextGlobalElements,
-        }),
-      );
-      return;
-    }
 
     if (open?.scope === 'global') {
       const currentGlobal = globalOverrideRef.current;
