@@ -1,13 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { use, useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 const DEFAULT_COLOR = '#38bdf8';
 
-export default function WorkSlipExcelEditor({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function WorkSlipExcelEditor({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
