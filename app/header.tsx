@@ -441,26 +441,6 @@ export default function AppHeader() {
     [writeWeekGridPrefsPatch],
   );
 
-  const makeNumericDraftHandler = useCallback(
-    (
-      setter: (value: string) => void,
-      fallback: number,
-      patchKey: keyof WeekGridPrefs,
-      min: number,
-      max: number,
-    ) => {
-      return (nextText: string) => {
-        setter(nextText);
-        if (nextText.trim() === '') return;
-        const next = Number(nextText);
-        if (!Number.isFinite(next)) return;
-        const clamped = Math.max(min, Math.min(max, Math.round(next)));
-        commitWeekGridNumericPatch({ [patchKey]: clamped } as Partial<WeekGridPrefs>);
-      };
-    },
-    [commitWeekGridNumericPatch],
-  );
-
   useEffect(() => {
     if (!isSettingsOpen) return;
     setWeekColorPickMode(readWeekColorPickMode());
@@ -2234,20 +2214,6 @@ export default function AppHeader() {
               aria-expanded={isMultiMenuOpen}
               title="週/月/年の切替"
             >
-
-          <Link
-            href="/schedule"
-            onClick={() => {
-              navIntentRef.current = 'push';
-            data-color-edit-slot="button"
-            data-color-edit-id="header:nav:schedule"
-            }}
-            className={navLinkClass(isSchedule, 'hidden lg:inline-flex')}
-            title="個人スケジュールへ"
-            className={navLinkClass(isSchedule, 'hidden lg:ml-2 lg:inline-flex')}
-          >
-            スケジュール
-          </Link>
               マルチ
             </button>
 
@@ -2295,6 +2261,19 @@ export default function AppHeader() {
               </div>
             </PortalMenu>
           </div>
+
+          <Link
+            href="/schedule"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:schedule"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            title="個人スケジュールへ"
+            className={navLinkClass(isSchedule, 'hidden lg:ml-2 lg:inline-flex')}
+          >
+            スケジュール
+          </Link>
         </div>
       </div>
       </div>
