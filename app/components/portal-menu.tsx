@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+
+const PORTAL_ROOT_ID = 'mh-portal-root';
+const PORTAL_ROOT_Z_INDEX = 12000;
 
 type PortalMenuProps = {
   anchorRef: React.RefObject<HTMLElement | null>;
@@ -15,37 +18,49 @@ type PortalMenuProps = {
   align?: 'left' | 'right';
 };
 
+function getOrCreatePortalRoot() {
+  let el = document.getElementById(PORTAL_ROOT_ID) as HTMLDivElement | null;
+  if (!el) {
+    el = document.createElement('div');
+    el.id = PORTAL_ROOT_ID;
+    document.body.appendChild(el);
+  }
+
+  el.style.position = 'fixed';
+  el.style.inset = '0';
+  el.style.zIndex = String(PORTAL_ROOT_Z_INDEX);
+  el.style.pointerEvents = 'none';
+
+  return el;
+}
+
 export default function PortalMenu({ anchorRef, isOpen, onClose, children, width, offset, className, menuRef, align }: PortalMenuProps) {
-  const container: HTMLElement | null = typeof document !== 'undefined'
-    ? (() => {
-        let el = document.getElementById('mh-portal-root') as HTMLElement | null;
-        if (!el) {
-          el = document.createElement('div');
-          el.id = 'mh-portal-root';
-          document.body.appendChild(el);
-        }
-        return el;
-      })()
-    : null;
+  const [container] = useState<HTMLElement | null>(() => (typeof document === 'undefined' ? null : getOrCreatePortalRoot()));
 
   const [pos, setPos] = useState({ left: 0, top: 0, w: width ?? 320 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) return;
+
     function update() {
       const anchor = anchorRef?.current;
       if (!anchor) return;
+
       const rect = anchor.getBoundingClientRect();
-      const w = width ?? Math.min(420, Math.round(rect.width || 320));
-      // default: align left to anchor.left
-      let left = Math.max(8, Math.round(rect.left + (offset?.x ?? 0)));
-      // if align right, align menu's right edge to anchor's right edge
+      const viewportWidth = window.innerWidth;
+      const preferredWidth = width ?? Math.min(420, Math.round(rect.width || 320));
+      const w = Math.min(preferredWidth, Math.max(160, viewportWidth - 16));
+      let left = rect.left + (offset?.x ?? 0);
+
       if (align === 'right') {
-        left = Math.max(8, Math.round(rect.right - w + (offset?.x ?? 0)));
+        left = rect.right - w + (offset?.x ?? 0);
       }
-      const top = Math.round(rect.bottom + (offset?.y ?? 0) + window.scrollY);
-      setPos({ left, top, w });
-    };
+
+      const clampedLeft = Math.min(Math.max(8, Math.round(left)), Math.max(8, viewportWidth - w - 8));
+      const top = Math.max(8, Math.round(rect.bottom + (offset?.y ?? 0)));
+      setPos({ left: clampedLeft, top, w });
+    }
+
     update();
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
@@ -68,11 +83,12 @@ export default function PortalMenu({ anchorRef, isOpen, onClose, children, width
   if (!isOpen) return null;
 
   const style: React.CSSProperties = {
-    position: 'absolute',
+    position: 'fixed',
     left: pos.left,
     top: pos.top,
     width: pos.w,
-    zIndex: 12000,
+    zIndex: PORTAL_ROOT_Z_INDEX + 1,
+    pointerEvents: 'auto',
   };
 
   return createPortal(
