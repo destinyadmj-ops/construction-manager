@@ -22,9 +22,11 @@ import {
   buildWeekGridPrefsSettingsKey,
   defaultWeekGridPrefs,
   normalizeWeekGridPrefs,
+  readWeekGridPrefsSavedAt,
   type WeekGridPrefs,
   type WeekGridPrefsTarget,
 } from '@/shared/week-grid-prefs';
+import { readRememberedLoginUserId } from '@/shared/login-memory';
 
 type JsonObject = Record<string, unknown>;
 
@@ -125,6 +127,7 @@ export default function AppHeader() {
   const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
 
   const [headerUserId, setHeaderUserId] = useState<string | null>(null);
+  const [rememberedHeaderUserId] = useState<string | null>(() => readRememberedLoginUserId());
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -199,16 +202,17 @@ export default function AppHeader() {
   const weekGridPrefsStorageKeys = useMemo(() => {
     if (!weekGridPrefsKey) return [];
     const keys = new Set<string>();
-    keys.add(buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId));
+    const storageOwnerUserId = headerUserId ?? rememberedHeaderUserId;
+    keys.add(buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, storageOwnerUserId));
     if (legacyWeekGridPrefsKey) {
-      keys.add(buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, headerUserId));
+      keys.add(buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, storageOwnerUserId));
     }
     keys.add(`masterHub.ui:${weekGridPrefsKey}`);
     if (legacyWeekGridPrefsKey) {
       keys.add(`masterHub.ui:${legacyWeekGridPrefsKey}`);
     }
     return Array.from(keys);
-  }, [headerUserId, legacyWeekGridPrefsKey, weekGridPrefsKey]);
+  }, [headerUserId, legacyWeekGridPrefsKey, rememberedHeaderUserId, weekGridPrefsKey]);
 
   const weekGridSectionTitle = useMemo(() => {
     if (weekModeKey === 'month') return 'セル（月予定）';
@@ -370,29 +374,33 @@ export default function AppHeader() {
     };
   }, []);
 
-  const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
+  const readStoredWeekGridPrefs = useCallback((key: string): { prefs: WeekGridPrefs; savedAt: number } => {
     try {
       const localKeys = weekGridPrefsStorageKeys.length > 0 ? weekGridPrefsStorageKeys : [`masterHub.ui:${key}`];
       for (const localKey of localKeys) {
         const txt = window.localStorage.getItem(localKey);
         if (!txt) continue;
         const parsed = JSON.parse(txt) as unknown;
-        return normalizeWeekGridPrefs(parsed);
+        return {
+          prefs: normalizeWeekGridPrefs(parsed, defaultWeekGridPrefs(weekGridPrefsTarget)),
+          savedAt: readWeekGridPrefsSavedAt(parsed),
+        };
       }
-      return defaultWeekGridPrefs();
+      return { prefs: defaultWeekGridPrefs(weekGridPrefsTarget), savedAt: 0 };
     } catch {
-      return defaultWeekGridPrefs();
+      return { prefs: defaultWeekGridPrefs(weekGridPrefsTarget), savedAt: 0 };
     }
-  }, [weekGridPrefsStorageKeys]);
+  }, [weekGridPrefsStorageKeys, weekGridPrefsTarget]);
 
   const writeWeekGridPrefsPatch = useCallback(
     (patch: Partial<WeekGridPrefs>) => {
       if (!weekGridPrefsKey) return;
       try {
-        const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId);
-        const current = readWeekGridPrefs(weekGridPrefsKey);
+        const storageOwnerUserId = headerUserId ?? rememberedHeaderUserId;
+        const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, storageOwnerUserId);
+        const current = readStoredWeekGridPrefs(weekGridPrefsKey).prefs;
         const next = normalizeWeekGridPrefs({ ...current, ...patch });
-        const payload = { v: 2, ...next };
+        const payload = { v: 2, savedAt: Date.now(), ...next };
         const nextTxt = JSON.stringify(payload);
         const prevTxt = window.localStorage.getItem(localKey);
         if (prevTxt !== nextTxt) {
@@ -417,7 +425,7 @@ export default function AppHeader() {
         // ignore
       }
     },
-    [headerUserId, readWeekGridPrefs, weekGridPrefsKey],
+    [headerUserId, readStoredWeekGridPrefs, rememberedHeaderUserId, weekGridPrefsKey],
   );
 
   useEffect(() => {
@@ -439,10 +447,13 @@ export default function AppHeader() {
     setWeekColorPickMode(readWeekColorPickMode());
     if (!weekGridPrefsKey) return;
     // Load (DB -> local fallback)
+    const localStored = readStoredWeekGridPrefs(weekGridPrefsKey);
     if (!headerUserId) {
-      setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+      setWeekGridPrefs(localStored.prefs);
       return;
     }
+
+    setWeekGridPrefs(localStored.prefs);
 
     let cancelled = false;
     void (async () => {
@@ -457,12 +468,23 @@ export default function AppHeader() {
           const raw = (obj as { value?: unknown }).value;
           const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
           const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+          const remoteUpdatedAtRaw = typeof obj?.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
+          const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
           if (cancelled) return;
+
+          if (localStored.savedAt > remoteUpdatedAt) {
+            return;
+          }
+
           setWeekGridPrefs(next);
 
           try {
-            const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId);
-            window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
+            const storageOwnerUserId = headerUserId ?? rememberedHeaderUserId;
+            const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, storageOwnerUserId);
+            window.localStorage.setItem(
+              localKey,
+              JSON.stringify({ v: 2, savedAt: remoteUpdatedAt || Date.now(), ...next }),
+            );
           } catch {
             // ignore
           }
@@ -470,14 +492,14 @@ export default function AppHeader() {
         }
       } catch {
         if (cancelled) return;
-        setWeekGridPrefs(readWeekGridPrefs(weekGridPrefsKey));
+        setWeekGridPrefs(localStored.prefs);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [headerUserId, isSettingsOpen, legacyWeekGridPrefsKey, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
+  }, [headerUserId, isSettingsOpen, legacyWeekGridPrefsKey, pathname, readStoredWeekGridPrefs, readWeekColorPickMode, rememberedHeaderUserId, weekGridPrefsKey]);
   const routeKey = useMemo(() => {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;

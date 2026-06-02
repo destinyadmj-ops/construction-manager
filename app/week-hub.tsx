@@ -42,10 +42,12 @@ import {
   clampNameColumnWidth,
   defaultWeekGridPrefs,
   normalizeWeekGridPrefs,
+  readWeekGridPrefsSavedAt,
   type WeekGridCellBg as CellBg,
   type WeekGridPrefsTarget,
   type WeekGridTextColor as CellTextColor,
 } from '@/shared/week-grid-prefs';
+import { readRememberedLoginUserId } from '@/shared/login-memory';
 import {
   personalScheduleSwatchClass,
   type PersonalScheduleSummaryDay,
@@ -1010,6 +1012,7 @@ function WeekHubInner() {
   const [editEnabled, setEditEnabled] = useState(true);
   const [editActive, setEditActive] = useState(false);
   const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
+  const [rememberedGridPrefsOwnerId] = useState<string | null>(() => readRememberedLoginUserId());
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editPasswordMsg, setEditPasswordMsg] = useState<string | null>(null);
@@ -1231,11 +1234,18 @@ function WeekHubInner() {
     return effectiveUserId;
   }, [authMeUser?.id, effectiveUserId, qsUserId]);
 
-  const gridPrefsOwnerId = useMemo(() => {
+  const gridPrefsRemoteUserId = useMemo(() => {
     const viewerUserId = (authMeUser?.id ?? '').trim();
     if (viewerUserId) return viewerUserId;
     return null;
   }, [authMeUser?.id]);
+
+  const gridPrefsOwnerId = useMemo(() => {
+    const viewerUserId = (authMeUser?.id ?? '').trim();
+    if (viewerUserId) return viewerUserId;
+    const rememberedUserId = (rememberedGridPrefsOwnerId ?? '').trim();
+    return rememberedUserId || null;
+  }, [authMeUser?.id, rememberedGridPrefsOwnerId]);
 
   const userOrderLocalStorageKey = useMemo(() => {
     return userOrderOwnerId ? `masterHub.userOrder:${userOrderOwnerId}:${userOrderKey}` : null;
@@ -1439,12 +1449,12 @@ function WeekHubInner() {
     setCellMinHComfortable(next.cellMinHComfortable);
   }, [gridPrefsDefaults]);
 
-  const loadGridPrefs = useCallback(async (userId: string | null, key: string) => {
-    const scopeKey = `${userId ?? 'anon'}:${key}`;
+  const loadGridPrefs = useCallback(async (storageUserId: string | null, remoteUserId: string | null, key: string) => {
+    const scopeKey = `${storageUserId ?? 'anon'}:${key}`;
     if (gridPrefsLoadedRef.current[scopeKey]) return;
     gridPrefsLoadedRef.current[scopeKey] = true;
-    const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, userId);
-    const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, userId);
+    const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, storageUserId);
+    const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, storageUserId);
     const oldLocalStorageKeys = [`masterHub.ui:${key}`, `masterHub.ui:${legacyGridPrefsKey}`];
 
     const localCandidates = [localStorageKey, legacyLocalStorageKey, ...oldLocalStorageKeys].filter(
@@ -1452,11 +1462,13 @@ function WeekHubInner() {
     );
     let loadedLocalKey: string | null = null;
     let localRaw: unknown = null;
+    let localSavedAt = 0;
     for (const candidate of localCandidates) {
       const raw = readLocalGridPrefs(candidate);
       if (!raw) continue;
       loadedLocalKey = candidate;
       localRaw = raw;
+      localSavedAt = readWeekGridPrefsSavedAt(raw);
       break;
     }
 
@@ -1465,7 +1477,10 @@ function WeekHubInner() {
       if (loadedLocalKey !== localStorageKey) {
         try {
           const normalized = normalizeWeekGridPrefs(localRaw, gridPrefsDefaults);
-          window.localStorage.setItem(localStorageKey, JSON.stringify({ ...normalized, v: WEEK_GRID_PREFS_VERSION }));
+          window.localStorage.setItem(
+            localStorageKey,
+            JSON.stringify({ ...normalized, savedAt: localSavedAt, v: WEEK_GRID_PREFS_VERSION }),
+          );
         } catch {
           // ignore
         }
@@ -1474,11 +1489,11 @@ function WeekHubInner() {
       applyGridPrefs(gridPrefsDefaults);
     }
 
-    if (!userId) return;
+    if (!remoteUserId) return;
 
     try {
       for (const remoteKey of [key, legacyGridPrefsKey]) {
-        const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(userId)}&key=${encodeURIComponent(remoteKey)}`);
+        const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(remoteUserId)}&key=${encodeURIComponent(remoteKey)}`);
         const j = (await r.json().catch(() => null)) as unknown;
         const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
         if (!r.ok || obj?.ok !== true) continue;
@@ -1486,6 +1501,12 @@ function WeekHubInner() {
         const raw = obj.value;
         const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
         if (!o) continue;
+
+        const remoteUpdatedAtRaw = typeof obj?.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
+        const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
+        if (localSavedAt > remoteUpdatedAt) {
+          break;
+        }
 
         applyGridPrefs(o);
 
@@ -1505,7 +1526,7 @@ function WeekHubInner() {
             const normalized = normalizeWeekGridPrefs(o, gridPrefsDefaults);
             window.localStorage.setItem(
               localStorageKey,
-              JSON.stringify({ ...o, ...normalized, v: WEEK_GRID_PREFS_VERSION }),
+              JSON.stringify({ ...o, ...normalized, savedAt: remoteUpdatedAt || Date.now(), v: WEEK_GRID_PREFS_VERSION }),
             );
           } catch {
             // ignore
@@ -1518,11 +1539,11 @@ function WeekHubInner() {
     }
   }, [applyGridPrefs, gridPrefsDefaults, legacyGridPrefsKey, readLocalGridPrefs]);
 
-  const saveGridPrefs = useCallback(async (userId: string | null, key: string, value: unknown) => {
+  const saveGridPrefs = useCallback(async (storageUserId: string | null, remoteUserId: string | null, key: string, value: unknown) => {
     const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
     const normalized = normalizeWeekGridPrefs(value, gridPrefsDefaults);
-    const payload = { ...raw, ...normalized, v: WEEK_GRID_PREFS_VERSION };
-    const localKey = buildWeekGridPrefsLocalStorageKey(key, userId);
+    const payload = { ...raw, ...normalized, savedAt: Date.now(), v: WEEK_GRID_PREFS_VERSION };
+    const localKey = buildWeekGridPrefsLocalStorageKey(key, storageUserId);
 
     if (typeof window !== 'undefined') {
       try {
@@ -1537,12 +1558,12 @@ function WeekHubInner() {
       }
     }
 
-    if (!userId) return;
+    if (!remoteUserId) return;
     try {
       await fetch('/api/ui-settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId, key, value: payload }),
+        body: JSON.stringify({ userId: remoteUserId, key, value: payload }),
       });
     } catch {
       // ignore
@@ -1722,12 +1743,12 @@ function WeekHubInner() {
       const uid = await resolveEffectiveUserId();
       if (!mounted) return;
       await loadUserOrder(uid);
-      await loadGridPrefs(gridPrefsOwnerId, gridPrefsKey);
+      await loadGridPrefs(gridPrefsOwnerId, gridPrefsRemoteUserId, gridPrefsKey);
     })();
     return () => {
       mounted = false;
     };
-  }, [gridPrefsKey, gridPrefsOwnerId, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
+  }, [gridPrefsKey, gridPrefsOwnerId, gridPrefsRemoteUserId, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1781,7 +1802,7 @@ function WeekHubInner() {
 
     gridPrefsSaveTimerRef.current = window.setTimeout(() => {
       gridPrefsSaveTimerRef.current = null;
-      void saveGridPrefs(gridPrefsOwnerId, gridPrefsKey, payload);
+      void saveGridPrefs(gridPrefsOwnerId, gridPrefsRemoteUserId, gridPrefsKey, payload);
     }, 350);
 
     return () => {
@@ -1801,6 +1822,7 @@ function WeekHubInner() {
     gridPrefsKey,
     gridPrefsLoadedScopeKey,
     gridPrefsOwnerId,
+    gridPrefsRemoteUserId,
     nameColW,
     saveGridPrefs,
   ]);
