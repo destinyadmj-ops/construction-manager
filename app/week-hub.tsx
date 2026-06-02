@@ -5741,7 +5741,7 @@ function MonthGrid({
             </div>
 
             {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
-              <div className="ml-auto flex w-full max-w-[48vw] justify-end">
+              <div className="ml-auto flex shrink-0 justify-end" style={{ width: 'min(48vw, 36rem)' }}>
                 <div
                   ref={topScrollbarRef}
                   className="mh-scrollbar-visible h-5 w-full overflow-x-auto overflow-y-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800/80"
