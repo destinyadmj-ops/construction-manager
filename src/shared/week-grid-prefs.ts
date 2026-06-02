@@ -22,7 +22,7 @@ export const DEFAULT_WEEK_GRID_PREFS: WeekGridPrefs = {
   cellTextColor: 'default',
   cellBg: 'default',
   nameColW: 96,
-  cellMinW: 192,
+  cellMinW: 195,
   cellMinHCompact: 48,
   cellMinHComfortable: 64,
 };
