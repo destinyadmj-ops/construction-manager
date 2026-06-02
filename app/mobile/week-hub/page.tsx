@@ -1176,10 +1176,10 @@ function MobileWeekHubInner() {
                 <button
                   type="button"
                   onClick={() => handleTabChange('week', 'normal')}
-                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  className={`rounded-md border px-3 py-1.5 text-sm transition ${
                     activeTab === 'week' && scheduleKind === 'normal'
-                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                      : 'text-zinc-500 dark:text-zinc-400'
+                      ? 'border-red-500 bg-white text-zinc-900 shadow-sm dark:border-red-400 dark:bg-black dark:text-zinc-50'
+                      : 'border-transparent text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
                   週予定
@@ -1187,10 +1187,10 @@ function MobileWeekHubInner() {
                 <button
                   type="button"
                   onClick={() => handleTabChange('personal', 'normal')}
-                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  className={`rounded-md border px-3 py-1.5 text-sm transition ${
                     activeTab === 'personal' && scheduleKind === 'normal'
-                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                      : 'text-zinc-500 dark:text-zinc-400'
+                      ? 'border-red-500 bg-white text-zinc-900 shadow-sm dark:border-red-400 dark:bg-black dark:text-zinc-50'
+                      : 'border-transparent text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
                   個人
@@ -1198,10 +1198,10 @@ function MobileWeekHubInner() {
                 <button
                   type="button"
                   onClick={() => handleTabChange('week', 'daily')}
-                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  className={`rounded-md border px-3 py-1.5 text-sm transition ${
                     activeTab === 'week' && scheduleKind === 'daily'
-                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-zinc-50'
-                      : 'text-zinc-500 dark:text-zinc-400'
+                      ? 'border-red-500 bg-white text-zinc-900 shadow-sm dark:border-red-400 dark:bg-black dark:text-zinc-50'
+                      : 'border-transparent text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
                   日常
