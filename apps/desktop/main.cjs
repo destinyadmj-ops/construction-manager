@@ -177,6 +177,21 @@ async function showAbout(win) {
   });
 }
 
+async function clearDesktopAppCache(ses) {
+  if (!ses) return;
+
+  try {
+    await ses.clearCache();
+  } catch {}
+
+  try {
+    await ses.clearStorageData({
+      origin: DEFAULT_ORIGIN,
+      storages: ['serviceworkers', 'cachestorage'],
+    });
+  } catch {}
+}
+
 function createAppMenu(win) {
   const template = [
     {
@@ -248,8 +263,11 @@ function createWindow() {
   });
 
   win.setTitle('Master Hub');
-  win.loadURL(DEFAULT_URL);
   createAppMenu(win);
+
+  void clearDesktopAppCache(win.webContents.session).finally(() => {
+    void win.loadURL(DEFAULT_URL);
+  });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Open external links in the default browser.

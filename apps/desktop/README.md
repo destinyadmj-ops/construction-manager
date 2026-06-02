@@ -59,19 +59,20 @@ npm run dist
 またはルートから接続先を固定して生成:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.2"
 ```
 
 - `scripts/package-desktop.ps1` も `-MasterHubUrl` が必須です。
 - `localhost` / `127.0.0.1` を配布用に埋め込むことは既定で禁止しています。ローカル検証で必要な場合だけ `-AllowLocalhostUrl` を付けてください。
 
 - 出力: `apps/desktop/dist/`
-- 生成物例: `Master Hub-Setup-0.1.1.exe`
+- 生成物例: `Master Hub-Setup-0.1.2.exe`
+- 本番の update API へ載せる場合は `public/downloads/Master Hub-Setup-0.1.2.exe` へ配置し、`apps/desktop/release.json` も同じ version / downloadUrl に更新します
 
 署名付き配布を行う場合の例:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.2" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
 ```
 
 Windows の証明書ストアを使う場合の例:
@@ -93,17 +94,19 @@ Windows の証明書ストアを使う場合の例:
 Vultr 側の環境変数例:
 
 ```env
-DESKTOP_APP_VERSION="0.1.1"
-DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master%20Hub-Setup-0.1.1.exe"
-DESKTOP_APP_RELEASE_NOTES="請求画面の修正と安定化"
+DESKTOP_APP_VERSION="0.1.2"
+DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master%20Hub-Setup-0.1.2.exe"
+DESKTOP_APP_RELEASE_NOTES="デスクトップ起動時のキャッシュ更新を改善"
 ```
+
+- `apps/desktop/release.json` が存在し、そこに書かれた version が env より新しい場合は repo 側 release 定義が優先されます
 
 ## 別PC確認
 
 1. 新規インストール確認
 
 ```powershell
-Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.1.exe" -Algorithm SHA256
+Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.2.exe" -Algorithm SHA256
 ```
 
 - 配布前に SHA256 を控える
@@ -111,9 +114,9 @@ Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.1.exe" -Algorithm SHA256
 
 2. updater 確認
 
-- 0.1.0 を入れた端末で、サーバー側の `DESKTOP_APP_VERSION` を 0.1.1 に向ける
+- 0.1.1 以下を入れた端末で、サーバー側の `DESKTOP_APP_VERSION` か `apps/desktop/release.json` を 0.1.2 に向ける
 - アプリの「ヘルプ」→「更新を確認」で新しいバージョン案内が出ることを確認する
-- 0.1.1 導入後は同じ操作で「最新です」表示に戻ることを確認する
+- 0.1.2 導入後は同じ操作で「最新です」表示に戻ることを確認する
 
 ## アイコン
 
