@@ -63,6 +63,12 @@ function clampInt(value: number, min: number, max: number, fallback: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+export function readWeekGridPrefsSavedAt(raw: unknown): number {
+  const obj = asObject(raw);
+  const savedAt = typeof obj?.savedAt === 'number' ? obj.savedAt : Number.NaN;
+  return Number.isFinite(savedAt) && savedAt > 0 ? savedAt : 0;
+}
+
 export function isWeekGridTextColor(value: unknown): value is WeekGridTextColor {
   return typeof value === 'string' && (WEEK_GRID_TEXT_COLOR_VALUES as readonly string[]).includes(value);
 }
