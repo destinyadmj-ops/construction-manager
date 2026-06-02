@@ -1231,6 +1231,12 @@ function WeekHubInner() {
     return effectiveUserId;
   }, [authMeUser?.id, effectiveUserId, qsUserId]);
 
+  const gridPrefsOwnerId = useMemo(() => {
+    const viewerUserId = (authMeUser?.id ?? '').trim();
+    if (viewerUserId) return viewerUserId;
+    return null;
+  }, [authMeUser?.id]);
+
   const userOrderLocalStorageKey = useMemo(() => {
     return userOrderOwnerId ? `masterHub.userOrder:${userOrderOwnerId}:${userOrderKey}` : null;
   }, [userOrderKey, userOrderOwnerId]);
@@ -1402,10 +1408,13 @@ function WeekHubInner() {
   const gridPrefsLoadedRef = useRef<Record<string, true>>({});
   const gridPrefsSaveTimerRef = useRef<number | null>(null);
   const gridPrefsLocalStorageKey = useMemo(
-    () => buildWeekGridPrefsLocalStorageKey(gridPrefsKey, effectiveUserId),
-    [effectiveUserId, gridPrefsKey],
+    () => buildWeekGridPrefsLocalStorageKey(gridPrefsKey, gridPrefsOwnerId),
+    [gridPrefsKey, gridPrefsOwnerId],
   );
-  const gridPrefsLoadedScopeKey = useMemo(() => `${effectiveUserId ?? 'anon'}:${gridPrefsKey}`, [effectiveUserId, gridPrefsKey]);
+  const gridPrefsLoadedScopeKey = useMemo(
+    () => `${gridPrefsOwnerId ?? 'anon'}:${gridPrefsKey}`,
+    [gridPrefsKey, gridPrefsOwnerId],
+  );
 
   const readLocalGridPrefs = useCallback((localStorageKey: string | null) => {
     if (typeof window === 'undefined') return null;
@@ -1713,12 +1722,12 @@ function WeekHubInner() {
       const uid = await resolveEffectiveUserId();
       if (!mounted) return;
       await loadUserOrder(uid);
-      await loadGridPrefs(uid, gridPrefsKey);
+      await loadGridPrefs(gridPrefsOwnerId, gridPrefsKey);
     })();
     return () => {
       mounted = false;
     };
-  }, [gridPrefsKey, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
+  }, [gridPrefsKey, gridPrefsOwnerId, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1772,7 +1781,7 @@ function WeekHubInner() {
 
     gridPrefsSaveTimerRef.current = window.setTimeout(() => {
       gridPrefsSaveTimerRef.current = null;
-      void saveGridPrefs(effectiveUserId, gridPrefsKey, payload);
+      void saveGridPrefs(gridPrefsOwnerId, gridPrefsKey, payload);
     }, 350);
 
     return () => {
@@ -1788,10 +1797,10 @@ function WeekHubInner() {
     cellMinHComfortable,
     cellMinW,
     cellTextColor,
-    effectiveUserId,
     gridLayout,
     gridPrefsKey,
     gridPrefsLoadedScopeKey,
+    gridPrefsOwnerId,
     nameColW,
     saveGridPrefs,
   ]);
@@ -5624,6 +5633,7 @@ function MonthGrid({
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const topScrollbarRef = useRef<HTMLDivElement | null>(null);
+  const topScrollbarVisualRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef<0 | 1>(0);
   const [topScrollbarMetrics, setTopScrollbarMetrics] = useState({ contentWidth: 0, viewportWidth: 0 });
 
@@ -5631,6 +5641,26 @@ function MonthGrid({
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
+
+  const updateTopScrollbarVisual = useCallback(() => {
+    const scrollbar = topScrollbarRef.current;
+    const visual = topScrollbarVisualRef.current;
+    if (!scrollbar || !visual) return;
+
+    const trackWidth = visual.clientWidth;
+    const viewportWidth = scrollbar.clientWidth;
+    const contentWidth = scrollbar.scrollWidth;
+    const maxScroll = Math.max(0, contentWidth - viewportWidth);
+    if (trackWidth <= 0 || viewportWidth <= 0 || contentWidth <= 0) return;
+
+    const thumbWidth =
+      maxScroll > 0 ? Math.max(48, Math.min(trackWidth, (viewportWidth / contentWidth) * trackWidth)) : trackWidth;
+    const maxThumbOffset = Math.max(0, trackWidth - thumbWidth);
+    const thumbOffset = maxScroll > 0 ? (scrollbar.scrollLeft / maxScroll) * maxThumbOffset : 0;
+
+    visual.style.setProperty('--mh-month-scroll-thumb-w', `${thumbWidth}px`);
+    visual.style.setProperty('--mh-month-scroll-thumb-x', `${thumbOffset}px`);
+  }, []);
 
   useEffect(() => {
     const body = scrollRootRef.current;
@@ -5645,6 +5675,7 @@ function MonthGrid({
       setTopScrollbarMetrics((prev) =>
         prev.contentWidth === next.contentWidth && prev.viewportWidth === next.viewportWidth ? prev : next,
       );
+      window.requestAnimationFrame(updateTopScrollbarVisual);
     };
 
     apply();
@@ -5656,7 +5687,7 @@ function MonthGrid({
       ro.disconnect();
       window.removeEventListener('resize', apply);
     };
-  }, [monthKey, users.length]);
+  }, [monthKey, updateTopScrollbarVisual, users.length]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -5680,30 +5711,37 @@ function MonthGrid({
     syncingRef.current = 1;
     syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
     syncScrollLeft(headerScrollRef.current, topScrollbarRef.current);
+    updateTopScrollbarVisual();
     window.requestAnimationFrame(() => {
       syncingRef.current = 0;
     });
-  }, [syncScrollLeft]);
+  }, [syncScrollLeft, updateTopScrollbarVisual]);
 
   const onBodyScroll = useCallback(() => {
     if (syncingRef.current) return;
     syncingRef.current = 1;
     syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
     syncScrollLeft(scrollRootRef.current, topScrollbarRef.current);
+    updateTopScrollbarVisual();
     window.requestAnimationFrame(() => {
       syncingRef.current = 0;
     });
-  }, [syncScrollLeft]);
+  }, [syncScrollLeft, updateTopScrollbarVisual]);
 
   const onTopScrollbarScroll = useCallback(() => {
     if (syncingRef.current) return;
     syncingRef.current = 1;
     syncScrollLeft(topScrollbarRef.current, headerScrollRef.current);
     syncScrollLeft(topScrollbarRef.current, scrollRootRef.current);
+    updateTopScrollbarVisual();
     window.requestAnimationFrame(() => {
       syncingRef.current = 0;
     });
-  }, [syncScrollLeft]);
+  }, [syncScrollLeft, updateTopScrollbarVisual]);
+
+  useEffect(() => {
+    updateTopScrollbarVisual();
+  }, [topScrollbarMetrics.contentWidth, topScrollbarMetrics.viewportWidth, updateTopScrollbarVisual]);
 
   return (
     <div
@@ -5742,10 +5780,21 @@ function MonthGrid({
             </div>
 
             {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
-              <div className="ml-auto flex shrink-0 justify-end" style={{ width: 'min(48vw, 36rem)' }}>
+              <div className="relative ml-auto flex shrink-0 justify-end" style={{ width: 'min(48vw, 36rem)' }}>
+                <div
+                  ref={topScrollbarVisualRef}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-1/2 z-10 h-2 -translate-y-1/2 rounded-full bg-zinc-300/95 shadow-inner dark:bg-zinc-700/90"
+                  data-testid="month-grid-top-scrollbar-visual"
+                >
+                  <div
+                    className="absolute left-0 top-0 h-full rounded-full bg-zinc-600/90 shadow-sm dark:bg-zinc-100/90"
+                    style={{ width: 'var(--mh-month-scroll-thumb-w, 48px)', transform: 'translateX(var(--mh-month-scroll-thumb-x, 0px))' }}
+                  />
+                </div>
                 <div
                   ref={topScrollbarRef}
-                  className="mh-scrollbar-visible h-5 w-full overflow-x-auto overflow-y-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800/80"
+                  className="mh-scrollbar-visible relative z-20 h-5 w-full overflow-x-auto overflow-y-hidden rounded-full bg-transparent"
                   onScroll={onTopScrollbarScroll}
                   data-testid="month-grid-top-scrollbar"
                 >
