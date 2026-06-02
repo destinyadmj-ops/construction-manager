@@ -509,9 +509,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.production down
 		- `npm run dist`
 		- または `powershell -File scripts/package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/"`
 		- 出力: `apps/desktop/dist/Master Hub-Setup-<version>.exe`
-		- 本番配布に載せる場合は `public/downloads/Master Hub-Setup-<version>.exe` へ配置し、`apps/desktop/release.json` の version / downloadUrl / notes も同じ版へ更新する
+		- 本番配布に載せる場合は `public/downloads/Master-Hub-Setup-<version>.exe` へ配置し、`public/desktop-release.json` の version / downloadUrl / notes も同じ版へ更新する
 	- 更新（最小運用）: 新しい `Setup-<version>.exe` を配布して実行してもらう
-	- 軽量更新確認: `apps/desktop/release.json` と `public/downloads/` に新しい exe を置くと、その版が `/api/desktop-release` で secrets より優先される。repo 管理を使わない場合だけ GitHub Actions secrets の `PROD_DESKTOP_APP_*` か `.env.production` の `DESKTOP_APP_*` を使う
+	- 軽量更新確認: `public/desktop-release.json` と `public/downloads/` に新しい exe を置くと、その版が `/api/desktop-release` で secrets より優先される。repo 管理を使わない場合だけ GitHub Actions secrets の `PROD_DESKTOP_APP_*` か `.env.production` の `DESKTOP_APP_*` を使う
 	- 接続先URL（例）: `$env:MASTER_HUB_URL='https://YOUR_URL/'; npm run start`
 - Android（TWA最小 / 推奨）: [apps/twa/README.md](apps/twa/README.md)
 	- 更新をWeb側に寄せたい場合の最小土台（HTTPS + 固定ドメイン前提）

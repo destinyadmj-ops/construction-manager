@@ -67,7 +67,7 @@ npm run dist
 
 - 出力: `apps/desktop/dist/`
 - 生成物例: `Master Hub-Setup-0.1.2.exe`
-- 本番の update API へ載せる場合は `public/downloads/Master Hub-Setup-0.1.2.exe` へ配置し、`apps/desktop/release.json` も同じ version / downloadUrl に更新します
+- 本番の update API へ載せる場合は `public/downloads/Master-Hub-Setup-0.1.2.exe` へ配置し、`public/desktop-release.json` も同じ version / downloadUrl に更新します
 
 署名付き配布を行う場合の例:
 
@@ -99,7 +99,7 @@ DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master%20Hub-Setup-0.1.2
 DESKTOP_APP_RELEASE_NOTES="デスクトップ起動時のキャッシュ更新を改善"
 ```
 
-- `apps/desktop/release.json` が存在し、そこに書かれた version が env より新しい場合は repo 側 release 定義が優先されます
+- `public/desktop-release.json` が存在し、そこに書かれた version が env より新しい場合は repo 側 release 定義が優先されます
 
 ## 別PC確認
 
