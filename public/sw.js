@@ -1,4 +1,4 @@
-const CACHE_NAME = 'master-hub-v4';
+const CACHE_NAME = 'master-hub-v5';
 const CORE_ASSETS = ['/', '/?mode=week', '/manifest.webmanifest', '/icon.svg', '/maskable-icon.svg'];
 
 self.addEventListener('install', (event) => {
