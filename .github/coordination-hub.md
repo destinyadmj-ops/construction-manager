@@ -31,14 +31,14 @@
 > 範囲が重なる時は「引き継ぎ／連絡」で調整してから着手する。
 
 ## 基準バージョン（A/B/C共通の出発点）
-- アプリ名/版: master-hub v0.1.0（Desktop=Electron v0.1.0）
-- Production live: build 2026-06-02T09:48:49.319Z / gitSha=null / nodeEnv=production（cache-bust 再取得で確定。画像と一致）
-- Desktop About 表記(画像): URL=masterhubapp.org, Electron 35.7.5, Chrome 134, Node 22.16.0, build 2026-06-02T09:48:49Z
-- コード基準: origin/main HEAD（auto-sync 済み）。production build 09:48:49Z は HEAD と一致。
+- アプリ名/版: master-hub Web v0.1.0 / Desktop 実体 v0.1.3（ユーザー環境）
+- Production live: build 2026-06-02T10:50:04.139Z / gitSha=null / nodeEnv=production
+- Desktop 実体前提: v0.1.3 導入済み。今後の本番アプリ確認はこの wrapper を基準にする。
+- コード基準: origin/main HEAD 2846991。production build 10:50:04.139Z は deploy success 26814859462 経由で HEAD 系列へ反映済み。
 - 版番号は全箇所 0.1.0 固定のため、差分判別は buildTime/gitSha で行う。
 
 ## ⚠️ 重複・影響リスク（A/B/C 着手前に必読）
-- R1: production と HEAD は現状一致(build 09:48:49Z)。今後 deploy する際は HEAD 全体が本番化するため、未検証 WIP が無いか必ずハブで確認・合意する。
+- R1: production と HEAD は現状一致(build 10:50:04.139Z)。今後 deploy する際は HEAD 全体が本番化するため、未検証 WIP が無いか必ずハブで確認・合意する。
 - R2【現実化済み】: git-auto-sync + git-push-safe.ps1 の `git add -A` で、B の未コミット WIP が A の commit 74398c0 に巻き込まれ本番化した。恒久対策＝部分 staging（同期メモ参照）。
 - R3: gitSha=null で本番実体の追跡困難・版番号も 0.1.0 固定。→ 提案: deploy 時に gitSha を埋める／buildTime で照合する運用に統一。
 
@@ -47,19 +47,20 @@
 |--------|------|-------------|------|---------|
 | done | A | apps/desktop/main.cjs | ヘルプ→更新を確認 からアプリ内DL＋インストーラ自動起動で更新適用できるよう構築（0.1.3） | 2026-06-02 ~10:05 |
 | done | C | coordination-hub | 運用開始・現行ベースライン確認 | 2026-06-02 19:05 JST |
-| done | C | app/layout.tsx, app/live-build-sync.tsx, TEAM-VERIFY-TEMPLATE.md | Electron実体向け live build sync と A/B/C 共通確認テンプレ追加。commit 7480e48 / ba486b2、deploy #338 queued | 2026-06-02 19:25 JST |
+| done | C | app/layout.tsx, app/live-build-sync.tsx, TEAM-VERIFY-TEMPLATE.md | Electron実体向け live build sync と A/B/C 共通確認テンプレ追加。ba486b2 を含む build 10:50:04.139Z で本番反映済み | 2026-06-02 19:25 JST |
 | done | A | app/week-hub.tsx, app/mobile/week-hub/page.tsx | 現在タブの枠線を赤表示へ変更（PC:週/月/年、モバイル:週/個人/日常） | 2026-06-02 19:40 JST |
 | done | B | .github/coordination-hub.md, .github/copilot-instructions.md | 台帳を Git 追跡正本化し PC 間引き継ぎ（GitHub経由）を構築 | 2026-06-02 20:?? JST |
+| done | C | .github/coordination-hub.md, TEAM-VERIFY-TEMPLATE.md | Desktop 0.1.3 導入済み前提へ基準値と即時反映運用を更新 | 2026-06-02 20:05 JST |
 
 ## ステータスボード（各チャットの現在地）
-- A（設定方法）: 【完了/deploy待ち】「ヘルプ→更新を確認」をアプリ内DL＋インストーラ自動起動方式に改修（0.1.3）。main.cjs/manifest/installer は自動同期コミットで既に origin/main 反映済み。README 0.1.3 を 98a727f で追加push。本番 API は deploy 完了まで 0.1.2 のまま（要監視）。注意: 既存 0.1.0 wrapper は旧ロジック（ブラウザ起動のみ）のため、初回だけ手動ブラウザ更新が必要。
+- A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
 - B（エラー調査）: gridPrefs「日付幅195が戻る」修正は production(build 09:48:49Z)に**完全反映済み・revert不要**と確認。lint/typecheck OK。台帳を Git 追跡正本化（.github/coordination-hub.md）し PC 間引き継ぎを構築。
-- C（日本語設定）: TEAM-VERIFY-TEMPLATE.md を追加し、app/live-build-sync.tsx を layout に導入。現行 Desktop v0.1.0 でも本番 deploy 後の Web build を約15秒 + focus 復帰で検知して自動再読込する設計。初回導入だけ1回の再起動/キャッシュ無視再読込が必要。deploy #338 待ち。
+- C（日本語設定）: TEAM-VERIFY-TEMPLATE.md を追加し、app/live-build-sync.tsx を layout に導入。production build 10:50:04.139Z に反映済み。Desktop 0.1.3 導入済み環境では、通常の Web-only deploy は約15秒または focus 復帰で追従する前提へ更新。
 
 ## バージョン基準（現状アプリ・2026-06-02）
-- Desktop（インストール済み実体）: v0.1.0（Electron 35.7.5 / Chrome 134 / Node 22.16.0）。今後の編集・読込はこの実体を基準にする。
-- Web（本番）: master-hub v0.1.0 / build 2026-06-02T09:48:49.319Z。
-- Desktop 配布最新: 0.1.2（/api/desktop-release が返す。起動時 cache 破棄入り）。ユーザーが再インストール/更新するまで実体は 0.1.0 のまま。
+- Desktop（インストール済み実体）: v0.1.3（ユーザー報告ベース）。今後の編集・読込はこの実体を基準にする。
+- Web（本番）: master-hub v0.1.0 / build 2026-06-02T10:50:04.139Z。
+- Desktop 配布最新: 0.1.3（/api/desktop-release が返す。起動時 cache 破棄 + アプリ内更新導線入り）。
 - 注意: About ダイアログの Desktop 版番号は実体の wrapper 版。Web 側修正だけでは wrapper は更新されない。
 
 ## 決定・方針ログ
@@ -67,9 +68,10 @@
 - (B) silent restore 直後は remembered login userId を local owner fallback に使う。
 - (A) desktop release 情報は env secrets 固定ではなく public/desktop-release.json を server bundle へ import して優先。downloadUrl は GitHub raw を指して本番 static コピー差異を回避。
 - (A) Electron wrapper は起動時に session cache＋serviceworkers/cachestorage を clearStorageData してから loadURL。古い Web バンドル固着を防止。
-- (A) デスクトップ配布の基準版を 0.1.2 へ。installer は public/downloads/ に配置（git 追跡）。
-- (C) 以後の日本語/ロケール作業は Desktop v0.1.0 実体 + Web build 2026-06-02T09:48:49.319Z を基準に互換維持。app/header.tsx、desktop release、deploy/workflow 変更はA/Bと調整後に着手。
-- (C) A/B/C 共通の確認テンプレを TEAM-VERIFY-TEMPLATE.md に集約。現行 Desktop v0.1.0 にも届く即時反映は wrapper ではなく Web 側 app/live-build-sync.tsx で実装し、Electron 実行時のみ /api/version 監視 -> cache掃除 -> 自動再読込で扱う。
+- (A) デスクトップ配布の基準版を 0.1.3 へ。installer は public/downloads/ に配置（git 追跡）。
+- (C) 以後の日本語/ロケール作業は Desktop v0.1.3 実体 + Web build 2026-06-02T10:50:04.139Z を基準に互換維持。app/header.tsx、desktop release、deploy/workflow 変更はA/Bと調整後に着手。
+- (C) A/B/C 共通の確認テンプレを TEAM-VERIFY-TEMPLATE.md に集約。即時反映は wrapper 固有実装ではなく Web 側 app/live-build-sync.tsx で扱い、Electron 実行時のみ /api/version 監視 -> cache掃除 -> 自動再読込で追従する。
+- (C) Desktop 0.1.3 導入済み + production build 10:50:04.139Z 以降を一度読み込んだ環境では、通常の Web-only deploy に手動再起動は不要とする。
 - (B) 調整ハブの正本を `.github/coordination-hub.md`（Git 追跡）に移し、`/memories/repo/coordination-hub.md` は PC 固有のローカルミラー扱い。PC 間引き継ぎは GitHub 経由でこの正本を同期する。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
@@ -98,5 +100,5 @@
 - production 反映フロー: save → sync → main → deploy（/memories/editing.md 準拠）。
 - 検証コマンド: `npm run typecheck` / `npm run lint`。
 - 【交錯防止ルール】複数チャット同時運用中は安全 push 前に「ファイルロック表」とステータスボードを確認。他チャットの WIP があるなら push を保留するか、`git add <自分の担当ファイル>` で部分 staging に切替える（`git add -A` を避ける）。
-- desktop wrapper 実体は 0.1.0。cache 破棄修正を全ユーザーへ届けるには 0.1.2 installer の再配布/更新が必要。Web のみ deploy では届かない。
+- desktop wrapper 実体は 0.1.3 を基準に運用。Web-only deploy の即時追従は live-build-sync 前提で確認し、wrapper 更新が必要なのは main.cjs / desktop-release / installer を触る変更のみ。
 - 【PC間引き継ぎ】正本=`.github/coordination-hub.md`（Git追跡・全PC同期）。ローカルミラー=`/memories/repo/coordination-hub.md`（PC固有・非同期）。食い違ったら正本を優先し、ミラーを上書きする。
