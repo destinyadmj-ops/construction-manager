@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from 'react';
 import "./globals.css";
+import LiveBuildSync from './live-build-sync';
 import ServiceWorkerRegister from "./sw-register";
 import AppHeader from "./header";
 import { HeaderActionsProvider } from './header-actions';
@@ -44,6 +45,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <HeaderActionsProvider>
             <ServiceWorkerRegister />
+            <LiveBuildSync />
             <PwaBackGuard />
             <UiThemeLoader />
             <PageThemeLoader />
