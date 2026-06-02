@@ -55,6 +55,7 @@ Web 変更時の標準フロー:
 1. 入力欄にフォーカス中は即 reload せず、入力が外れたタイミングで反映する。
 2. Desktop の About に出る Desktop version は wrapper 版で、Web 変更だけでは通常変わらない。
 3. Wrapper 変更を含む場合は、/api/desktop-release の version と installer 再配布が必要。
+4. live build sync を初めて配る回だけは、その機能自体を読み込ませるために Desktop アプリで 1 回の再起動またはキャッシュ無視再読み込みが必要。
 
 ## 4. 変更後確認
 
