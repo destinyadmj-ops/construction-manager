@@ -209,8 +209,10 @@ export default function AppHeader() {
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
 
   const isUpdateAvailable = isUpdateAvailableByVersion || isUpdateAvailableBySw;
+  const routeKind = (searchParams.get('kind') ?? '').trim().toLowerCase();
 
-  const isWeek = pathname === '/' && (!mode || mode === 'week');
+  const isDailyWeek = pathname === '/' && (!mode || mode === 'week') && routeKind === 'daily';
+  const isWeek = pathname === '/' && (!mode || mode === 'week') && routeKind !== 'daily';
 
   const weekModeKey = useMemo(() => {
     if (pathname !== '/') return null;
@@ -2198,6 +2200,20 @@ export default function AppHeader() {
             aria-current={isPartners ? 'page' : undefined}
           >
             関係会社
+          </Link>
+
+          <Link
+            href="/?mode=week&kind=daily"
+            data-color-edit-slot="button"
+            data-color-edit-id="header:nav:daily"
+            onClick={() => {
+              navIntentRef.current = 'push';
+            }}
+            className={navLinkClass(isDailyWeek, 'hidden lg:inline-flex')}
+            title="日常予定へ"
+            aria-current={isDailyWeek ? 'page' : undefined}
+          >
+            日常
           </Link>
 
           <div ref={multiMenuRef} className="relative">
