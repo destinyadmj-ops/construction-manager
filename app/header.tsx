@@ -472,7 +472,8 @@ export default function AppHeader() {
           const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
           if (cancelled) return;
 
-          if (localStored.savedAt > remoteUpdatedAt) {
+          const latestLocalStored = readStoredWeekGridPrefs(weekGridPrefsKey);
+          if (latestLocalStored.savedAt > remoteUpdatedAt) {
             return;
           }
 

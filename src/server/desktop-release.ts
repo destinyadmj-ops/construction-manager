@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import pkg from '../../package.json';
+import repoReleaseManifest from '../../public/desktop-release.json';
 
 export type DesktopReleaseInfo = {
   version: string;
@@ -64,6 +65,25 @@ function readJsonObject(filePath: string): Record<string, unknown> | null {
   }
 }
 
+function normalizeDesktopReleaseRecord(release: Record<string, unknown> | null): DesktopReleaseInfo | null {
+  if (!release) return null;
+
+  const version = typeof release.version === 'string' ? release.version.trim() : '';
+  if (!version) return null;
+
+  const rawDownloadUrl = typeof release.downloadUrl === 'string' ? release.downloadUrl.trim() : '';
+  const bundledPublicInstaller = getPublicDesktopInstaller(version);
+
+  return {
+    version,
+    downloadUrl:
+      rawDownloadUrl || (bundledPublicInstaller ? `/downloads/${encodeURIComponent(bundledPublicInstaller.fileName)}` : null),
+    notes: typeof release.notes === 'string' ? release.notes.trim() || null : null,
+    publishedAt: typeof release.publishedAt === 'string' ? release.publishedAt.trim() || null : null,
+    channel: typeof release.channel === 'string' && release.channel.trim() ? release.channel.trim() : 'stable',
+  };
+}
+
 function getPublicDesktopInstaller(version?: string): { fileName: string; filePath: string; version: string } | null {
   const downloadsDir = resolve(process.cwd(), 'public', 'downloads');
   if (!existsSync(downloadsDir)) return null;
@@ -98,25 +118,11 @@ function getPublicDesktopInstaller(version?: string): { fileName: string; filePa
 }
 
 function getRepoDesktopReleaseInfo(): DesktopReleaseInfo | null {
-  const release =
-    readJsonObject(resolve(process.cwd(), 'public', 'desktop-release.json')) ??
-    readJsonObject(resolve(process.cwd(), 'apps', 'desktop', 'release.json'));
-  if (!release) return null;
-
-  const version = typeof release.version === 'string' ? release.version.trim() : '';
-  if (!version) return null;
-
-  const bundledPublicInstaller = getPublicDesktopInstaller(version);
-  const rawDownloadUrl = typeof release.downloadUrl === 'string' ? release.downloadUrl.trim() : '';
-
-  return {
-    version,
-    downloadUrl:
-      rawDownloadUrl || (bundledPublicInstaller ? `/downloads/${encodeURIComponent(bundledPublicInstaller.fileName)}` : null),
-    notes: typeof release.notes === 'string' ? release.notes.trim() || null : null,
-    publishedAt: typeof release.publishedAt === 'string' ? release.publishedAt.trim() || null : null,
-    channel: typeof release.channel === 'string' && release.channel.trim() ? release.channel.trim() : 'stable',
-  };
+  return (
+    normalizeDesktopReleaseRecord(repoReleaseManifest as Record<string, unknown>) ??
+    normalizeDesktopReleaseRecord(readJsonObject(resolve(process.cwd(), 'public', 'desktop-release.json'))) ??
+    normalizeDesktopReleaseRecord(readJsonObject(resolve(process.cwd(), 'apps', 'desktop', 'release.json')))
+  );
 }
 
 function getEnvDesktopReleaseInfo(): DesktopReleaseInfo | null {

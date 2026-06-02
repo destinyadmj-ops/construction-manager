@@ -1504,7 +1504,8 @@ function WeekHubInner() {
 
         const remoteUpdatedAtRaw = typeof obj?.updatedAt === 'string' ? Date.parse(obj.updatedAt) : Number.NaN;
         const remoteUpdatedAt = Number.isFinite(remoteUpdatedAtRaw) ? remoteUpdatedAtRaw : 0;
-        if (localSavedAt > remoteUpdatedAt) {
+        const latestLocalSavedAt = readWeekGridPrefsSavedAt(readLocalGridPrefs(localStorageKey));
+        if (latestLocalSavedAt > remoteUpdatedAt) {
           break;
         }
 
