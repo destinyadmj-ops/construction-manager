@@ -1080,7 +1080,7 @@ export default function AppHeader() {
       className="sticky top-0 z-50 border-b border-zinc-200 backdrop-blur dark:border-zinc-800"
     >
       <div className="bg-white/60 dark:bg-black/60">
-        <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-2 py-2 sm:px-2.5 sm:py-3 lg:flex-nowrap lg:px-5">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 px-2 py-2 sm:px-2.5 sm:py-3 lg:flex-nowrap lg:px-5">
 
           <div className="-ml-0.5 flex min-w-0 flex-nowrap items-center gap-0.5 sm:-ml-2">
             {/* Left small banner area (future: settings/alerts/notifications) */}

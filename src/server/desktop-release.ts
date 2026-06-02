@@ -33,8 +33,12 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+function isDesktopInstallerFileName(fileName: string): boolean {
+  return /^Master(?: |-)Hub-Setup-.*\.exe$/i.test(fileName);
+}
+
 function extractInstallerVersion(fileName: string): string | null {
-  const match = /^Master Hub-Setup-(.+)\.exe$/i.exec(fileName);
+  const match = /^Master(?: |-)Hub-Setup-(.+)\.exe$/i.exec(fileName);
   if (!match) return null;
   const version = match[1]?.trim();
   return version ? version : null;
@@ -66,7 +70,7 @@ function getPublicDesktopInstaller(version?: string): { fileName: string; filePa
 
   try {
     const candidates = readdirSync(downloadsDir)
-      .filter((name) => /^Master Hub-Setup-.*\.exe$/i.test(name))
+      .filter(isDesktopInstallerFileName)
       .map((fileName) => {
         const installerVersion = extractInstallerVersion(fileName);
         if (!installerVersion) return null;
@@ -94,8 +98,9 @@ function getPublicDesktopInstaller(version?: string): { fileName: string; filePa
 }
 
 function getRepoDesktopReleaseInfo(): DesktopReleaseInfo | null {
-  const releasePath = resolve(process.cwd(), 'apps', 'desktop', 'release.json');
-  const release = readJsonObject(releasePath);
+  const release =
+    readJsonObject(resolve(process.cwd(), 'public', 'desktop-release.json')) ??
+    readJsonObject(resolve(process.cwd(), 'apps', 'desktop', 'release.json'));
   if (!release) return null;
 
   const version = typeof release.version === 'string' ? release.version.trim() : '';
@@ -150,7 +155,7 @@ export function getBundledDesktopInstaller(): { fileName: string; filePath: stri
 
   try {
     const candidates = readdirSync(distDir)
-      .filter((name) => /^Master Hub-Setup-.*\.exe$/i.test(name))
+      .filter(isDesktopInstallerFileName)
       .map((fileName) => {
         const filePath = join(distDir, fileName);
         return {

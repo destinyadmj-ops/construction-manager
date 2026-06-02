@@ -1,0 +1,7 @@
+{
+  "version": "0.1.2",
+  "downloadUrl": "/downloads/Master-Hub-Setup-0.1.2.exe",
+  "notes": "デスクトップ起動時にキャッシュを自動更新し、最新の本番画面へ追従するよう改善",
+  "publishedAt": "2026-06-02T09:30:00Z",
+  "channel": "stable"
+}
