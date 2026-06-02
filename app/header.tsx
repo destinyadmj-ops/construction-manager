@@ -8,20 +8,22 @@ import PortalMenu from './components/portal-menu';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderActions } from './header-actions';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
-import { normalizeThemeShade } from './color-ramp';
 import {
   applyUiTheme,
   defaultUiTheme,
   normalizeUiTheme,
   readLocalUiTheme,
   UI_THEME_SETTING_KEY,
-  type UiThemeColor,
   writeLocalUiTheme,
 } from './ui-theme';
 import {
   buildLegacyWeekGridPrefsSettingsKey,
   buildWeekGridPrefsLocalStorageKey,
   buildWeekGridPrefsSettingsKey,
+  defaultWeekGridPrefs,
+  normalizeWeekGridPrefs,
+  type WeekGridPrefs,
+  type WeekGridPrefsTarget,
 } from '@/shared/week-grid-prefs';
 
 type JsonObject = Record<string, unknown>;
@@ -34,7 +36,7 @@ function toMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function detectWeekGridPrefsTarget() {
+function detectWeekGridPrefsTarget(): WeekGridPrefsTarget {
   if (typeof navigator !== 'undefined') {
     const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
     if (userAgentData?.mobile === true) return 'mobile' as const;
@@ -43,85 +45,6 @@ function detectWeekGridPrefsTarget() {
     if (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) return 'mobile' as const;
   }
   return 'desktop' as const;
-}
-
-type WeekGridPrefs = {
-  gridLayout: 'compact' | 'comfortable';
-  cellTextColor: UiThemeColor;
-  cellTextShade: number;
-  cellBgColor: UiThemeColor;
-  cellBgShade: number;
-  nameColW: number;
-  cellMinW: number;
-  cellMinHCompact: number;
-  cellMinHComfortable: number;
-};
-
-function clampInt(n: number, min: number, max: number, fallback: number) {
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(n)));
-}
-
-function normalizeWeekGridPrefs(raw: unknown): WeekGridPrefs {
-  const o = asObject(raw);
-  const gridLayout = o?.gridLayout === 'comfortable' ? 'comfortable' : 'compact';
-  const rawTextColor = typeof o?.cellTextColor === 'string' ? (o.cellTextColor as string) : '';
-  const _allowedTextColors = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
-  const cellTextColor = (_allowedTextColors as readonly string[]).includes(rawTextColor)
-    ? (rawTextColor as typeof _allowedTextColors[number])
-    : 'default';
-  const cellTextShade = normalizeThemeShade(o?.cellTextShade, 50);
-
-  const rawBgColor = typeof o?.cellBgColor === 'string' ? (o.cellBgColor as string) : '';
-  const _allowedBgColors = ['default', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
-  const cellBgColor = (_allowedBgColors as readonly string[]).includes(rawBgColor)
-    ? (rawBgColor as typeof _allowedBgColors[number])
-    : 'default';
-  const cellBgShade = (() => {
-    if (typeof o?.cellBgShade === 'number') return normalizeThemeShade(o.cellBgShade, 0);
-    // v1 compatibility
-    if (o?.cellBg === 'soft') return 25;
-    return 0;
-  })();
-  const nameColW = clampInt(typeof o?.nameColW === 'number' ? (o.nameColW as number) : NaN, 80, 280, 96);
-  const cellMinW = clampInt(typeof o?.cellMinW === 'number' ? (o.cellMinW as number) : NaN, 60, 240, 112);
-  const cellMinHCompact = clampInt(
-    typeof o?.cellMinHCompact === 'number' ? (o.cellMinHCompact as number) : NaN,
-    32,
-    120,
-    48,
-  );
-  const cellMinHComfortable = clampInt(
-    typeof o?.cellMinHComfortable === 'number' ? (o.cellMinHComfortable as number) : NaN,
-    32,
-    120,
-    64,
-  );
-  return {
-    gridLayout,
-    cellTextColor,
-    cellTextShade,
-    cellBgColor,
-    cellBgShade,
-    nameColW,
-    cellMinW,
-    cellMinHCompact,
-    cellMinHComfortable,
-  };
-}
-
-function defaultWeekGridPrefs(): WeekGridPrefs {
-  return {
-    gridLayout: 'compact',
-    cellTextColor: 'default',
-    cellTextShade: 50,
-    cellBgColor: 'default',
-    cellBgShade: 0,
-    nameColW: 96,
-    cellMinW: 112,
-    cellMinHCompact: 48,
-    cellMinHComfortable: 64,
-  };
 }
 
 type MonthLegendState = {
@@ -268,6 +191,12 @@ export default function AppHeader() {
     }
     return Array.from(keys);
   }, [headerUserId, legacyWeekGridPrefsKey, weekGridPrefsKey]);
+
+  const weekGridSectionTitle = useMemo(() => {
+    if (weekModeKey === 'month') return 'セル（月予定）';
+    if (weekModeKey === 'year') return 'セル（年予定）';
+    return 'セル（週予定）';
+  }, [weekModeKey]);
 
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
@@ -1450,7 +1379,7 @@ export default function AppHeader() {
                 {pathname === '/' && weekGridPrefsKey ? (
                   <>
                     <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                      セル（週予定）
+                      {weekGridSectionTitle}
                     </div>
                     <div className="p-2 space-y-2">
                       <div className="grid grid-cols-[90px_1fr] items-center gap-2">
@@ -1523,7 +1452,7 @@ export default function AppHeader() {
                       </div>
 
                       <div className="grid grid-cols-[90px_1fr] items-center gap-2">
-                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">セル幅</div>
+                        <div className="text-[11px] text-zinc-600 dark:text-zinc-400">日付幅</div>
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                           <input
                             type="number"
