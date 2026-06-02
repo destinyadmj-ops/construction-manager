@@ -4,7 +4,7 @@
 
 ## 1. 着手前
 
-1. /memories/repo/coordination-hub.md を確認する。
+1. .github/coordination-hub.md を確認する。必要なら /memories/repo/coordination-hub.md は高速参照用 mirror として併読する。
 2. 触るファイルを lock 表へ記載する。
 3. 変更が次のどちらかを先に分類する。
    - Web 変更: app, src/server, public の画面/API/スタイル変更。
