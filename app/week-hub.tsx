@@ -1436,10 +1436,31 @@ function WeekHubInner() {
     gridPrefsLoadedRef.current[scopeKey] = true;
     const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, userId);
     const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, userId);
+    const oldLocalStorageKeys = [`masterHub.ui:${key}`, `masterHub.ui:${legacyGridPrefsKey}`];
 
-    const localRaw = readLocalGridPrefs(localStorageKey) ?? readLocalGridPrefs(legacyLocalStorageKey);
+    const localCandidates = [localStorageKey, legacyLocalStorageKey, ...oldLocalStorageKeys].filter(
+      (value): value is string => !!value,
+    );
+    let loadedLocalKey: string | null = null;
+    let localRaw: unknown = null;
+    for (const candidate of localCandidates) {
+      const raw = readLocalGridPrefs(candidate);
+      if (!raw) continue;
+      loadedLocalKey = candidate;
+      localRaw = raw;
+      break;
+    }
+
     if (localRaw) {
       applyGridPrefs(localRaw);
+      if (loadedLocalKey !== localStorageKey) {
+        try {
+          const normalized = normalizeWeekGridPrefs(localRaw, gridPrefsDefaults);
+          window.localStorage.setItem(localStorageKey, JSON.stringify({ ...normalized, v: WEEK_GRID_PREFS_VERSION }));
+        } catch {
+          // ignore
+        }
+      }
     } else {
       applyGridPrefs(gridPrefsDefaults);
     }
@@ -5691,8 +5712,8 @@ function MonthGrid({
       <div className="sticky z-40" style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}>
         {/* Month switch: sticky stack top row */}
         <div className="border-b border-zinc-400 bg-white/90 px-2 py-2 text-xs backdrop-blur dark:border-zinc-600 dark:bg-black/90">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={onPrevMonth}
@@ -5710,30 +5731,29 @@ function MonthGrid({
               >
                 →
               </button>
+              <button
+                type="button"
+                onClick={onToday}
+                className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+              >
+                今月
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={onToday}
-              className="rounded-md border border-zinc-200 bg-white/60 px-2 py-1 text-xs hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
-            >
-              今月
-            </button>
+            {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
+              <div className="ml-auto flex min-w-0 flex-1 justify-end">
+                <div
+                  ref={topScrollbarRef}
+                  className="mh-scrollbar-visible h-5 w-full min-w-0 max-w-[48vw] overflow-x-auto overflow-y-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800/80"
+                  onScroll={onTopScrollbarScroll}
+                  data-testid="month-grid-top-scrollbar"
+                >
+                  <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
-
-        {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
-          <div className="border-b border-zinc-400 bg-white/90 px-2 py-1 dark:border-zinc-600 dark:bg-black/90">
-            <div
-              ref={topScrollbarRef}
-              className="mh-scrollbar-visible h-5 overflow-x-auto overflow-y-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800/80"
-              onScroll={onTopScrollbarScroll}
-              data-testid="month-grid-top-scrollbar"
-            >
-              <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
-            </div>
-          </div>
-        ) : null}
 
         {/* Date header row: sticky stack second row */}
         <div className="border-b border-zinc-400 dark:border-zinc-600">
