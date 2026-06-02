@@ -2,28 +2,59 @@
 
 import { useEffect } from 'react';
 
+const ELECTRON_SW_RESET_KEY = 'mh-electron-sw-reset';
+
+function isElectronRuntime() {
+  if (typeof navigator === 'undefined') return false;
+  return /\bElectron\//.test(navigator.userAgent);
+}
+
+async function unregisterServiceWorkers() {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  return registrations.length > 0;
+}
+
+async function clearMasterHubCaches() {
+  if (!('caches' in window)) return;
+  const keys = await window.caches.keys();
+  await Promise.all(keys.filter((key) => key.startsWith('master-hub-')).map((key) => window.caches.delete(key)));
+}
+
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     const enableInDev = process.env.NEXT_PUBLIC_ENABLE_SW === '1';
     if (!('serviceWorker' in navigator)) return;
 
-    if (process.env.NODE_ENV !== 'production' && !enableInDev) {
-      navigator.serviceWorker
-        .getRegistrations()
-        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-        .catch(() => {
-          // no-op
-        });
+    const resetServiceWorkers = async () => {
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      const hadRegistrations = await unregisterServiceWorkers().catch(() => false);
+      await clearMasterHubCaches().catch(() => {
+        // no-op
+      });
 
-      if ('caches' in window) {
-        window.caches
-          .keys()
-          .then((keys) => Promise.all(keys.filter((key) => key.startsWith('master-hub-')).map((key) => window.caches.delete(key))))
-          .catch(() => {
-            // no-op
-          });
+      if (!isElectronRuntime()) return;
+      if (!hadController && !hadRegistrations) {
+        window.sessionStorage.removeItem(ELECTRON_SW_RESET_KEY);
+        return;
       }
 
+      if (window.sessionStorage.getItem(ELECTRON_SW_RESET_KEY) === '1') {
+        window.sessionStorage.removeItem(ELECTRON_SW_RESET_KEY);
+        return;
+      }
+
+      window.sessionStorage.setItem(ELECTRON_SW_RESET_KEY, '1');
+      window.location.reload();
+    };
+
+    if (isElectronRuntime()) {
+      void resetServiceWorkers();
+      return;
+    }
+
+    if (process.env.NODE_ENV !== 'production' && !enableInDev) {
+      void resetServiceWorkers();
       return;
     }
 
