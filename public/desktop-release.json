@@ -1,7 +1,7 @@
 {
-  "version": "0.1.2",
-  "downloadUrl": "https://raw.githubusercontent.com/destinyadmj-ops/construction-manager/main/public/downloads/Master-Hub-Setup-0.1.2.exe",
-  "notes": "デスクトップ起動時にキャッシュを自動更新し、最新の本番画面へ追従するよう改善",
-  "publishedAt": "2026-06-02T09:30:00Z",
+  "version": "0.1.3",
+  "downloadUrl": "https://raw.githubusercontent.com/destinyadmj-ops/construction-manager/main/public/downloads/Master-Hub-Setup-0.1.3.exe",
+  "notes": "ヘルプ→更新を確認 からアプリ内でダウンロードし、そのままインストールして更新できるように改善。起動時のキャッシュ自動更新も継続。",
+  "publishedAt": "2026-06-02T09:55:00Z",
   "channel": "stable"
 }
