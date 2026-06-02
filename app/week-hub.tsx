@@ -3382,7 +3382,7 @@ function WeekHubInner() {
                 onClick={() => setMode(tab.key as ViewMode)}
                 className={`rounded-md border px-2 py-1 text-xs ${
                   mode === tab.key
-                    ? 'border-blue-500 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-800'
+                    ? 'border-red-500 bg-blue-600 text-white dark:border-red-400 dark:bg-blue-800'
                     : 'border-zinc-200 bg-white/60 text-zinc-700 hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black'
                 }`}
               >
