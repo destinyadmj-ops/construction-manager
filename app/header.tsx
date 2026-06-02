@@ -32,6 +32,24 @@ function asObject(v: unknown): JsonObject | null {
   return v && typeof v === 'object' ? (v as JsonObject) : null;
 }
 
+function parseDraftIntInRange(value: string, min: number, max: number): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.round(parsed);
+  if (rounded < min || rounded > max) return null;
+  return rounded;
+}
+
+function finalizeDraftInt(value: string, min: number, max: number, fallback: number): number {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return fallback;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
 function toMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -763,12 +781,18 @@ export default function AppHeader() {
   }, [pathname]);
 
   const pageFontKey = useMemo(() => {
+    if (pathname !== '/') return `fontSize:${pathname}`;
+    return `fontSize:${pathname}:${weekModeKey ?? 'week'}`;
+  }, [pathname, weekModeKey]);
+
+  const legacyPageFontKey = useMemo(() => {
+    if (pathname !== '/') return null;
     return `fontSize:${pathname}`;
   }, [pathname]);
 
   const localPageFontKey = useCallback(
-    (userId: string | null) => {
-      return `masterHub.ui:fontSize:${userId ?? 'anon'}:${pageFontKey}`;
+    (userId: string | null, key = pageFontKey) => {
+      return `masterHub.ui:fontSize:${userId ?? 'anon'}:${key}`;
     },
     [pageFontKey],
   );
@@ -776,22 +800,26 @@ export default function AppHeader() {
   const readLocalPageFontSize = useCallback(
     (userId: string | null): number | null => {
       try {
-        const raw = window.localStorage.getItem(localPageFontKey(userId));
-        if (!raw) return null;
-        const n = Number(raw);
-        if (!Number.isFinite(n)) return null;
-        return Math.max(10, Math.min(30, Math.round(n)));
+        const candidateKeys = legacyPageFontKey ? [pageFontKey, legacyPageFontKey] : [pageFontKey];
+        for (const key of candidateKeys) {
+          const raw = window.localStorage.getItem(localPageFontKey(userId, key));
+          if (!raw) continue;
+          const n = Number(raw);
+          if (!Number.isFinite(n)) continue;
+          return Math.max(10, Math.min(30, Math.round(n)));
+        }
+        return null;
       } catch {
         return null;
       }
     },
-    [localPageFontKey],
+    [legacyPageFontKey, localPageFontKey, pageFontKey],
   );
 
   const writeLocalPageFontSize = useCallback(
-    (userId: string | null, px: number | null) => {
+    (userId: string | null, px: number | null, key = pageFontKey) => {
       try {
-        const k = localPageFontKey(userId);
+        const k = localPageFontKey(userId, key);
         if (px == null) {
           window.localStorage.removeItem(k);
           return;
@@ -802,7 +830,7 @@ export default function AppHeader() {
         // ignore
       }
     },
-    [localPageFontKey],
+    [localPageFontKey, pageFontKey],
   );
 
   const applyFontSize = useCallback(
@@ -830,20 +858,24 @@ export default function AppHeader() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(
-          `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(pageFontKey)}`,
-        );
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) return;
-        if (cancelled) return;
+        const remoteKeys = legacyPageFontKey ? [pageFontKey, legacyPageFontKey] : [pageFontKey];
+        for (const remoteKey of remoteKeys) {
+          const r = await fetch(
+            `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(remoteKey)}`,
+          );
+          const j = (await r.json().catch(() => null)) as unknown;
+          const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+          if (!r.ok || obj?.ok !== true) continue;
+          if (cancelled) return;
 
-        const raw = obj.value;
-        const n = typeof raw === 'number' ? raw : null;
-        setPageFontSize(n);
-        setPageFontSizeDraft(n == null ? '' : String(n));
-        applyFontSize(n);
-        writeLocalPageFontSize(headerUserId, n);
+          const raw = obj.value;
+          const n = typeof raw === 'number' ? raw : null;
+          setPageFontSize(n);
+          setPageFontSizeDraft(n == null ? '' : String(n));
+          applyFontSize(n);
+          writeLocalPageFontSize(headerUserId, n);
+          return;
+        }
       } catch {
         if (cancelled) return;
         const fallback = readLocalPageFontSize(headerUserId);
@@ -855,7 +887,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [applyFontSize, headerUserId, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
+  }, [applyFontSize, headerUserId, legacyPageFontKey, pageFontKey, readLocalPageFontSize, writeLocalPageFontSize]);
 
   const savePageFontSize = useCallback(
     async (px: number) => {
@@ -1206,19 +1238,23 @@ export default function AppHeader() {
                       min={10}
                       max={30}
                       value={pageFontSizeDraft}
-                      onChange={(e) => setPageFontSizeDraft(e.target.value)}
+                      onChange={(e) => {
+                        const nextText = e.target.value;
+                        setPageFontSizeDraft(nextText);
+                        const next = parseDraftIntInRange(nextText, 10, 30);
+                        if (next != null) {
+                          void savePageFontSize(next);
+                        }
+                      }}
                       onKeyDown={(e) => {
                         if (e.key !== 'Enter') return;
-                        const n = Number(pageFontSizeDraft);
-                        if (!Number.isFinite(n)) return;
+                        const n = finalizeDraftInt(pageFontSizeDraft, 10, 30, pageFontSize ?? 12);
+                        setPageFontSizeDraft(String(n));
                         void savePageFontSize(n);
                       }}
                       onBlur={() => {
-                        const n = Number(pageFontSizeDraft);
-                        if (!Number.isFinite(n)) {
-                          setPageFontSizeDraft(pageFontSize == null ? '' : String(pageFontSize));
-                          return;
-                        }
+                        const n = finalizeDraftInt(pageFontSizeDraft, 10, 30, pageFontSize ?? 12);
+                        setPageFontSizeDraft(String(n));
                         void savePageFontSize(n);
                       }}
                       className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
@@ -1415,6 +1451,7 @@ export default function AppHeader() {
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={80}
                             max={280}
                             step={1}
@@ -1422,21 +1459,18 @@ export default function AppHeader() {
                             onChange={(e) => {
                               const nextText = e.target.value;
                               setNameColWDraft(nextText);
-                              const next = Number(nextText);
-                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ nameColW: next });
+                              const next = parseDraftIntInRange(nextText, 80, 280);
+                              if (next != null) commitWeekGridNumericPatch({ nameColW: next });
                             }}
                             onBlur={() => {
-                              const next = Number(nameColWDraft);
-                              if (!Number.isFinite(next)) {
-                                setNameColWDraft(String(weekGridPrefs.nameColW));
-                                return;
-                              }
+                              const next = finalizeDraftInt(nameColWDraft, 80, 280, weekGridPrefs.nameColW);
+                              setNameColWDraft(String(next));
                               commitWeekGridNumericPatch({ nameColW: next });
                             }}
                             onKeyDown={(e) => {
                               if (e.key !== 'Enter') return;
-                              const next = Number(nameColWDraft);
-                              if (!Number.isFinite(next)) return;
+                              const next = finalizeDraftInt(nameColWDraft, 80, 280, weekGridPrefs.nameColW);
+                              setNameColWDraft(String(next));
                               commitWeekGridNumericPatch({ nameColW: next });
                             }}
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
@@ -1456,6 +1490,7 @@ export default function AppHeader() {
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={60}
                             max={240}
                             step={1}
@@ -1463,21 +1498,18 @@ export default function AppHeader() {
                             onChange={(e) => {
                               const nextText = e.target.value;
                               setCellMinWDraft(nextText);
-                              const next = Number(nextText);
-                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinW: next });
+                              const next = parseDraftIntInRange(nextText, 60, 240);
+                              if (next != null) commitWeekGridNumericPatch({ cellMinW: next });
                             }}
                             onBlur={() => {
-                              const next = Number(cellMinWDraft);
-                              if (!Number.isFinite(next)) {
-                                setCellMinWDraft(String(weekGridPrefs.cellMinW));
-                                return;
-                              }
+                              const next = finalizeDraftInt(cellMinWDraft, 60, 240, weekGridPrefs.cellMinW);
+                              setCellMinWDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinW: next });
                             }}
                             onKeyDown={(e) => {
                               if (e.key !== 'Enter') return;
-                              const next = Number(cellMinWDraft);
-                              if (!Number.isFinite(next)) return;
+                              const next = finalizeDraftInt(cellMinWDraft, 60, 240, weekGridPrefs.cellMinW);
+                              setCellMinWDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinW: next });
                             }}
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
@@ -1497,6 +1529,7 @@ export default function AppHeader() {
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={40}
                             max={120}
                             step={1}
@@ -1504,21 +1537,18 @@ export default function AppHeader() {
                             onChange={(e) => {
                               const nextText = e.target.value;
                               setCellMinHCompactDraft(nextText);
-                              const next = Number(nextText);
-                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinHCompact: next });
+                              const next = parseDraftIntInRange(nextText, 40, 120);
+                              if (next != null) commitWeekGridNumericPatch({ cellMinHCompact: next });
                             }}
                             onBlur={() => {
-                              const next = Number(cellMinHCompactDraft);
-                              if (!Number.isFinite(next)) {
-                                setCellMinHCompactDraft(String(weekGridPrefs.cellMinHCompact));
-                                return;
-                              }
+                              const next = finalizeDraftInt(cellMinHCompactDraft, 40, 120, weekGridPrefs.cellMinHCompact);
+                              setCellMinHCompactDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinHCompact: next });
                             }}
                             onKeyDown={(e) => {
                               if (e.key !== 'Enter') return;
-                              const next = Number(cellMinHCompactDraft);
-                              if (!Number.isFinite(next)) return;
+                              const next = finalizeDraftInt(cellMinHCompactDraft, 40, 120, weekGridPrefs.cellMinHCompact);
+                              setCellMinHCompactDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinHCompact: next });
                             }}
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
@@ -1538,6 +1568,7 @@ export default function AppHeader() {
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={56}
                             max={180}
                             step={1}
@@ -1545,21 +1576,28 @@ export default function AppHeader() {
                             onChange={(e) => {
                               const nextText = e.target.value;
                               setCellMinHComfortableDraft(nextText);
-                              const next = Number(nextText);
-                              if (Number.isFinite(next)) commitWeekGridNumericPatch({ cellMinHComfortable: next });
+                              const next = parseDraftIntInRange(nextText, 56, 180);
+                              if (next != null) commitWeekGridNumericPatch({ cellMinHComfortable: next });
                             }}
                             onBlur={() => {
-                              const next = Number(cellMinHComfortableDraft);
-                              if (!Number.isFinite(next)) {
-                                setCellMinHComfortableDraft(String(weekGridPrefs.cellMinHComfortable));
-                                return;
-                              }
+                              const next = finalizeDraftInt(
+                                cellMinHComfortableDraft,
+                                56,
+                                180,
+                                weekGridPrefs.cellMinHComfortable,
+                              );
+                              setCellMinHComfortableDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinHComfortable: next });
                             }}
                             onKeyDown={(e) => {
                               if (e.key !== 'Enter') return;
-                              const next = Number(cellMinHComfortableDraft);
-                              if (!Number.isFinite(next)) return;
+                              const next = finalizeDraftInt(
+                                cellMinHComfortableDraft,
+                                56,
+                                180,
+                                weekGridPrefs.cellMinHComfortable,
+                              );
+                              setCellMinHComfortableDraft(String(next));
                               commitWeekGridNumericPatch({ cellMinHComfortable: next });
                             }}
                             className="w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-800 dark:bg-black"
