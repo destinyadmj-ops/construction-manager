@@ -1730,11 +1730,12 @@ function WeekHubInner() {
 
       if (event instanceof CustomEvent) {
         const detail = event.detail && typeof event.detail === 'object' ? (event.detail as Record<string, unknown>) : null;
-        if (typeof detail?.storageKey === 'string' && detail.storageKey !== gridPrefsLocalStorageKey) return;
+        if (typeof detail?.key === 'string' && detail.key !== gridPrefsKey) return;
         if (detail?.value) {
           applyGridPrefs(detail.value);
           return;
         }
+        if (typeof detail?.storageKey === 'string' && detail.storageKey !== gridPrefsLocalStorageKey) return;
       }
 
       const raw = readLocalGridPrefs(gridPrefsLocalStorageKey);
@@ -1747,7 +1748,7 @@ function WeekHubInner() {
       window.removeEventListener('masterHub:gridPrefsUpdated', apply as EventListener);
       window.removeEventListener('storage', apply as EventListener);
     };
-  }, [applyGridPrefs, gridPrefsLocalStorageKey, readLocalGridPrefs]);
+  }, [applyGridPrefs, gridPrefsKey, gridPrefsLocalStorageKey, readLocalGridPrefs]);
 
   useEffect(() => {
     if (!gridPrefsLoadedRef.current[gridPrefsLoadedScopeKey]) return;
