@@ -59,44 +59,47 @@ npm run dist
 またはルートから接続先を固定して生成:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.2"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.3"
 ```
 
 - `scripts/package-desktop.ps1` も `-MasterHubUrl` が必須です。
 - `localhost` / `127.0.0.1` を配布用に埋め込むことは既定で禁止しています。ローカル検証で必要な場合だけ `-AllowLocalhostUrl` を付けてください。
 
 - 出力: `apps/desktop/dist/`
-- 生成物例: `Master Hub-Setup-0.1.2.exe`
-- 本番の update API へ載せる場合は `public/downloads/Master-Hub-Setup-0.1.2.exe` へ配置し、`public/desktop-release.json` も同じ version / downloadUrl に更新します
+- 生成物例: `Master Hub-Setup-0.1.3.exe`
+- 本番の update API へ載せる場合は `public/downloads/Master-Hub-Setup-0.1.3.exe` へ配置し、`public/desktop-release.json` も同じ version / downloadUrl に更新します
 
 署名付き配布を行う場合の例:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.2" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.3" -WindowsCertFile "C:\certs\masterhub.pfx" -WindowsCertPassword "<password>"
 ```
 
 Windows の証明書ストアを使う場合の例:
 
 ```powershell
-.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.1" -WindowsCertSha1 "<thumbprint>"
+.\scripts\package-desktop.ps1 -MasterHubUrl "https://YOUR_DOMAIN/" -DesktopVersion "0.1.3" -WindowsCertSha1 "<thumbprint>"
 ```
 
 証明書を指定しない場合は未署名のまま生成されます。
 
 ## 更新運用（軽量）
 
-フル自動差し替えではなく、「更新確認して新しいインストーラへ誘導する」方式です。
+フル自動差し替えではなく、「更新確認 → アプリ内でダウンロード → そのままインストール」する方式です。
 
 - Web / API の変更はサーバー更新だけで反映されます
 - Electron ラッパー自体を更新したいときだけ、新しい exe を再配布します
-- アプリ内の「更新を確認」は `/api/desktop-release` を見て、新しい exe のダウンロードURLへ誘導します
+- アプリ内の「ヘルプ」→「更新を確認」は `/api/desktop-release` を見て新版を検出します
+  - `0.1.3` 以降のラッパーは「今すぐ更新」でアプリ内に installer をダウンロードし、完了後にそのまま起動してアプリを終了します（HTTPS の downloadUrl のみ対象）
+  - ダウンロードに失敗した場合や HTTP の downloadUrl の場合は、従来どおりブラウザでダウンロードページへ誘導します
+  - `0.1.2` 以前の旧ラッパーは「今すぐ更新」非対応のため、初回だけブラウザ経由で新版へ更新してください
 
 Vultr 側の環境変数例:
 
 ```env
-DESKTOP_APP_VERSION="0.1.2"
-DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master%20Hub-Setup-0.1.2.exe"
-DESKTOP_APP_RELEASE_NOTES="デスクトップ起動時のキャッシュ更新を改善"
+DESKTOP_APP_VERSION="0.1.3"
+DESKTOP_APP_DOWNLOAD_URL="https://YOUR_DOMAIN/downloads/Master-Hub-Setup-0.1.3.exe"
+DESKTOP_APP_RELEASE_NOTES="ヘルプ→更新を確認 からアプリ内更新に対応"
 ```
 
 - `public/desktop-release.json` が存在し、そこに書かれた version が env より新しい場合は repo 側 release 定義が優先されます
@@ -106,7 +109,7 @@ DESKTOP_APP_RELEASE_NOTES="デスクトップ起動時のキャッシュ更新�
 1. 新規インストール確認
 
 ```powershell
-Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.2.exe" -Algorithm SHA256
+Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.3.exe" -Algorithm SHA256
 ```
 
 - 配布前に SHA256 を控える
@@ -114,9 +117,10 @@ Get-FileHash ".\apps\desktop\dist\Master Hub-Setup-0.1.2.exe" -Algorithm SHA256
 
 2. updater 確認
 
-- 0.1.1 以下を入れた端末で、サーバー側の `DESKTOP_APP_VERSION` か `apps/desktop/release.json` を 0.1.2 に向ける
+- 0.1.2 以下を入れた端末で、サーバー側の `DESKTOP_APP_VERSION` か `public/desktop-release.json` を 0.1.3 に向ける
 - アプリの「ヘルプ」→「更新を確認」で新しいバージョン案内が出ることを確認する
-- 0.1.2 導入後は同じ操作で「最新です」表示に戻ることを確認する
+- `0.1.3` 以降では「今すぐ更新」でアプリ内ダウンロード→インストーラ起動→アプリ終了まで進むことを確認する
+- 0.1.3 導入後は同じ操作で「最新です」表示に戻ることを確認する
 
 ## アイコン
 
