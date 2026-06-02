@@ -1053,7 +1053,7 @@ export default function AppHeader() {
       <div className="bg-white/60 dark:bg-black/60">
         <div className="mx-auto flex w-full max-w-screen-2xl min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3 lg:flex-nowrap lg:px-6">
 
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:-ml-1 sm:flex-nowrap">
+          <div className="flex min-w-0 flex-nowrap items-center gap-1 sm:-ml-1">
             {/* Left small banner area (future: settings/alerts/notifications) */}
             <Link href="/" className="shrink-0 whitespace-nowrap text-sm font-medium tracking-tight">
               Master Hub
@@ -1168,7 +1168,7 @@ export default function AppHeader() {
                   setIsSettingsOpen((v) => !v);
                 }}
                 aria-expanded={isSettingsOpen}
-                className="rounded-md border border-zinc-200 bg-white/60 px-3 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black"
+                className="rounded-md border border-zinc-200 bg-white/60 px-2.5 py-2 text-[11px] hover:bg-white dark:border-zinc-800 dark:bg-black/60 dark:hover:bg-black sm:px-3"
                 title="設定"
               >
                 設定
