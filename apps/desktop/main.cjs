@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, shell, clipboard, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, clipboard, nativeTheme, net } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -88,6 +88,129 @@ async function fetchJson(url) {
   }
 }
 
+function downloadInstaller(win, url, destPath) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    let request;
+    try {
+      request = net.request(url);
+    } catch (err) {
+      fail(err);
+      return;
+    }
+
+    request.on('response', (response) => {
+      const status = response.statusCode || 0;
+      if (status !== 200) {
+        fail(new Error(`HTTP ${status}`));
+        return;
+      }
+
+      const total = Number(response.headers['content-length']) || 0;
+      let received = 0;
+      const fileStream = fs.createWriteStream(destPath);
+      fileStream.on('error', fail);
+
+      response.on('data', (chunk) => {
+        received += chunk.length;
+        fileStream.write(chunk);
+        if (total > 0) {
+          try {
+            win.setProgressBar(Math.min(received / total, 1));
+          } catch {}
+        }
+      });
+      response.on('end', () => {
+        fileStream.end(() => {
+          if (settled) return;
+          settled = true;
+          resolve(destPath);
+        });
+      });
+      response.on('error', fail);
+    });
+    request.on('error', fail);
+    request.end();
+  });
+}
+
+async function downloadAndInstall(win, downloadUrl, version) {
+  let parsed;
+  try {
+    parsed = new URL(downloadUrl);
+  } catch {
+    parsed = null;
+  }
+
+  // アプリ内ダウンロード→自動起動は HTTPS のみ許可。それ以外はブラウザに委ねる。
+  if (!parsed || parsed.protocol !== 'https:') {
+    void shell.openExternal(downloadUrl);
+    return;
+  }
+
+  const safeVersion = String(version || '').replace(/[^0-9A-Za-z.+-]/g, '') || 'latest';
+  const fileName = `Master-Hub-Setup-${safeVersion}.exe`;
+  const destPath = path.join(app.getPath('temp'), fileName);
+
+  try {
+    try {
+      win.setProgressBar(0);
+    } catch {}
+    await downloadInstaller(win, downloadUrl, destPath);
+    try {
+      win.setProgressBar(-1);
+    } catch {}
+
+    const result = await dialog.showMessageBox(win, {
+      type: 'info',
+      title: '更新の準備ができました',
+      message: 'インストーラのダウンロードが完了しました。',
+      detail:
+        '「今すぐインストール」を押すとインストーラを起動し、アプリを終了します。インストール完了後にアプリを再度起動してください。',
+      buttons: ['今すぐインストール', 'あとで'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (result.response !== 0) return;
+
+    const openError = await shell.openPath(destPath);
+    if (openError) {
+      await dialog.showMessageBox(win, {
+        type: 'warning',
+        title: 'インストーラ起動失敗',
+        message: 'インストーラを起動できませんでした。',
+        detail: `保存先: ${destPath}\n${openError}`,
+      });
+      void shell.showItemInFolder(destPath);
+      return;
+    }
+
+    setTimeout(() => app.quit(), 800);
+  } catch (err) {
+    try {
+      win.setProgressBar(-1);
+    } catch {}
+    const message = err && err.message ? err.message : String(err);
+    const result = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: '更新の取得に失敗しました',
+      message: 'アプリ内での更新ダウンロードに失敗しました。',
+      detail: `ブラウザでダウンロードページを開きますか？\n${message}`,
+      buttons: ['ブラウザで開く', '閉じる'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (result.response === 0) void shell.openExternal(downloadUrl);
+  }
+}
+
 async function checkForUpdates(win, { silentIfCurrent = false } = {}) {
   const releaseJson = await fetchJson(DEFAULT_RELEASE_URL);
   const release =
@@ -133,7 +256,7 @@ async function checkForUpdates(win, { silentIfCurrent = false } = {}) {
     .join('\n');
 
   const hasDownload = downloadUrl.length > 0;
-  const buttons = hasDownload ? ['ダウンロード', '閉じる'] : ['閉じる'];
+  const buttons = hasDownload ? ['今すぐ更新', 'ブラウザで開く', '閉じる'] : ['閉じる'];
   const result = await dialog.showMessageBox(win, {
     type: 'info',
     title: '更新があります',
@@ -144,7 +267,10 @@ async function checkForUpdates(win, { silentIfCurrent = false } = {}) {
     cancelId: buttons.length - 1,
   });
 
-  if (hasDownload && result.response === 0) {
+  if (!hasDownload) return;
+  if (result.response === 0) {
+    await downloadAndInstall(win, downloadUrl, release.version);
+  } else if (result.response === 1) {
     void shell.openExternal(downloadUrl);
   }
 }
