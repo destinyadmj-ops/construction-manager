@@ -18,6 +18,11 @@ import {
   type UiThemeColor,
   writeLocalUiTheme,
 } from './ui-theme';
+import {
+  buildLegacyWeekGridPrefsSettingsKey,
+  buildWeekGridPrefsLocalStorageKey,
+  buildWeekGridPrefsSettingsKey,
+} from '@/shared/week-grid-prefs';
 
 type JsonObject = Record<string, unknown>;
 
@@ -27,6 +32,17 @@ function asObject(v: unknown): JsonObject | null {
 
 function toMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function detectWeekGridPrefsTarget() {
+  if (typeof navigator !== 'undefined') {
+    const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+    if (userAgentData?.mobile === true) return 'mobile' as const;
+    const userAgent = navigator.userAgent || '';
+    if (/iPhone|iPod|Windows Phone/i.test(userAgent)) return 'mobile' as const;
+    if (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) return 'mobile' as const;
+  }
+  return 'desktop' as const;
 }
 
 type WeekGridPrefs = {
@@ -221,6 +237,8 @@ export default function AppHeader() {
     return 'week';
   }, [mode, pathname]);
 
+  const weekGridPrefsTarget = useMemo(() => detectWeekGridPrefsTarget(), []);
+
   const weekScheduleKindKey = useMemo(() => {
     if (pathname !== '/') return null;
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
@@ -229,8 +247,27 @@ export default function AppHeader() {
 
   const weekGridPrefsKey = useMemo(() => {
     if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
-    return `week-hub:${weekScheduleKindKey}:${weekModeKey}:gridPrefs`;
+    return buildWeekGridPrefsSettingsKey(weekScheduleKindKey, weekModeKey, weekGridPrefsTarget);
+  }, [pathname, weekGridPrefsTarget, weekModeKey, weekScheduleKindKey]);
+
+  const legacyWeekGridPrefsKey = useMemo(() => {
+    if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
+    return buildLegacyWeekGridPrefsSettingsKey(weekScheduleKindKey, weekModeKey);
   }, [pathname, weekModeKey, weekScheduleKindKey]);
+
+  const weekGridPrefsStorageKeys = useMemo(() => {
+    if (!weekGridPrefsKey) return [];
+    const keys = new Set<string>();
+    keys.add(buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId));
+    if (legacyWeekGridPrefsKey) {
+      keys.add(buildWeekGridPrefsLocalStorageKey(legacyWeekGridPrefsKey, headerUserId));
+    }
+    keys.add(`masterHub.ui:${weekGridPrefsKey}`);
+    if (legacyWeekGridPrefsKey) {
+      keys.add(`masterHub.ui:${legacyWeekGridPrefsKey}`);
+    }
+    return Array.from(keys);
+  }, [headerUserId, legacyWeekGridPrefsKey, weekGridPrefsKey]);
 
   const [weekGridPrefs, setWeekGridPrefs] = useState<WeekGridPrefs>(() => defaultWeekGridPrefs());
   const [weekColorPickMode, setWeekColorPickMode] = useState(false);
@@ -388,21 +425,24 @@ export default function AppHeader() {
 
   const readWeekGridPrefs = useCallback((key: string): WeekGridPrefs => {
     try {
-      const localKey = `masterHub.ui:${key}`;
-      const txt = window.localStorage.getItem(localKey);
-      if (!txt) return defaultWeekGridPrefs();
-      const parsed = JSON.parse(txt) as unknown;
-      return normalizeWeekGridPrefs(parsed);
+      const localKeys = weekGridPrefsStorageKeys.length > 0 ? weekGridPrefsStorageKeys : [`masterHub.ui:${key}`];
+      for (const localKey of localKeys) {
+        const txt = window.localStorage.getItem(localKey);
+        if (!txt) continue;
+        const parsed = JSON.parse(txt) as unknown;
+        return normalizeWeekGridPrefs(parsed);
+      }
+      return defaultWeekGridPrefs();
     } catch {
       return defaultWeekGridPrefs();
     }
-  }, []);
+  }, [weekGridPrefsStorageKeys]);
 
   const writeWeekGridPrefsPatch = useCallback(
     (patch: Partial<WeekGridPrefs>) => {
       if (!weekGridPrefsKey) return;
       try {
-        const localKey = `masterHub.ui:${weekGridPrefsKey}`;
+        const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId);
         const current = readWeekGridPrefs(weekGridPrefsKey);
         const next = normalizeWeekGridPrefs({ ...current, ...patch });
         const payload = { v: 2, ...next };
@@ -410,7 +450,11 @@ export default function AppHeader() {
         const prevTxt = window.localStorage.getItem(localKey);
         if (prevTxt !== nextTxt) {
           window.localStorage.setItem(localKey, nextTxt);
-          window.dispatchEvent(new CustomEvent('masterHub:gridPrefsUpdated', { detail: { key: weekGridPrefsKey } }));
+          window.dispatchEvent(
+            new CustomEvent('masterHub:gridPrefsUpdated', {
+              detail: { key: weekGridPrefsKey, storageKey: localKey, value: payload },
+            }),
+          );
         }
 
         setWeekGridPrefs(next);
@@ -456,24 +500,26 @@ export default function AppHeader() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(
-          `/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(weekGridPrefsKey)}`,
-        );
-        const j = (await r.json().catch(() => null)) as unknown;
-        const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!r.ok || obj?.ok !== true) throw new Error('not ok');
+        const remoteKeys = legacyWeekGridPrefsKey ? [weekGridPrefsKey, legacyWeekGridPrefsKey] : [weekGridPrefsKey];
+        for (const remoteKey of remoteKeys.filter((value): value is string => !!value)) {
+          const r = await fetch(`/api/ui-settings?userId=${encodeURIComponent(headerUserId)}&key=${encodeURIComponent(remoteKey)}`);
+          const j = (await r.json().catch(() => null)) as unknown;
+          const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+          if (!r.ok || obj?.ok !== true) continue;
 
-        const raw = (obj as { value?: unknown }).value;
-        const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-        const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
-        if (cancelled) return;
-        setWeekGridPrefs(next);
+          const raw = (obj as { value?: unknown }).value;
+          const vObj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+          const next = normalizeWeekGridPrefs(vObj && typeof vObj.v === 'number' ? vObj : raw);
+          if (cancelled) return;
+          setWeekGridPrefs(next);
 
-        try {
-          const localKey = `masterHub.ui:${weekGridPrefsKey}`;
-          window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
-        } catch {
-          // ignore
+          try {
+            const localKey = buildWeekGridPrefsLocalStorageKey(weekGridPrefsKey, headerUserId);
+            window.localStorage.setItem(localKey, JSON.stringify({ v: 2, ...next }));
+          } catch {
+            // ignore
+          }
+          return;
         }
       } catch {
         if (cancelled) return;
@@ -484,7 +530,7 @@ export default function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [headerUserId, isSettingsOpen, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
+  }, [headerUserId, isSettingsOpen, legacyWeekGridPrefsKey, pathname, readWeekColorPickMode, readWeekGridPrefs, weekGridPrefsKey]);
   const routeKey = useMemo(() => {
     const qs = searchParams.toString();
     return qs ? `${pathname}?${qs}` : pathname;
