@@ -93,16 +93,16 @@ PROD_DESKTOP_APP_CHANNEL="stable"
 手動 deploy や GitHub Actions を使わない構成では、従来どおり Vultr 側の環境変数に `DESKTOP_APP_*` を設定:
 
 ```env
-DESKTOP_APP_VERSION="0.1.1"
-DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master%20Hub-Setup-0.1.1.exe"
+DESKTOP_APP_VERSION="0.1.3"
+DESKTOP_APP_DOWNLOAD_URL="https://your-server.com/downloads/Master-Hub-Setup-0.1.3.exe"
 DESKTOP_APP_RELEASE_NOTES="スマホ表示・予定編集・履歴保持・更新案内を改善"
 ```
 
 ### 別PCでの確認ポイント
 
 1. 新規PCでインストーラから起動し、本番URLへログインできることを確認
-2. 旧版 0.1.0 を入れた端末で `DESKTOP_APP_VERSION=0.1.1` に向け、「更新を確認」で新バージョン案内が出ることを確認
-3. 0.1.1 適用後に再度「更新を確認」し、「最新です」表示になることを確認
+2. 旧版（0.1.2 以下）を入れた端末で `DESKTOP_APP_VERSION=0.1.3` に向け、「更新を確認」で新バージョン案内が出ることを確認
+3. 0.1.3 適用後に再度「更新を確認」し、「最新です」表示になることを確認
 
 ### コード署名
 

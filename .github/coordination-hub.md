@@ -39,16 +39,16 @@
 > 範囲が重なる時は「引き継ぎ／連絡」で調整してから着手する。
 
 ## 基準バージョン（A/B/C共通の出発点）
-- アプリ名/版: master-hub Web v0.1.0 / Desktop 実体 v0.1.3（ユーザー環境）
+- アプリ名/版: master-hub Web v0.1.3 / Desktop 実体 v0.1.3（ユーザー環境）
 - Production live: build 2026-06-02T10:50:04.139Z / gitSha=null / nodeEnv=production
 - Desktop 実体前提: v0.1.3 導入済み。今後の本番アプリ確認はこの wrapper を基準にする。
 - コード基準: origin/main HEAD 2846991。production build 10:50:04.139Z は deploy success 26814859462 経由で HEAD 系列へ反映済み。
-- 版番号は全箇所 0.1.0 固定のため、差分判別は buildTime/gitSha で行う。
+- 版番号表記は 0.1.3 に統一。差分判別は引き続き buildTime/gitSha で行う。
 
 ## ⚠️ 重複・影響リスク（A/B/C 着手前に必読）
 - R1: production と HEAD は現状一致(build 10:50:04.139Z)。今後 deploy する際は HEAD 全体が本番化するため、未検証 WIP が無いか必ずハブで確認・合意する。
 - R2【現実化済み】: git-auto-sync + git-push-safe.ps1 の `git add -A` で、B の未コミット WIP が A の commit 74398c0 に巻き込まれ本番化した。恒久対策＝部分 staging（同期メモ参照）。
-- R3: gitSha=null で本番実体の追跡困難・版番号も 0.1.0 固定。→ 提案: deploy 時に gitSha を埋める／buildTime で照合する運用に統一。
+- R3: gitSha=null で本番実体の追跡困難。→ 提案: deploy 時に gitSha を埋める／buildTime で照合する運用に統一。
 
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
@@ -59,6 +59,7 @@
 | done | A | app/week-hub.tsx, app/mobile/week-hub/page.tsx | 現在タブの枠線を赤表示へ変更（PC:週/月/年、モバイル:週/個人/日常） | 2026-06-02 19:40 JST |
 | done | B | .github/coordination-hub.md, .github/copilot-instructions.md | 台帳を Git 追跡正本化し PC 間引き継ぎ（GitHub経由）を構築 | 2026-06-02 20:?? JST |
 | done | C | .github/coordination-hub.md, TEAM-VERIFY-TEMPLATE.md | Desktop 0.1.3 導入済み前提へ基準値と即時反映運用を更新 | 2026-06-02 20:05 JST |
+| done | C | package.json, package-lock.json, apps/desktop/package-lock.json, .env.production.example, APP-PACKAGING.md | 版番号表記を 0.1.3 に統一（表示/文書のみ）。更新導線・desktop-release・live build sync の挙動は不変更 | 2026-08-03 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
@@ -67,7 +68,7 @@
 
 ## バージョン基準（現状アプリ・2026-06-02）
 - Desktop（インストール済み実体）: v0.1.3（ユーザー報告ベース）。今後の編集・読込はこの実体を基準にする。
-- Web（本番）: master-hub v0.1.0 / build 2026-06-02T10:50:04.139Z。
+- Web（本番）: master-hub v0.1.3 / build 2026-06-02T10:50:04.139Z。
 - Desktop 配布最新: 0.1.3（/api/desktop-release が返す。起動時 cache 破棄 + アプリ内更新導線入り）。
 - 注意: About ダイアログの Desktop 版番号は実体の wrapper 版。Web 側修正だけでは wrapper は更新されない。
 
@@ -80,6 +81,7 @@
 - (C) 以後の日本語/ロケール作業は Desktop v0.1.3 実体 + Web build 2026-06-02T10:50:04.139Z を基準に互換維持。app/header.tsx、desktop release、deploy/workflow 変更はA/Bと調整後に着手。
 - (C) A/B/C 共通の確認テンプレを TEAM-VERIFY-TEMPLATE.md に集約。即時反映は wrapper 固有実装ではなく Web 側 app/live-build-sync.tsx で扱い、Electron 実行時のみ /api/version 監視 -> cache掃除 -> 自動再読込で追従する。
 - (C) Desktop 0.1.3 導入済み + production build 10:50:04.139Z 以降を一度読み込んだ環境では、通常の Web-only deploy に手動再起動は不要とする。
+- (C) 旧版表記と新版表記の混在による運用混乱を防ぐため、表示・ドキュメント上の版番号は 0.1.3 へ統一。差分追跡は継続して buildTime/gitSha を優先。
 - (B) 調整ハブの正本を `.github/coordination-hub.md`（Git 追跡）に移し、`/memories/repo/coordination-hub.md` は PC 固有のローカルミラー扱い。PC 間引き継ぎは GitHub 経由でこの正本を同期する。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
