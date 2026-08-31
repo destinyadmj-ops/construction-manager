@@ -60,7 +60,7 @@
 | done | B | .github/coordination-hub.md, .github/copilot-instructions.md | 台帳を Git 追跡正本化し PC 間引き継ぎ（GitHub経由）を構築 | 2026-06-02 20:?? JST |
 | done | C | .github/coordination-hub.md, TEAM-VERIFY-TEMPLATE.md | Desktop 0.1.3 導入済み前提へ基準値と即時反映運用を更新 | 2026-06-02 20:05 JST |
 | done | C | package.json, package-lock.json, apps/desktop/package-lock.json, .env.production.example, APP-PACKAGING.md | 版番号表記を 0.1.3 に統一（表示/文書のみ）。更新導線・desktop-release・live build sync の挙動は不変更 | 2026-08-03 |
-| editing | C | app/site-ledger/page.tsx, app/api/sites/shared-sync/route.ts, src/server/shared-excel-sync.ts | 共有フォルダ Excel の一方向同期（作業表☆→週予定DB / 作業伝票→現場台帳・作業伝票）最小差分実装 | 2026-08-31 |
+| done | C | app/site-ledger/page.tsx, app/api/sites/shared-sync/route.ts, src/server/shared-excel-sync.ts | 共有フォルダ Excel の一方向同期（作業表☆→週予定DB / 作業伝票→現場台帳・作業伝票）最小差分実装 | 2026-08-31 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
@@ -83,6 +83,7 @@
 - (C) A/B/C 共通の確認テンプレを TEAM-VERIFY-TEMPLATE.md に集約。即時反映は wrapper 固有実装ではなく Web 側 app/live-build-sync.tsx で扱い、Electron 実行時のみ /api/version 監視 -> cache掃除 -> 自動再読込で追従する。
 - (C) Desktop 0.1.3 導入済み + production build 10:50:04.139Z 以降を一度読み込んだ環境では、通常の Web-only deploy に手動再起動は不要とする。
 - (C) 旧版表記と新版表記の混在による運用混乱を防ぐため、表示・ドキュメント上の版番号は 0.1.3 へ統一。差分追跡は継続して buildTime/gitSha を優先。
+- (C) 共有フォルダ同期は app/api/sites/shared-sync 経由の手動実行に限定し、Excel 原本への書戻しは行わない。作業伝票ファイル名は「作業伝票」パターン検出 + 対象期優先 + 更新日時最新で選定する。
 - (B) 調整ハブの正本を `.github/coordination-hub.md`（Git 追跡）に移し、`/memories/repo/coordination-hub.md` は PC 固有のローカルミラー扱い。PC 間引き継ぎは GitHub 経由でこの正本を同期する。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
