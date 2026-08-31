@@ -133,6 +133,29 @@ type AuthMeUser = {
   canGrantScheduleEdit: boolean;
 };
 
+type SharedSyncPreview = {
+  sharedDir: string;
+  selected: {
+    workTable: { fileName: string; mtimeIso: string } | null;
+    workSlip: { fileName: string; mtimeIso: string; term: number | null; period: string | null } | null;
+  };
+  warnings: string[];
+};
+
+type SharedSyncResult = SharedSyncPreview & {
+  counts: {
+    sitesCreated: number;
+    sitesUpdated: number;
+    sitesMatched: number;
+    sitesSkipped: number;
+    scheduleCreated: number;
+    scheduleSkipped: number;
+    workSlipsCreated: number;
+    workSlipsSkipped: number;
+    unknownUsers: number;
+  };
+};
+
 type ScheduleKind = 'normal' | 'daily';
 
 function generateDateSearchTokens(dateYmd: string | null | undefined): string[] {
@@ -209,6 +232,9 @@ export default function SiteLedgerPage() {
 
   const [isImporting, setIsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [sharedSyncPreview, setSharedSyncPreview] = useState<SharedSyncPreview | null>(null);
+  const [sharedSyncMsg, setSharedSyncMsg] = useState<string | null>(null);
+  const [isSharedSyncing, setIsSharedSyncing] = useState(false);
 
   // 削除機能関連のstate
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
@@ -477,6 +503,143 @@ export default function SiteLedgerPage() {
     }
   }, [scheduleKind]);
 
+  const loadSharedSyncPreview = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/sites/shared-sync?kind=${encodeURIComponent(scheduleKind)}`, { cache: 'no-store' });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true) {
+        throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+      }
+
+      const selectedRaw = obj?.selected && typeof obj.selected === 'object' ? (obj.selected as Record<string, unknown>) : null;
+      const workTableRaw = selectedRaw?.workTable && typeof selectedRaw.workTable === 'object'
+        ? (selectedRaw.workTable as Record<string, unknown>)
+        : null;
+      const workSlipRaw = selectedRaw?.workSlip && typeof selectedRaw.workSlip === 'object'
+        ? (selectedRaw.workSlip as Record<string, unknown>)
+        : null;
+      const warningsRaw = Array.isArray(obj?.warnings) ? (obj.warnings as unknown[]) : [];
+
+      setSharedSyncPreview({
+        sharedDir: typeof obj?.sharedDir === 'string' ? obj.sharedDir : '',
+        selected: {
+          workTable: workTableRaw
+            ? {
+                fileName: typeof workTableRaw.fileName === 'string' ? workTableRaw.fileName : '',
+                mtimeIso: typeof workTableRaw.mtimeIso === 'string' ? workTableRaw.mtimeIso : '',
+              }
+            : null,
+          workSlip: workSlipRaw
+            ? {
+                fileName: typeof workSlipRaw.fileName === 'string' ? workSlipRaw.fileName : '',
+                mtimeIso: typeof workSlipRaw.mtimeIso === 'string' ? workSlipRaw.mtimeIso : '',
+                term: typeof workSlipRaw.term === 'number' ? workSlipRaw.term : null,
+                period: typeof workSlipRaw.period === 'string' ? workSlipRaw.period : null,
+              }
+            : null,
+        },
+        warnings: warningsRaw.filter((x): x is string => typeof x === 'string'),
+      });
+    } catch (e) {
+      setSharedSyncPreview(null);
+      setSharedSyncMsg(e instanceof Error ? `共有同期の候補確認に失敗: ${e.message}` : '共有同期の候補確認に失敗しました');
+    }
+  }, [scheduleKind]);
+
+  const runSharedSync = useCallback(async () => {
+    if (!canEditSite) return;
+    setSharedSyncMsg(null);
+    setIsSharedSyncing(true);
+    try {
+      const r = await fetch('/api/sites/shared-sync', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: apiKind }),
+      });
+      const j = (await r.json().catch(() => null)) as unknown;
+      const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
+      if (!r.ok || obj?.ok !== true) {
+        throw new Error((obj?.error as string) || `HTTP ${r.status}`);
+      }
+
+      const countsRaw = obj?.counts && typeof obj.counts === 'object' ? (obj.counts as Record<string, unknown>) : null;
+      const result: SharedSyncResult = {
+        sharedDir: typeof obj?.sharedDir === 'string' ? obj.sharedDir : '',
+        selected: {
+          workTable:
+            obj?.selected &&
+            typeof obj.selected === 'object' &&
+            (obj.selected as Record<string, unknown>).workTable &&
+            typeof (obj.selected as Record<string, unknown>).workTable === 'object'
+              ? {
+                  fileName:
+                    typeof ((obj.selected as Record<string, unknown>).workTable as Record<string, unknown>).fileName === 'string'
+                      ? (((obj.selected as Record<string, unknown>).workTable as Record<string, unknown>).fileName as string)
+                      : '',
+                  mtimeIso:
+                    typeof ((obj.selected as Record<string, unknown>).workTable as Record<string, unknown>).mtimeIso === 'string'
+                      ? (((obj.selected as Record<string, unknown>).workTable as Record<string, unknown>).mtimeIso as string)
+                      : '',
+                }
+              : null,
+          workSlip:
+            obj?.selected &&
+            typeof obj.selected === 'object' &&
+            (obj.selected as Record<string, unknown>).workSlip &&
+            typeof (obj.selected as Record<string, unknown>).workSlip === 'object'
+              ? {
+                  fileName:
+                    typeof ((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).fileName === 'string'
+                      ? (((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).fileName as string)
+                      : '',
+                  mtimeIso:
+                    typeof ((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).mtimeIso === 'string'
+                      ? (((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).mtimeIso as string)
+                      : '',
+                  term:
+                    typeof ((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).term === 'number'
+                      ? (((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).term as number)
+                      : null,
+                  period:
+                    typeof ((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).period === 'string'
+                      ? (((obj.selected as Record<string, unknown>).workSlip as Record<string, unknown>).period as string)
+                      : null,
+                }
+              : null,
+        },
+        warnings: Array.isArray(obj?.warnings)
+          ? (obj.warnings as unknown[]).filter((x): x is string => typeof x === 'string')
+          : [],
+        counts: {
+          sitesCreated: typeof countsRaw?.sitesCreated === 'number' ? countsRaw.sitesCreated : 0,
+          sitesUpdated: typeof countsRaw?.sitesUpdated === 'number' ? countsRaw.sitesUpdated : 0,
+          sitesMatched: typeof countsRaw?.sitesMatched === 'number' ? countsRaw.sitesMatched : 0,
+          sitesSkipped: typeof countsRaw?.sitesSkipped === 'number' ? countsRaw.sitesSkipped : 0,
+          scheduleCreated: typeof countsRaw?.scheduleCreated === 'number' ? countsRaw.scheduleCreated : 0,
+          scheduleSkipped: typeof countsRaw?.scheduleSkipped === 'number' ? countsRaw.scheduleSkipped : 0,
+          workSlipsCreated: typeof countsRaw?.workSlipsCreated === 'number' ? countsRaw.workSlipsCreated : 0,
+          workSlipsSkipped: typeof countsRaw?.workSlipsSkipped === 'number' ? countsRaw.workSlipsSkipped : 0,
+          unknownUsers: typeof countsRaw?.unknownUsers === 'number' ? countsRaw.unknownUsers : 0,
+        },
+      };
+
+      setSharedSyncMsg(
+        `共有同期: 現場 新規${result.counts.sitesCreated} / 補完${result.counts.sitesUpdated} / 既存${result.counts.sitesMatched} / スキップ${result.counts.sitesSkipped} | 週予定 追加${result.counts.scheduleCreated} / 重複${result.counts.scheduleSkipped} | 作業伝票 追加${result.counts.workSlipsCreated} / 既存${result.counts.workSlipsSkipped}`,
+      );
+
+      if (result.warnings.length > 0) {
+        setSharedSyncMsg((prev) => `${prev ?? ''}${prev ? ' / ' : ''}${result.warnings.join(' / ')}`);
+      }
+
+      await Promise.all([loadSites(), loadDeprCounts(), loadPhotoSites(), loadSharedSyncPreview()]);
+    } catch (e) {
+      setSharedSyncMsg(e instanceof Error ? `共有同期に失敗: ${e.message}` : '共有同期に失敗しました');
+    } finally {
+      setIsSharedSyncing(false);
+    }
+  }, [apiKind, canEditSite, loadDeprCounts, loadPhotoSites, loadSharedSyncPreview, loadSites]);
+
   const openPhotoFolder = useCallback(
     (siteId: string, dateYmd?: string | null) => {
       router.push(buildSitePhotoHref(siteId, dateYmd));
@@ -490,6 +653,9 @@ export default function SiteLedgerPage() {
   useEffect(() => {
     void loadPhotoSites();
   }, [loadPhotoSites]);
+  useEffect(() => {
+    void loadSharedSyncPreview();
+  }, [loadSharedSyncPreview]);
   useEffect(() => {
     if (!selectedPhotoSiteId) {
       setSelectedSiteDates([]);
@@ -799,13 +965,30 @@ export default function SiteLedgerPage() {
             <div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">作業伝票</div>
               <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                Excel を現場単位で追加し、現場詳細、報告書、写真、会計へすぐ移動できます。
+                共有フォルダの 作業表☆ / 作業伝票 を読み取り専用で取り込み、週予定DB・現場台帳・作業伝票へ一方向同期します。
               </div>
+              <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+                作業表: {sharedSyncPreview?.selected.workTable?.fileName ?? '未検出'} / 作業伝票: {sharedSyncPreview?.selected.workSlip?.fileName ?? '未検出'}
+              </div>
+              {sharedSyncPreview?.selected.workSlip?.period ? (
+                <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                  対象期間: {sharedSyncPreview.selected.workSlip.period}
+                </div>
+              ) : null}
+              {sharedSyncPreview?.warnings?.length ? (
+                <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{sharedSyncPreview.warnings.join(' / ')}</div>
+              ) : null}
+              {sharedSyncMsg ? <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{sharedSyncMsg}</div> : null}
             </div>
             <button
               type="button"
+              disabled={!canEditSite || isSharedSyncing}
+              onClick={() => void runSharedSync()}
               className="rounded-2xl border border-sky-500 bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(14,165,233,0.24)] transition hover:bg-sky-600 dark:border-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
-            />
+              title="共有フォルダ同期（Excel は読み取り専用。MASTERHUB にのみ反映）"
+            >
+              {isSharedSyncing ? '同期中…' : '作業伝票ボタン同期'}
+            </button>
           </div>
         </div>
 
