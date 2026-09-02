@@ -348,6 +348,67 @@ function splitAssignees(...inputs: Array<string | null | undefined>): string[] {
   return result;
 }
 
+function looksLikeAssigneeName(value: unknown): boolean {
+  const text = normalizeRegistryText(toCellText(value));
+  if (!text) return false;
+  if (text.length > 24) return false;
+  if (/\d/.test(text)) return false;
+  if (/[()（）]/.test(text)) return false;
+  return /[\u3040-\u30ff\u3400-\u9fff]/.test(text);
+}
+
+function extractWorkTableRowsFromMatrix(grid: unknown[][], fallbackYear: number): WorkTableRow[] {
+  // Week-matrix format: first column is assignee, date headers are on one row.
+  const rows: WorkTableRow[] = [];
+
+  let headerRowIndex = -1;
+  let dateCols: number[] = [];
+  for (let rowIndex = 0; rowIndex < Math.min(30, grid.length); rowIndex += 1) {
+    const row = grid[rowIndex] ?? [];
+    const cols: number[] = [];
+    for (let col = 0; col < row.length; col += 1) {
+      if (parseDateToYmd(row[col], fallbackYear)) cols.push(col);
+    }
+    if (cols.length >= 4) {
+      headerRowIndex = rowIndex;
+      dateCols = cols;
+      break;
+    }
+  }
+  if (headerRowIndex < 0 || dateCols.length === 0) return rows;
+
+  let emptyRun = 0;
+  for (let rowIndex = headerRowIndex + 2; rowIndex < grid.length; rowIndex += 1) {
+    const row = grid[rowIndex] ?? [];
+    const assignee = normalizeRegistryText(toCellText(row[0]));
+    const hasAnyCell = dateCols.some((col) => normalizeRegistryText(toCellText(row[col])));
+
+    if (!assignee && !hasAnyCell) {
+      emptyRun += 1;
+      if (emptyRun >= 12) break;
+      continue;
+    }
+    emptyRun = 0;
+
+    if (!looksLikeAssigneeName(assignee)) continue;
+
+    for (const col of dateCols) {
+      const dayYmd = parseDateToYmd((grid[headerRowIndex] ?? [])[col], fallbackYear);
+      const siteName = normalizeRegistryText(toCellText(row[col]));
+      if (!dayYmd || !siteName) continue;
+
+      rows.push({
+        dayYmd,
+        companyName: null,
+        siteName,
+        assignees: [assignee],
+      });
+    }
+  }
+
+  return rows;
+}
+
 function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
   const rows: WorkTableRow[] = [];
   const fallbackYear = new Date().getFullYear();
@@ -356,6 +417,7 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
     const grid = gridFromSheet(sheet);
+    const sheetRows: WorkTableRow[] = [];
 
     const found = findHeaderRowAndColumns(grid, {
       date: DATE_HEADERS,
@@ -365,34 +427,39 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
       company: COMPANY_HEADERS,
       driver: DRIVER_HEADERS,
     });
-    if (!found) continue;
+    if (found) {
+      let emptyRun = 0;
+      for (let rowIndex = found.headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
+        const row = grid[rowIndex] ?? [];
+        const siteName = normalizeRegistryText(toCellText(row[found.indexMap.site]));
+        const dateYmd = parseDateToYmd(row[found.indexMap.date], fallbackYear);
+        const companyName = normalizeRegistryText(toCellText(row[found.indexMap.company]));
+        const lead = normalizeRegistryText(toCellText(row[found.indexMap.lead]));
+        const members = normalizeRegistryText(toCellText(row[found.indexMap.members]));
+        const driver = normalizeRegistryText(toCellText(row[found.indexMap.driver]));
+        const assignees = splitAssignees(lead, members, driver);
 
-    let emptyRun = 0;
-    for (let rowIndex = found.headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
-      const row = grid[rowIndex] ?? [];
-      const siteName = normalizeRegistryText(toCellText(row[found.indexMap.site]));
-      const dateYmd = parseDateToYmd(row[found.indexMap.date], fallbackYear);
-      const companyName = normalizeRegistryText(toCellText(row[found.indexMap.company]));
-      const lead = normalizeRegistryText(toCellText(row[found.indexMap.lead]));
-      const members = normalizeRegistryText(toCellText(row[found.indexMap.members]));
-      const driver = normalizeRegistryText(toCellText(row[found.indexMap.driver]));
-      const assignees = splitAssignees(lead, members, driver);
+        if (!siteName && !dateYmd && assignees.length === 0) {
+          emptyRun += 1;
+          if (emptyRun >= 12) break;
+          continue;
+        }
+        emptyRun = 0;
 
-      if (!siteName && !dateYmd && assignees.length === 0) {
-        emptyRun += 1;
-        if (emptyRun >= 12) break;
-        continue;
+        if (!siteName || !dateYmd || assignees.length === 0) continue;
+        sheetRows.push({
+          dayYmd: dateYmd,
+          companyName: companyName || null,
+          siteName,
+          assignees,
+        });
       }
-      emptyRun = 0;
-
-      if (!siteName || !dateYmd || assignees.length === 0) continue;
-      rows.push({
-        dayYmd: dateYmd,
-        companyName: companyName || null,
-        siteName,
-        assignees,
-      });
     }
+
+    if (sheetRows.length === 0) {
+      sheetRows.push(...extractWorkTableRowsFromMatrix(grid, fallbackYear));
+    }
+    rows.push(...sheetRows);
   }
 
   const seen = new Set<string>();
