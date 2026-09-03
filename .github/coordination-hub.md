@@ -64,6 +64,7 @@
 | done | B | app/week-hub.tsx | 編集OFF時の「編集から開始」警告のみを週タブ右側へ専用表示（赤文字）。他通知の既存表示は維持 | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts, app/api/users/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts | sharedExcelSync の重複混在と note化混在の根本修正（site正規化 + idempotent再構成 + 既存同期データ限定cleanup） | 2026-09-03 |
+| done | B | src/server/shared-excel-sync.ts, app/week-hub.tsx | 枠外赤+復旧（overflow基準）と作業表同期の赤黒色反映（保存〜表示経路）修正。lint/typecheck通過、同期再実行で件数安定を確認 | 2026-09-04 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
@@ -91,6 +92,7 @@
 - (B) 作業表☆同期時に担当者名を `User` へ自動同期（新規作成/既存有効化/名前更新）し、`week-hub:normal|daily:userOrder` を global UI setting へ保存。週/月/年API と users API はこの順序を優先して返す。
 - (B) 週予定の編集OFF警告は汎用通知を移設せず、対象文言だけを week タブ右側に専用表示（赤文字）する方針を採用。既存の他通知（通信失敗/UndoRedo/削除結果など）は従来位置を維持。
 - (B) sharedExcelSync 予定は siteId 必須 + scheduleEntryKind=site へ正規化。同期時に sharedExcelSync 由来のみ user/date範囲で再構成して idempotent 化し、UTC日付ズレ由来の重複を解消。追記表示は scheduleGroupNote 専用へ復帰。
+- (B) 週/月セルの赤 `+` は「複数現場」条件ではなく実 overflow 判定（scroll/client 比較）で表示し、枠外右側に固定表示する方針へ更新。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
@@ -104,6 +106,7 @@
   - 原因3: 当初 manifest を apps/desktop/release.json に置いたが Dockerfile は public のみ COPY するため本番 image に載らず反映されなかった。
   - 対策: main.cjs に cache 破棄、desktop-release.ts を public/desktop-release.json import 優先へ、downloadUrl=GitHub raw、0.1.2 へ更新。
 - (A→B) 【交錯事故】git-push-safe.ps1 が `git add -A` で全 dirty を staging するため、B の未コミット app/header.tsx・app/week-hub.tsx が A の commit 74398c0 に混入し本番 push された。lint/typecheck は通過済みだが B の意図した push タイミングではない。差分は savedAt 比較の小修正のみで害は低い見込み。B 確認済み＝revert 不要。
+- (B) shared sync 色反映対応後の確認で 1回目実行後に件数が増えたが、続けて再実行で sharedExcelSync 件数 1609→1609 に安定（増殖なし）。`labelColor` は red/default が保存され、note化/null site 再発なしを確認。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。

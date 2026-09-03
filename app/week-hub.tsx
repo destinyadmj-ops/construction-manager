@@ -366,6 +366,43 @@ function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): strin
   return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
 }
 
+function OverflowPlusLabel({ children, measureKey }: { children: ReactNode; measureKey: string }) {
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  const [overflowed, setOverflowed] = useState(false);
+
+  useEffect(() => {
+    const textEl = textRef.current;
+    if (!textEl) return;
+
+    const update = () => {
+      const next = textEl.scrollWidth > textEl.clientWidth + 1 || textEl.scrollHeight > textEl.clientHeight + 1;
+      setOverflowed((prev) => (prev === next ? prev : next));
+    };
+
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(textEl);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [measureKey]);
+
+  return (
+    <span className="relative block w-full">
+      <span ref={textRef} className="block overflow-hidden whitespace-nowrap">
+        {children}
+      </span>
+      {overflowed ? (
+        <span className="pointer-events-none absolute left-full top-1/2 ml-0.5 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
+          +
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function ColumnResizeHandle({
   onPointerDown,
 }: {
@@ -7488,7 +7525,7 @@ function Row({
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               onContextMenu={handleContextMenu}
-              title={hasHoverMenu ? undefined : input.tooltipValue}
+              title={input.tooltipValue}
             >
               {input.displayValue}
             </div>
@@ -7543,7 +7580,7 @@ function Row({
             onDoubleClick={handleInlineEdit}
             className={`${input.className} w-full cursor-pointer text-left hover:underline`}
             style={{ fontSize: input.fontSize }}
-            title={hasHoverMenu ? undefined : input.tooltipValue}
+            title={input.tooltipValue}
             aria-label={`${siteName} の詳細を開く`}
           >
             {input.displayValue}
@@ -7597,7 +7634,6 @@ function Row({
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
-        const hasMultipleSitesInGroup = siteItems.length > 1;
         const hoverMenuItems: CellHoverMenuItem[] =
           siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
             ? [
@@ -7625,46 +7661,36 @@ function Row({
               ]
             : [];
         const displayValue = (
-          <>
-            <span
-              className="block overflow-hidden whitespace-nowrap"
-              style={hasMultipleSitesInGroup ? { maxWidth: 'calc(100% - 1rem)' } : undefined}
-            >
-              {renderedItems.map((item, itemIndex) => {
-                const isSiteItem = isSiteCellEntry(item.entry);
-                return (
-                  <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
-                    {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
-                    {isSiteItem ? (
-                      <span className={labelTextClass(item.entry.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
-                        {item.displayName}
-                      </span>
-                    ) : (
-                      <>
-                        <span className="text-red-600 dark:text-red-400">追記:</span>
-                        {' '}
-                        <span className="text-zinc-700 dark:text-zinc-200">{item.fullDisplayName}</span>
-                      </>
-                    )}
-                  </Fragment>
-                );
-              })}
-              {groupNote ? (
-                <>
-                  {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
-                  <span className="text-red-600 dark:text-red-400">追記:</span>
-                  {' '}
-                  <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
-                  {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
-                </>
-              ) : null}
-            </span>
-            {hasMultipleSitesInGroup ? (
-              <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
-                +
-              </span>
+          <OverflowPlusLabel measureKey={`${day}:${groupIndex}:${displayText}`}>
+            {renderedItems.map((item, itemIndex) => {
+              const isSiteItem = isSiteCellEntry(item.entry);
+              return (
+                <Fragment key={`display:${day}:${groupIndex}:${itemIndex}`}>
+                  {itemIndex > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
+                  {isSiteItem ? (
+                    <span className={labelTextClass(item.entry.color ?? 'default', itemIndex === 0 ? 'primary' : 'secondary')}>
+                      {item.displayName}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-red-600 dark:text-red-400">追記:</span>
+                      {' '}
+                      <span className="text-zinc-700 dark:text-zinc-200">{item.fullDisplayName}</span>
+                    </>
+                  )}
+                </Fragment>
+              );
+            })}
+            {groupNote ? (
+              <>
+                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
+                <span className="text-red-600 dark:text-red-400">追記:</span>
+                {' '}
+                <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
+                {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
+              </>
             ) : null}
-          </>
+          </OverflowPlusLabel>
         );
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
@@ -7677,9 +7703,7 @@ function Row({
               tooltipValue,
               siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
               entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
-              className: `block overflow-hidden whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                hasMultipleSitesInGroup ? 'relative' : ''
-              } ${
+              className: `block whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
                 isNoteGroup
                   ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
                   : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
