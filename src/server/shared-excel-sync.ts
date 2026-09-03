@@ -542,6 +542,19 @@ function addMinutes(d: Date, minutes: number): Date {
   return x;
 }
 
+function toYmdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function hasSharedExcelSyncMeta(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const obj = value as Record<string, unknown>;
+  return !!obj.sharedExcelSync && typeof obj.sharedExcelSync === 'object' && !Array.isArray(obj.sharedExcelSync);
+}
+
 function todayYmdTokyo(): string {
   try {
     return new Intl.DateTimeFormat('sv-SE', {
@@ -620,6 +633,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   }
 
   const kind = input.kind;
+  const workTableFileName = files.workTable.fileName;
 
   const workTableBook = readWorkbook(files.workTable.filePath);
   const workSlipBook = readWorkbook(files.workSlip.filePath);
@@ -769,15 +783,33 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const globalUserOrderIds = Array.from(new Set([...scheduledUserOrderIds, ...activeUserIds]));
   await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
 
-  const preparedRows: Array<{ userId: string; dayYmd: string; summary: string; siteId: string | null; sourceKey: string }> = [];
+  const preparedRows: Array<{ userId: string; dayYmd: string; summary: string; siteId: string; sourceKey: string }> = [];
 
   for (const row of scheduleRows) {
-    const siteHit = await findMatchingSite({
-      companyName: row.companyName,
-      name: row.siteName,
-      kind,
-    });
-    const siteId = siteHit.site?.id ?? null;
+    if (row.companyName) {
+      await ensurePartnerByName(row.companyName);
+    }
+
+    const siteHit = await findMatchingSite({ companyName: row.companyName, name: row.siteName, kind });
+    const conflictByNameOnly =
+      siteHit.site &&
+      siteHit.matchType === 'name-only' &&
+      row.companyName &&
+      siteHit.site.companyName &&
+      normalizeKey(row.companyName) !== normalizeKey(siteHit.site.companyName);
+
+    let siteId = siteHit.site && !conflictByNameOnly ? siteHit.site.id : null;
+    if (!siteId) {
+      const created = await prisma.site.create({
+        data: {
+          kind,
+          companyName: row.companyName,
+          name: row.siteName,
+        },
+        select: { id: true },
+      });
+      siteId = created.id;
+    }
 
     for (const assignee of row.assignees) {
       const user = userByName.get(normalizeKey(assignee));
@@ -792,7 +824,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
         dayYmd: row.dayYmd,
         summary,
         siteId,
-        sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(summary)}|${siteId ?? ''}`,
+        sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}`,
       });
     }
   }
@@ -809,82 +841,102 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     const maxDay = dayList[dayList.length - 1] ?? null;
     const userIds = Array.from(new Set(finalRows.map((x) => x.userId)));
 
-    let existingRows: Array<{ userId: string; startAt: Date; summary: string | null; siteId: string | null }> = [];
+    let existingRows: Array<{
+      id: string;
+      userId: string;
+      startAt: Date;
+      summary: string | null;
+      siteId: string | null;
+      accountingMeta: Prisma.JsonValue | null;
+    }> = [];
     if (minDay && maxDay && userIds.length > 0) {
       const maxDayEnd = new Date(`${maxDay}T00:00:00`);
       maxDayEnd.setDate(maxDayEnd.getDate() + 1);
 
-      existingRows = await prisma.workEntry.findMany({
-        where: {
-          kind,
-          userId: { in: userIds },
-          startAt: { gte: startOfDayLocal(minDay), lt: maxDayEnd },
-        },
-        select: {
-          userId: true,
-          startAt: true,
-          summary: true,
-          siteId: true,
-        },
-      });
-    }
-
-    const existingKeySet = new Set<string>();
-    const existingCountByCell = new Map<string, number>();
-
-    for (const row of existingRows) {
-      const ymd = row.startAt.toISOString().slice(0, 10);
-      const cellKey = `${row.userId}|${ymd}`;
-      existingCountByCell.set(cellKey, (existingCountByCell.get(cellKey) ?? 0) + 1);
-      existingKeySet.add(`${cellKey}|${normalizeKey(row.summary)}|${row.siteId ?? ''}`);
-    }
-
-    const createData: Array<{
-      userId: string;
-      kind: SiteKind;
-      startAt: Date;
-      summary: string;
-      siteId: string | null;
-      accountingMeta: Prisma.InputJsonValue;
-    }> = [];
-
-    const appendedPerCell = new Map<string, number>();
-
-    for (const row of finalRows) {
-      const cellKey = `${row.userId}|${row.dayYmd}`;
-      const dedupeKey = `${cellKey}|${normalizeKey(row.summary)}|${row.siteId ?? ''}`;
-      if (existingKeySet.has(dedupeKey)) {
-        counts.scheduleSkipped += 1;
-        continue;
-      }
-
-      const existingCount = existingCountByCell.get(cellKey) ?? 0;
-      const appendedCount = appendedPerCell.get(cellKey) ?? 0;
-      const minuteOffset = existingCount + appendedCount;
-      appendedPerCell.set(cellKey, appendedCount + 1);
-      existingKeySet.add(dedupeKey);
-
-      createData.push({
-        userId: row.userId,
-        kind,
-        startAt: addMinutes(startOfDayLocal(row.dayYmd), minuteOffset),
-        summary: row.summary,
-        siteId: row.siteId,
-        accountingMeta: {
-          scheduleEntryKind: row.siteId ? 'site' : 'note',
-          scheduleText: row.summary,
-          sharedExcelSync: {
-            source: '作業表☆',
-            fileName: files.workTable.fileName,
-            rowKey: row.sourceKey,
+      await prisma.$transaction(async (tx) => {
+        existingRows = await tx.workEntry.findMany({
+          where: {
+            kind,
+            userId: { in: userIds },
+            startAt: { gte: startOfDayLocal(minDay), lt: maxDayEnd },
           },
-        } as Prisma.InputJsonValue,
-      });
-    }
+          select: {
+            id: true,
+            userId: true,
+            startAt: true,
+            summary: true,
+            siteId: true,
+            accountingMeta: true,
+          },
+        });
 
-    if (createData.length > 0) {
-      await prisma.workEntry.createMany({ data: createData });
-      counts.scheduleCreated += createData.length;
+        const sharedIds = existingRows.filter((row) => hasSharedExcelSyncMeta(row.accountingMeta)).map((row) => row.id);
+        if (sharedIds.length > 0) {
+          await tx.workEntry.deleteMany({ where: { id: { in: sharedIds } } });
+        }
+
+        const baseRows = existingRows.filter((row) => !hasSharedExcelSyncMeta(row.accountingMeta));
+        const existingSiteKeySet = new Set<string>();
+        const existingCountByCell = new Map<string, number>();
+
+        for (const row of baseRows) {
+          const ymd = toYmdLocal(row.startAt);
+          const cellKey = `${row.userId}|${ymd}`;
+          existingCountByCell.set(cellKey, (existingCountByCell.get(cellKey) ?? 0) + 1);
+          if (row.siteId) {
+            existingSiteKeySet.add(`${cellKey}|${row.siteId}`);
+          }
+        }
+
+        const createData: Array<{
+          userId: string;
+          kind: SiteKind;
+          startAt: Date;
+          summary: string;
+          note: string | null;
+          siteId: string;
+          accountingMeta: Prisma.InputJsonValue;
+        }> = [];
+
+        const appendedPerCell = new Map<string, number>();
+
+        for (const row of finalRows) {
+          const cellKey = `${row.userId}|${row.dayYmd}`;
+          const siteDedupeKey = `${cellKey}|${row.siteId}`;
+          if (existingSiteKeySet.has(siteDedupeKey)) {
+            counts.scheduleSkipped += 1;
+            continue;
+          }
+
+          const existingCount = existingCountByCell.get(cellKey) ?? 0;
+          const appendedCount = appendedPerCell.get(cellKey) ?? 0;
+          const minuteOffset = existingCount + appendedCount;
+          appendedPerCell.set(cellKey, appendedCount + 1);
+          existingSiteKeySet.add(siteDedupeKey);
+
+          createData.push({
+            userId: row.userId,
+            kind,
+            startAt: addMinutes(startOfDayLocal(row.dayYmd), minuteOffset),
+            summary: row.summary,
+            note: null,
+            siteId: row.siteId,
+            accountingMeta: {
+              scheduleEntryKind: 'site',
+              sharedExcelSync: {
+                source: '作業表☆',
+                fileName: workTableFileName,
+                rowKey: row.sourceKey,
+              },
+            } as Prisma.InputJsonValue,
+          });
+        }
+
+        if (createData.length > 0) {
+          await tx.workEntry.createMany({ data: createData });
+          counts.scheduleCreated += createData.length;
+        }
+      });
     }
   }
 

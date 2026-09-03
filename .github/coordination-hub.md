@@ -63,6 +63,7 @@
 | done | C | app/site-ledger/page.tsx, app/api/sites/shared-sync/route.ts, src/server/shared-excel-sync.ts | 共有フォルダ Excel の一方向同期（作業表☆→週予定DB / 作業伝票→現場台帳・作業伝票）最小差分実装 | 2026-08-31 |
 | done | B | app/week-hub.tsx | 編集OFF時の「編集から開始」警告のみを週タブ右側へ専用表示（赤文字）。他通知の既存表示は維持 | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts, app/api/users/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
+| editing | B | src/server/shared-excel-sync.ts | sharedExcelSync の重複混在と note化混在の根本修正（site正規化 + idempotent再構成 + 既存同期データ限定cleanup） | 2026-09-03 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
