@@ -244,6 +244,7 @@ type ScheduleChangeHistoryItem = {
 };
 
 const HISTORY_GROUP_MS = 800;
+const EDIT_START_WARNING_MESSAGE = '編集するには、ヘッダーの「編集」から開始してください';
 
 function isLabelColor(value: unknown): value is LabelColor {
   return typeof value === 'string' && (LABEL_COLORS as readonly string[]).includes(value);
@@ -1047,6 +1048,8 @@ function WeekHubInner() {
   const [cellTextColor, setCellTextColor] = useState<CellTextColor>(DEFAULT_WEEK_GRID_PREFS.cellTextColor);
   const [cellActionMsg, setCellActionMsg] = useState<string | null>(null);
   const cellActionMsgTimer = useRef<number | null>(null);
+  const [editStartWarningMsg, setEditStartWarningMsg] = useState<string | null>(null);
+  const editStartWarningTimer = useRef<number | null>(null);
   const lastNonColorCellActionRef = useRef<CellClickAction>('toggle');
   const [isNameColResizing, setIsNameColResizing] = useState(false);
   const nameColResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -1968,7 +1971,24 @@ function WeekHubInner() {
     }
   }, [router, scheduleKind, selectedUserId, visibleSites]);
 
+  const showEditStartWarning = useCallback(() => {
+    if (editActive) return;
+    if (editStartWarningTimer.current) {
+      window.clearTimeout(editStartWarningTimer.current);
+      editStartWarningTimer.current = null;
+    }
+    setEditStartWarningMsg(EDIT_START_WARNING_MESSAGE);
+    editStartWarningTimer.current = window.setTimeout(() => {
+      setEditStartWarningMsg(null);
+      editStartWarningTimer.current = null;
+    }, 2500);
+  }, [editActive]);
+
   const showCellActionMsg = useCallback((msg: string | null) => {
+    if (msg === EDIT_START_WARNING_MESSAGE) {
+      showEditStartWarning();
+      return;
+    }
     if (cellActionMsgTimer.current) {
       window.clearTimeout(cellActionMsgTimer.current);
       cellActionMsgTimer.current = null;
@@ -1980,7 +2000,7 @@ function WeekHubInner() {
         cellActionMsgTimer.current = null;
       }, 2500);
     }
-  }, []);
+  }, [showEditStartWarning]);
 
   const ensureSelectedSite = useCallback(async (): Promise<SiteItem | null> => {
     if (selectedSite) return selectedSite;
@@ -3389,6 +3409,18 @@ function WeekHubInner() {
                 {tab.label}
               </button>
             ))}
+
+            {mode === 'week' && editStartWarningMsg ? (
+              <div
+                className="ml-1 rounded-md border border-red-200 bg-red-50/80 px-2 py-1 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+                role="status"
+                aria-live="polite"
+                data-testid="week-tab-edit-warning"
+                title={editStartWarningMsg}
+              >
+                {editStartWarningMsg}
+              </div>
+            ) : null}
 
             {isElectronShell ? (
               <div className="ml-0 flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs sm:ml-2">
