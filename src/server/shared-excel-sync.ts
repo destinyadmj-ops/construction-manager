@@ -36,7 +36,7 @@ type DiscoveredSharedFiles = {
 type WorkTableRow = {
   dayYmd: string;
   companyName: string | null;
-  siteName: string;
+  entries: Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }>;
   assignees: string[];
 };
 
@@ -113,6 +113,106 @@ function toCellText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value == null) return '';
   return String(value);
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function isRedColorToken(value: string): boolean {
+  const normalized = value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  if (!normalized) return false;
+  return normalized.endsWith('FF0000') || normalized.endsWith('C00000') || normalized.endsWith('9C0006');
+}
+
+function detectCellEntryColor(cell: unknown): 'default' | 'red' {
+  const c = cell as { s?: unknown; r?: unknown } | null;
+  const rich = typeof c?.r === 'string' ? c.r : '';
+  if (/<color\b[^>]*rgb="[^"]*"/i.test(rich)) {
+    const matches = rich.match(/<color\b[^>]*rgb="([^"]+)"/gi) ?? [];
+    if (matches.some((token) => isRedColorToken(token))) return 'red';
+  }
+
+  const style = c?.s as Record<string, unknown> | undefined;
+  const font = style?.font as Record<string, unknown> | undefined;
+  const styleColor = font?.color as Record<string, unknown> | undefined;
+  const rgb = typeof styleColor?.rgb === 'string' ? styleColor.rgb : '';
+  return isRedColorToken(rgb) ? 'red' : 'default';
+}
+
+function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: string; color: 'default' | 'red' }> {
+  if (!rawRich) return [];
+  const runRegex = /<r>([\s\S]*?)<\/r>/g;
+  const result: Array<{ text: string; color: 'default' | 'red' }> = [];
+
+  let runMatch: RegExpExecArray | null = null;
+  while ((runMatch = runRegex.exec(rawRich)) !== null) {
+    const runBlock = runMatch[1] ?? '';
+    const textMatches = Array.from(runBlock.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
+    const text = decodeXmlText(textMatches.map((x) => x[1] ?? '').join(''));
+    if (!text) continue;
+    const colorMatch = /<color\b[^>]*rgb="([^"]+)"/i.exec(runBlock);
+    const color = colorMatch && isRedColorToken(colorMatch[1] ?? '') ? 'red' : 'default';
+    result.push({ text, color });
+  }
+
+  if (result.length > 0) return result;
+
+  const plainTextMatches = Array.from(rawRich.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
+  const plain = decodeXmlText(plainTextMatches.map((x) => x[1] ?? '').join(''));
+  if (!plain) return [];
+  return [{ text: plain, color: 'default' }];
+}
+
+function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
+  const c = cell as { r?: unknown } | null;
+  const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null);
+  const partList = parts.length > 0 ? parts : [{ text: fallbackText, color: detectCellEntryColor(cell) }];
+  const delimiter = /([、,，\/／\r\n]+|[ \t]{2,}|　{2,})/;
+
+  const collected: Array<{ siteName: string; color: 'default' | 'red' }> = [];
+  let buf = '';
+  let hasRed = false;
+  const flush = () => {
+    const normalized = normalizeRegistryText(buf);
+    buf = '';
+    if (!normalized) {
+      hasRed = false;
+      return;
+    }
+    collected.push({ siteName: normalized, color: hasRed ? 'red' : 'default' });
+    hasRed = false;
+  };
+
+  for (const part of partList) {
+    const tokens = part.text.split(delimiter);
+    for (const token of tokens) {
+      if (!token) continue;
+      if (delimiter.test(token)) {
+        flush();
+        continue;
+      }
+      buf += token;
+      if (part.color === 'red') hasRed = true;
+    }
+  }
+  flush();
+
+  const deduped: Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> = [];
+  const seen = new Set<string>();
+  for (const item of collected) {
+    const key = `${normalizeKey(item.siteName)}|${item.color}`;
+    if (!normalizeKey(item.siteName) || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push({ siteName: item.siteName, color: item.color, itemIndex: deduped.length });
+  }
+
+  return deduped;
 }
 
 function findHeaderRowAndColumns(
@@ -249,6 +349,8 @@ function readWorkbook(filePath: string): XLSX.WorkBook {
   try {
     return XLSX.readFile(filePath, {
       cellDates: true,
+      cellStyles: true,
+      cellHTML: true,
       dense: false,
     });
   } catch (error) {
@@ -358,7 +460,7 @@ function looksLikeAssigneeName(value: unknown): boolean {
   return /[\u3040-\u30ff\u3400-\u9fff]/.test(text);
 }
 
-function extractWorkTableRowsFromMatrix(grid: unknown[][], fallbackYear: number): WorkTableRow[] {
+function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][], fallbackYear: number): WorkTableRow[] {
   // Week-matrix format: first column is assignee, date headers are on one row.
   const rows: WorkTableRow[] = [];
 
@@ -398,10 +500,15 @@ function extractWorkTableRowsFromMatrix(grid: unknown[][], fallbackYear: number)
       const siteName = normalizeRegistryText(toCellText(row[col]));
       if (!dayYmd || !siteName) continue;
 
+      const addr = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+      const cell = (sheet as Record<string, unknown>)[addr];
+      const entries = splitSiteEntriesFromCell(cell, siteName);
+      if (entries.length === 0) continue;
+
       rows.push({
         dayYmd,
         companyName: null,
-        siteName,
+        entries,
         assignees: [assignee],
       });
     }
@@ -439,6 +546,9 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
         const members = normalizeRegistryText(toCellText(row[found.indexMap.members]));
         const driver = normalizeRegistryText(toCellText(row[found.indexMap.driver]));
         const assignees = splitAssignees(lead, members, driver);
+        const addr = XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.site });
+        const cell = (sheet as Record<string, unknown>)[addr];
+        const entries = splitSiteEntriesFromCell(cell, siteName);
 
         if (!siteName && !dateYmd && assignees.length === 0) {
           emptyRun += 1;
@@ -447,18 +557,18 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
         }
         emptyRun = 0;
 
-        if (!siteName || !dateYmd || assignees.length === 0) continue;
+        if (entries.length === 0 || !dateYmd || assignees.length === 0) continue;
         sheetRows.push({
           dayYmd: dateYmd,
           companyName: companyName || null,
-          siteName,
+          entries,
           assignees,
         });
       }
     }
 
     if (sheetRows.length === 0) {
-      sheetRows.push(...extractWorkTableRowsFromMatrix(grid, fallbackYear));
+      sheetRows.push(...extractWorkTableRowsFromMatrix(sheet, grid, fallbackYear));
     }
     rows.push(...sheetRows);
   }
@@ -466,12 +576,25 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
   const seen = new Set<string>();
   const deduped: WorkTableRow[] = [];
   for (const row of rows) {
+    const filteredEntries: Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> = [];
+    const localSeen = new Set<string>();
+    for (const entry of row.entries) {
+      const entryKey = `${normalizeKey(entry.siteName)}|${entry.color}`;
+      if (!entryKey || localSeen.has(entryKey)) continue;
+      localSeen.add(entryKey);
+      filteredEntries.push({ ...entry, itemIndex: filteredEntries.length });
+    }
+    if (filteredEntries.length === 0) continue;
+
+    let hasNewKey = false;
     for (const assignee of row.assignees) {
-      const key = `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(row.siteName)}`;
+      const key = `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${filteredEntries.map((x) => `${normalizeKey(x.siteName)}:${x.color}`).join('|')}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      hasNewKey = true;
     }
-    deduped.push(row);
+    if (!hasNewKey) continue;
+    deduped.push({ ...row, entries: filteredEntries });
   }
   return deduped;
 }
@@ -783,32 +906,48 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const globalUserOrderIds = Array.from(new Set([...scheduledUserOrderIds, ...activeUserIds]));
   await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
 
-  const preparedRows: Array<{ userId: string; dayYmd: string; summary: string; siteId: string; sourceKey: string }> = [];
+  const preparedRows: Array<{
+    userId: string;
+    dayYmd: string;
+    summary: string;
+    siteId: string;
+    labelColor: 'default' | 'red';
+    groupIndex: number;
+    itemIndex: number;
+    sourceKey: string;
+  }> = [];
 
   for (const row of scheduleRows) {
     if (row.companyName) {
       await ensurePartnerByName(row.companyName);
     }
 
-    const siteHit = await findMatchingSite({ companyName: row.companyName, name: row.siteName, kind });
-    const conflictByNameOnly =
-      siteHit.site &&
-      siteHit.matchType === 'name-only' &&
-      row.companyName &&
-      siteHit.site.companyName &&
-      normalizeKey(row.companyName) !== normalizeKey(siteHit.site.companyName);
+    const siteIdByEntryKey = new Map<string, string>();
+    for (const entry of row.entries) {
+      const entryKey = `${normalizeKey(entry.siteName)}|${entry.color}`;
+      if (siteIdByEntryKey.has(entryKey)) continue;
 
-    let siteId = siteHit.site && !conflictByNameOnly ? siteHit.site.id : null;
-    if (!siteId) {
-      const created = await prisma.site.create({
-        data: {
-          kind,
-          companyName: row.companyName,
-          name: row.siteName,
-        },
-        select: { id: true },
-      });
-      siteId = created.id;
+      const siteHit = await findMatchingSite({ companyName: row.companyName, name: entry.siteName, kind });
+      const conflictByNameOnly =
+        siteHit.site &&
+        siteHit.matchType === 'name-only' &&
+        row.companyName &&
+        siteHit.site.companyName &&
+        normalizeKey(row.companyName) !== normalizeKey(siteHit.site.companyName);
+
+      let siteId = siteHit.site && !conflictByNameOnly ? siteHit.site.id : null;
+      if (!siteId) {
+        const created = await prisma.site.create({
+          data: {
+            kind,
+            companyName: row.companyName,
+            name: entry.siteName,
+          },
+          select: { id: true },
+        });
+        siteId = created.id;
+      }
+      siteIdByEntryKey.set(entryKey, siteId);
     }
 
     for (const assignee of row.assignees) {
@@ -818,14 +957,22 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
         continue;
       }
 
-      const summary = row.siteName;
-      preparedRows.push({
-        userId: user.id,
-        dayYmd: row.dayYmd,
-        summary,
-        siteId,
-        sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}`,
-      });
+      for (const entry of row.entries) {
+        const summary = entry.siteName;
+        const siteId = siteIdByEntryKey.get(`${normalizeKey(entry.siteName)}|${entry.color}`);
+        if (!siteId) continue;
+
+        preparedRows.push({
+          userId: user.id,
+          dayYmd: row.dayYmd,
+          summary,
+          siteId,
+          labelColor: entry.color,
+          groupIndex: 0,
+          itemIndex: entry.itemIndex,
+          sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}|${entry.color}|${entry.itemIndex}`,
+        });
+      }
     }
   }
 
@@ -928,6 +1075,9 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
                 fileName: workTableFileName,
                 rowKey: row.sourceKey,
               },
+              labelColor: row.labelColor,
+              scheduleGroupIndex: row.groupIndex,
+              scheduleItemIndex: row.itemIndex,
             } as Prisma.InputJsonValue,
           });
         }
