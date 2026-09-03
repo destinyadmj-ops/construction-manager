@@ -61,6 +61,7 @@
 | done | C | .github/coordination-hub.md, TEAM-VERIFY-TEMPLATE.md | Desktop 0.1.3 導入済み前提へ基準値と即時反映運用を更新 | 2026-06-02 20:05 JST |
 | done | C | package.json, package-lock.json, apps/desktop/package-lock.json, .env.production.example, APP-PACKAGING.md | 版番号表記を 0.1.3 に統一（表示/文書のみ）。更新導線・desktop-release・live build sync の挙動は不変更 | 2026-08-03 |
 | done | C | app/site-ledger/page.tsx, app/api/sites/shared-sync/route.ts, src/server/shared-excel-sync.ts | 共有フォルダ Excel の一方向同期（作業表☆→週予定DB / 作業伝票→現場台帳・作業伝票）最小差分実装 | 2026-08-31 |
+| done | B | app/week-hub.tsx | 編集OFF時の「編集から開始」警告のみを週タブ右側へ専用表示（赤文字）。他通知の既存表示は維持 | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts, app/api/users/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
 
 ## ステータスボード（各チャットの現在地）
@@ -87,6 +88,7 @@
 - (C) 共有フォルダ同期は app/api/sites/shared-sync 経由の手動実行に限定し、Excel 原本への書戻しは行わない。作業伝票ファイル名は「作業伝票」パターン検出 + 対象期優先 + 更新日時最新で選定する。
 - (B) 調整ハブの正本を `.github/coordination-hub.md`（Git 追跡）に移し、`/memories/repo/coordination-hub.md` は PC 固有のローカルミラー扱い。PC 間引き継ぎは GitHub 経由でこの正本を同期する。
 - (B) 作業表☆同期時に担当者名を `User` へ自動同期（新規作成/既存有効化/名前更新）し、`week-hub:normal|daily:userOrder` を global UI setting へ保存。週/月/年API と users API はこの順序を優先して返す。
+- (B) 週予定の編集OFF警告は汎用通知を移設せず、対象文言だけを week タブ右側に専用表示（赤文字）する方針を採用。既存の他通知（通信失敗/UndoRedo/削除結果など）は従来位置を維持。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
