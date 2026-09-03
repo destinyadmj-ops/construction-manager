@@ -12,6 +12,7 @@ import {
   type ScheduleCellEntryKind,
 } from '@/shared/schedule-cell-entry';
 import { prisma } from '@/server/db/prisma';
+import { applyGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 
 export const runtime = 'nodejs';
 
@@ -243,12 +244,13 @@ export async function GET(request: Request) {
 
   const days = Array.from({ length: 7 }, (_, i) => toYmd(addDays(weekStart, i)));
 
-  const users = await prisma.user.findMany({
+  const usersRaw = await prisma.user.findMany({
     where: { kind, showInSchedule: true },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, email: true },
     take: 200,
   });
+  const users = await applyGlobalScheduleUserOrder(kind, usersRaw);
 
   const entries = await prisma.workEntry.findMany({
     where: {

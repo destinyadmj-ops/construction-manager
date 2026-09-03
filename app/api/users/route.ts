@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
+import { applyGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -55,12 +56,13 @@ export async function GET(request: Request) {
     const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
     const kind = kindParam === 'daily' ? 'DAILY' : kindParam === 'all' ? null : 'NORMAL';
 
-    const users = await prisma.user.findMany({
+    const usersRaw = await prisma.user.findMany({
       where: kind ? { kind } : undefined,
       orderBy: { createdAt: 'asc' },
       select: { id: true, name: true, email: true, kind: true, showInSchedule: true, passwordHash: true },
       take: 200,
     });
+    const users = kind ? await applyGlobalScheduleUserOrder(kind, usersRaw) : usersRaw;
 
     return Response.json(
       {

@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { applyGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 
 export const runtime = 'nodejs';
 
@@ -30,12 +31,13 @@ export async function GET(request: Request) {
 
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${pad2(i + 1)}`);
 
-  const users = await prisma.user.findMany({
+  const usersRaw = await prisma.user.findMany({
     where: { kind, showInSchedule: true },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, email: true },
     take: 200,
   });
+  const users = await applyGlobalScheduleUserOrder(kind, usersRaw);
 
   const userIds = users.map((u) => u.id);
 
