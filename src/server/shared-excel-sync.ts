@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
 import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
+import { saveGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -703,15 +704,70 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   }
 
   const users = await prisma.user.findMany({
-    where: { kind, showInSchedule: true },
-    select: { id: true, name: true },
-    take: 200,
+    where: { kind },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, showInSchedule: true },
+    take: 500,
   });
-  const userByName = new Map<string, { id: string; name: string }>();
+
+  const assigneeNameByKey = new Map<string, string>();
+  const assigneeKeyOrder: string[] = [];
+  for (const row of scheduleRows) {
+    for (const assignee of row.assignees) {
+      const key = normalizeKey(assignee);
+      if (!key || assigneeNameByKey.has(key)) continue;
+      assigneeNameByKey.set(key, assignee);
+      assigneeKeyOrder.push(key);
+    }
+  }
+
+  const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
   for (const user of users) {
     const key = normalizeKey(user.name);
-    if (key) userByName.set(key, { id: user.id, name: user.name ?? '' });
+    if (key && !userByName.has(key)) {
+      userByName.set(key, { id: user.id, name: user.name ?? '', showInSchedule: user.showInSchedule });
+    }
   }
+
+  for (const key of assigneeKeyOrder) {
+    const assigneeName = assigneeNameByKey.get(key);
+    if (!assigneeName) continue;
+
+    const existing = userByName.get(key);
+    if (existing) {
+      const patch: { name?: string | null; showInSchedule?: boolean } = {};
+      if ((existing.name ?? '').trim() !== assigneeName) patch.name = assigneeName;
+      if (!existing.showInSchedule) patch.showInSchedule = true;
+
+      if (Object.keys(patch).length > 0) {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: patch,
+          select: { id: true },
+        });
+        existing.name = patch.name ?? existing.name;
+        existing.showInSchedule = patch.showInSchedule ?? existing.showInSchedule;
+      }
+      continue;
+    }
+
+    const created = await prisma.user.create({
+      data: {
+        kind,
+        name: assigneeName,
+        showInSchedule: true,
+      },
+      select: { id: true, name: true, showInSchedule: true },
+    });
+    userByName.set(key, { id: created.id, name: created.name ?? assigneeName, showInSchedule: created.showInSchedule });
+  }
+
+  const scheduledUserOrderIds = assigneeKeyOrder
+    .map((key) => userByName.get(key)?.id ?? null)
+    .filter((id): id is string => !!id);
+  const activeUserIds = users.filter((user) => user.showInSchedule).map((user) => user.id);
+  const globalUserOrderIds = Array.from(new Set([...scheduledUserOrderIds, ...activeUserIds]));
+  await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
 
   const preparedRows: Array<{ userId: string; dayYmd: string; summary: string; siteId: string | null; sourceKey: string }> = [];
 

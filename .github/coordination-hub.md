@@ -61,6 +61,7 @@
 | done | C | .github/coordination-hub.md, TEAM-VERIFY-TEMPLATE.md | Desktop 0.1.3 導入済み前提へ基準値と即時反映運用を更新 | 2026-06-02 20:05 JST |
 | done | C | package.json, package-lock.json, apps/desktop/package-lock.json, .env.production.example, APP-PACKAGING.md | 版番号表記を 0.1.3 に統一（表示/文書のみ）。更新導線・desktop-release・live build sync の挙動は不変更 | 2026-08-03 |
 | done | C | app/site-ledger/page.tsx, app/api/sites/shared-sync/route.ts, src/server/shared-excel-sync.ts | 共有フォルダ Excel の一方向同期（作業表☆→週予定DB / 作業伝票→現場台帳・作業伝票）最小差分実装 | 2026-08-31 |
+| editing | B | src/server/shared-excel-sync.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
