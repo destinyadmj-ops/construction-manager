@@ -653,10 +653,23 @@ function extractWorkSlipLedgerRows(workbook: XLSX.WorkBook): WorkSlipLedgerRow[]
   return Array.from(dedupedByName.values());
 }
 
-function startOfDayLocal(ymd: string): Date {
-  const d = new Date(`${ymd}T00:00:00`);
-  d.setHours(0, 0, 0, 0);
-  return d;
+function startOfDayUtc(ymd: string): Date {
+  return new Date(`${ymd}T00:00:00.000Z`);
+}
+
+function startOfSharedSyncDay(ymd: string): Date {
+  const base = startOfDayUtc(ymd);
+  // Keep shared-sync entries away from timezone day-boundary to avoid cross-env day drift.
+  return addMinutes(base, 12 * 60);
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  const d = startOfDayUtc(ymd);
+  d.setUTCDate(d.getUTCDate() + days);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function addMinutes(d: Date, minutes: number): Date {
@@ -962,15 +975,20 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
         const siteId = siteIdByEntryKey.get(`${normalizeKey(entry.siteName)}|${entry.color}`);
         if (!siteId) continue;
 
+        const groupIndex = entry.color === 'red' ? 1 : 0;
+        const itemIndexInGroup = row.entries
+          .filter((candidate) => (candidate.color === 'red' ? 1 : 0) === groupIndex)
+          .findIndex((candidate) => candidate.siteName === entry.siteName && candidate.color === entry.color);
+
         preparedRows.push({
           userId: user.id,
           dayYmd: row.dayYmd,
           summary,
           siteId,
           labelColor: entry.color,
-          groupIndex: 0,
-          itemIndex: entry.itemIndex,
-          sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}|${entry.color}|${entry.itemIndex}`,
+          groupIndex,
+          itemIndex: itemIndexInGroup < 0 ? entry.itemIndex : itemIndexInGroup,
+          sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}|${entry.color}|${groupIndex}|${itemIndexInGroup < 0 ? entry.itemIndex : itemIndexInGroup}`,
         });
       }
     }
@@ -997,15 +1015,15 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       accountingMeta: Prisma.JsonValue | null;
     }> = [];
     if (minDay && maxDay && userIds.length > 0) {
-      const maxDayEnd = new Date(`${maxDay}T00:00:00`);
-      maxDayEnd.setDate(maxDayEnd.getDate() + 1);
+      const minDayForQuery = addDaysYmd(minDay, -1);
+      const maxDayForQueryExclusive = addDaysYmd(maxDay, 2);
 
       await prisma.$transaction(async (tx) => {
         existingRows = await tx.workEntry.findMany({
           where: {
             kind,
             userId: { in: userIds },
-            startAt: { gte: startOfDayLocal(minDay), lt: maxDayEnd },
+            startAt: { gte: startOfDayUtc(minDayForQuery), lt: startOfDayUtc(maxDayForQueryExclusive) },
           },
           select: {
             id: true,
@@ -1064,7 +1082,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
           createData.push({
             userId: row.userId,
             kind,
-            startAt: addMinutes(startOfDayLocal(row.dayYmd), minuteOffset),
+            startAt: addMinutes(startOfSharedSyncDay(row.dayYmd), minuteOffset),
             summary: row.summary,
             note: null,
             siteId: row.siteId,
