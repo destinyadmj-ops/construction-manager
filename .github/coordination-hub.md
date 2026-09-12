@@ -65,6 +65,7 @@
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts, app/api/users/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts | sharedExcelSync の重複混在と note化混在の根本修正（site正規化 + idempotent再構成 + 既存同期データ限定cleanup） | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts | 作業表☆の赤黒混在を色別グループ保存へ修正し、shared sync の1日ずれ根因（startAt日付境界）を修正。lint/typecheck通過、rowKey日付不一致0、再同期非増殖を確認 | 2026-09-08 |
+| editing | B | scripts/package-desktop.ps1, README.md, APP-PACKAGING.md, public/desktop-release.json, src/server/desktop-release.ts, package.json, apps/desktop/package.json | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置し、release manifest と更新導線の整合を確認 | 2026-09-12 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
