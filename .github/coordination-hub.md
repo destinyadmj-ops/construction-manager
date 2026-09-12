@@ -65,7 +65,8 @@
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/api/schedule/year/summary/route.ts, app/api/users/route.ts | 作業表☆を正として担当者名/並び順を作業予定軸で同期（unknownUsers解消と表示順統一） | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts | sharedExcelSync の重複混在と note化混在の根本修正（site正規化 + idempotent再構成 + 既存同期データ限定cleanup） | 2026-09-03 |
 | done | B | src/server/shared-excel-sync.ts | 作業表☆の赤黒混在を色別グループ保存へ修正し、shared sync の1日ずれ根因（startAt日付境界）を修正。lint/typecheck通過、rowKey日付不一致0、再同期非増殖を確認 | 2026-09-08 |
-| editing | B | scripts/package-desktop.ps1, README.md, APP-PACKAGING.md, public/desktop-release.json, src/server/desktop-release.ts, package.json, apps/desktop/package.json | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置し、release manifest と更新導線の整合を確認 | 2026-09-12 |
+| done | B | scripts/package-desktop.ps1, public/desktop-release.json, apps/desktop/package.json, apps/desktop/package-lock.json, public/downloads/Master-Hub-Setup-0.1.4.exe | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置。/api/desktop-release=0.1.4、SHA256一致、Desktop出力まで確認 | 2026-09-12 |
+| done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx | 作業表☆同期の不整合修正（斎藤忠夫重複統合、黒赤グループ保証、ふりがな除去）を最小差分で実装。preview→sync→再sync検証、lint/typecheck通過 | 2026-09-12 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
@@ -95,6 +96,9 @@
 - (B) sharedExcelSync 予定は siteId 必須 + scheduleEntryKind=site へ正規化。同期時に sharedExcelSync 由来のみ user/date範囲で再構成して idempotent 化し、UTC日付ズレ由来の重複を解消。追記表示は scheduleGroupNote 専用へ復帰。
 - (B) 週/月セルの赤 `+` は「複数現場」条件ではなく実 overflow 判定（scroll/client 比較）で表示し、枠外右側に固定表示する方針へ更新。
 - (B) 作業表☆同期は色別グループを `scheduleGroupIndex` へ保存（黒=0, 赤=1）し、`scheduleItemIndex` は色グループ内順序で保存する方針へ更新。週/月APIの既存groupingで2枠表示を実現。
+- (B) desktop packaging は既存 `scripts/package-desktop.ps1` 導線を再利用し、wrapper 基準版を 0.1.4 へ更新。公開物は `public/downloads/Master-Hub-Setup-0.1.4.exe` と `public/desktop-release.json` を一致させ、`src/server/desktop-release.ts` は挙動変更なしで運用。
+- (B) shared sync 実行時に同一正規化ユーザー名を canonical ID（global user order 優先、fallback=createdAt最古）へ寄せる方針を追加。duplicate User は hard delete せず showInSchedule=false 化。
+- (B) sharedExcelSync 色は API 側で meta 優先を固定し、meta 色欠落時も scheduleGroupIndex から昼(default)/夜(red)を復元する方針を week/month へ適用。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
@@ -110,6 +114,8 @@
 - (A→B) 【交錯事故】git-push-safe.ps1 が `git add -A` で全 dirty を staging するため、B の未コミット app/header.tsx・app/week-hub.tsx が A の commit 74398c0 に混入し本番 push された。lint/typecheck は通過済みだが B の意図した push タイミングではない。差分は savedAt 比較の小修正のみで害は低い見込み。B 確認済み＝revert 不要。
 - (B) shared sync 色反映対応後の確認で 1回目実行後に件数が増えたが、続けて再実行で sharedExcelSync 件数 1609→1609 に安定（増殖なし）。`labelColor` は red/default が保存され、note化/null site 再発なしを確認。
 - (B) 1日ずれ根因を特定: `dayYmd` 自体は正しい一方、shared sync が `startAt` をローカル0時で保存していたため、API実行環境のTZ差で前日化。対策として shared sync 保存時刻をUTC日中帯へ固定し、cleanup抽出範囲を±1日拡張して既存ずれデータの再構成漏れを防止。
+- (B) desktop 0.1.4 installer 生成時、コード署名証明書未設定のため未署名（Status: NotSigned）。配布は可能だが SmartScreen 警告リスクあり。
+- (B) shared-sync route 検証で preview→sync→再sync は成功。2回目で shared 件数再増殖なし（1768→1768）を確認。sync 検証で .storage/sites 配下に作業伝票コピーが新規生成される点は既存仕様どおり。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。

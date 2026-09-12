@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
 import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
-import { saveGlobalScheduleUserOrder } from '@/server/schedule-user-order';
+import { readGlobalScheduleUserOrder, saveGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -177,16 +177,14 @@ function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ 
 
   const collected: Array<{ siteName: string; color: 'default' | 'red' }> = [];
   let buf = '';
-  let hasRed = false;
+  let bufColor: 'default' | 'red' = 'default';
   const flush = () => {
     const normalized = normalizeRegistryText(buf);
     buf = '';
     if (!normalized) {
-      hasRed = false;
       return;
     }
-    collected.push({ siteName: normalized, color: hasRed ? 'red' : 'default' });
-    hasRed = false;
+    collected.push({ siteName: normalized, color: bufColor });
   };
 
   for (const part of partList) {
@@ -197,8 +195,14 @@ function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ 
         flush();
         continue;
       }
+
+      if (buf && part.color !== bufColor) {
+        flush();
+      }
+      if (!buf) {
+        bufColor = part.color;
+      }
       buf += token;
-      if (part.color === 'red') hasRed = true;
     }
   }
   flush();
@@ -856,9 +860,11 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const users = await prisma.user.findMany({
     where: { kind },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, showInSchedule: true },
+    select: { id: true, name: true, showInSchedule: true, createdAt: true },
     take: 500,
   });
+  const globalOrder = await readGlobalScheduleUserOrder(kind);
+  const globalOrderIndex = new Map<string, number>(globalOrder.map((id, index) => [id, index] as const));
 
   const assigneeNameByKey = new Map<string, string>();
   const assigneeKeyOrder: string[] = [];
@@ -871,12 +877,78 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     }
   }
 
-  const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
-  for (const user of users) {
-    const key = normalizeKey(user.name);
-    if (key && !userByName.has(key)) {
-      userByName.set(key, { id: user.id, name: user.name ?? '', showInSchedule: user.showInSchedule });
+  const selectCanonicalUser = (candidates: Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>) => {
+    const sorted = [...candidates].sort((left, right) => {
+      const leftOrder = globalOrderIndex.get(left.id);
+      const rightOrder = globalOrderIndex.get(right.id);
+      if (leftOrder != null && rightOrder != null && leftOrder !== rightOrder) return leftOrder - rightOrder;
+      if (leftOrder != null && rightOrder == null) return -1;
+      if (leftOrder == null && rightOrder != null) return 1;
+      const createdDiff = left.createdAt.getTime() - right.createdAt.getTime();
+      if (createdDiff !== 0) return createdDiff;
+      return left.id.localeCompare(right.id);
+    });
+    return sorted[0] ?? null;
+  };
+
+  const consolidateDuplicateUsers = async (sourceUsers: Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>) => {
+    const byNameKey = new Map<string, Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>>();
+    for (const user of sourceUsers) {
+      const key = normalizeKey(user.name);
+      if (!key || !assigneeNameByKey.has(key)) continue;
+      const hit = byNameKey.get(key) ?? [];
+      hit.push(user);
+      byNameKey.set(key, hit);
     }
+
+    const mergePlan: Array<{ canonicalId: string; duplicateIds: string[] }> = [];
+    for (const candidates of byNameKey.values()) {
+      if (candidates.length <= 1) continue;
+      const canonical = selectCanonicalUser(candidates);
+      if (!canonical) continue;
+      const duplicateIds = candidates.filter((candidate) => candidate.id !== canonical.id).map((candidate) => candidate.id);
+      if (duplicateIds.length === 0) continue;
+      mergePlan.push({ canonicalId: canonical.id, duplicateIds });
+    }
+
+    if (mergePlan.length === 0) return;
+
+    await prisma.$transaction(async (tx) => {
+      for (const plan of mergePlan) {
+        await tx.workEntry.updateMany({
+          where: { kind, userId: { in: plan.duplicateIds } },
+          data: { userId: plan.canonicalId },
+        });
+
+        await tx.user.updateMany({
+          where: { id: { in: plan.duplicateIds } },
+          data: { showInSchedule: false },
+        });
+      }
+    });
+  };
+
+  await consolidateDuplicateUsers(users);
+  const usersAfterConsolidation = await prisma.user.findMany({
+    where: { kind },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, showInSchedule: true, createdAt: true },
+    take: 500,
+  });
+
+  const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
+  const usersAfterByKey = new Map<string, Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>>();
+  for (const user of usersAfterConsolidation) {
+    const key = normalizeKey(user.name);
+    if (!key) continue;
+    const hit = usersAfterByKey.get(key) ?? [];
+    hit.push(user);
+    usersAfterByKey.set(key, hit);
+  }
+  for (const [key, candidates] of usersAfterByKey.entries()) {
+    const canonical = selectCanonicalUser(candidates);
+    if (!canonical) continue;
+    userByName.set(key, { id: canonical.id, name: canonical.name ?? '', showInSchedule: canonical.showInSchedule });
   }
 
   for (const key of assigneeKeyOrder) {
@@ -901,6 +973,23 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       continue;
     }
 
+    const refreshedUsers = await prisma.user.findMany({
+      where: { kind },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, showInSchedule: true, createdAt: true },
+      take: 500,
+    });
+    const refreshedCandidates = refreshedUsers.filter((user) => normalizeKey(user.name) === key);
+    const refreshedCanonical = selectCanonicalUser(refreshedCandidates);
+    if (refreshedCanonical) {
+      userByName.set(key, {
+        id: refreshedCanonical.id,
+        name: refreshedCanonical.name ?? assigneeName,
+        showInSchedule: refreshedCanonical.showInSchedule,
+      });
+      continue;
+    }
+
     const created = await prisma.user.create({
       data: {
         kind,
@@ -915,7 +1004,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const scheduledUserOrderIds = assigneeKeyOrder
     .map((key) => userByName.get(key)?.id ?? null)
     .filter((id): id is string => !!id);
-  const activeUserIds = users.filter((user) => user.showInSchedule).map((user) => user.id);
+  const activeUserIds = usersAfterConsolidation.filter((user) => user.showInSchedule).map((user) => user.id);
   const globalUserOrderIds = Array.from(new Set([...scheduledUserOrderIds, ...activeUserIds]));
   await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
 
