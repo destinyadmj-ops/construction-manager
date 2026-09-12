@@ -128,6 +128,12 @@ function colorForEntry(input: {
   const metaColor = meta?.labelColor;
   if (isLabelColor(metaColor)) return metaColor;
 
+  const sharedMeta = asObject(meta?.sharedExcelSync);
+  if (sharedMeta) {
+    const sharedGroupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : 0;
+    return sharedGroupIndex === 1 ? 'red' : 'default';
+  }
+
   const siteColor = (input.site?.scheduleLabelColor ?? '').trim();
   if (isLabelColor(siteColor)) return siteColor;
 

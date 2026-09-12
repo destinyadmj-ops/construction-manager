@@ -355,7 +355,9 @@ function normalizeSiteLookupKey(value: string) {
     .replace(/（追記[:：].*?）$/u, '')
     .replace(/\(追記[:：].*?\)$/u, '')
     .replace(/^追記[:：]\s*/u, '')
+    .replace(/[（(]\s*[ぁ-ゖァ-ヺー・･\s]+\s*[）)]/gu, ' ')
     .replace(/\s\+\d+$/, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 

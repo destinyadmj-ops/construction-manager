@@ -24,16 +24,19 @@ function normalizeOrderIds(value: unknown): string[] {
   return result;
 }
 
-export async function applyGlobalScheduleUserOrder<T extends { id: string }>(kind: ScheduleKind, users: T[]): Promise<T[]> {
-  if (users.length <= 1) return users;
-
+export async function readGlobalScheduleUserOrder(kind: ScheduleKind): Promise<string[]> {
   const key = buildUserOrderKey(kind);
   const setting = await prisma.userUiSetting.findUnique({
     where: { userId_key: { userId: GLOBAL_UI_SETTINGS_USER_ID, key } },
     select: { value: true },
   });
+  return normalizeOrderIds(setting?.value);
+}
 
-  const order = normalizeOrderIds(setting?.value);
+export async function applyGlobalScheduleUserOrder<T extends { id: string }>(kind: ScheduleKind, users: T[]): Promise<T[]> {
+  if (users.length <= 1) return users;
+
+  const order = await readGlobalScheduleUserOrder(kind);
   if (order.length === 0) return users;
 
   const byId = new Map(users.map((user) => [user.id, user] as const));

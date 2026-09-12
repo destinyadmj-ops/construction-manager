@@ -16,6 +16,7 @@ type PartnerCandidate = {
 export function normalizeRegistryText(input: string | null | undefined): string {
   return (input ?? '')
     .normalize('NFKC')
+    .replace(/[（(]\s*[ぁ-ゖァ-ヺー・･\s]+\s*[）)]/gu, ' ')
     .replace(/\u3000/g, ' ')
     .replace(/[\u0000-\u001f]+/g, ' ')
     .replace(/[‐‑‒–—―−]/g, '-')
