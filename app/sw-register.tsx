@@ -2,11 +2,14 @@
 
 import { useEffect } from 'react';
 
-const ELECTRON_SW_RESET_KEY = 'mh-electron-sw-reset';
-
 function isElectronRuntime() {
   if (typeof navigator === 'undefined') return false;
   return /\bElectron\//.test(navigator.userAgent);
+}
+
+function perfLog(label: string, startedAt: number) {
+  const elapsed = Math.max(0, Math.round(performance.now() - startedAt));
+  console.info(`[perf][sw-register] ${label}: ${elapsed}ms`);
 }
 
 async function unregisterServiceWorkers() {
@@ -23,35 +26,26 @@ async function clearMasterHubCaches() {
 
 export default function ServiceWorkerRegister() {
   useEffect(() => {
+    const effectStartedAt = performance.now();
     const enableInDev = process.env.NEXT_PUBLIC_ENABLE_SW === '1';
     if (!('serviceWorker' in navigator)) return;
 
+    if (isElectronRuntime()) {
+      // Electron desktop startup cache invalidation is owned by apps/desktop/main.cjs.
+      // Avoid duplicate SW reset + reload here to reduce cold-start latency.
+      perfLog('electron branch skipped (main process owns reset)', effectStartedAt);
+      return;
+    }
+
     const resetServiceWorkers = async () => {
-      const hadController = Boolean(navigator.serviceWorker.controller);
+      const resetStartedAt = performance.now();
       const hadRegistrations = await unregisterServiceWorkers().catch(() => false);
       await clearMasterHubCaches().catch(() => {
         // no-op
       });
 
-      if (!isElectronRuntime()) return;
-      if (!hadController && !hadRegistrations) {
-        window.sessionStorage.removeItem(ELECTRON_SW_RESET_KEY);
-        return;
-      }
-
-      if (window.sessionStorage.getItem(ELECTRON_SW_RESET_KEY) === '1') {
-        window.sessionStorage.removeItem(ELECTRON_SW_RESET_KEY);
-        return;
-      }
-
-      window.sessionStorage.setItem(ELECTRON_SW_RESET_KEY, '1');
-      window.location.reload();
+      perfLog(`reset ran (electron=no, registrations=${hadRegistrations ? 'yes' : 'no'})`, resetStartedAt);
     };
-
-    if (isElectronRuntime()) {
-      void resetServiceWorkers();
-      return;
-    }
 
     if (process.env.NODE_ENV !== 'production' && !enableInDev) {
       void resetServiceWorkers();
@@ -72,6 +66,8 @@ export default function ServiceWorkerRegister() {
       .catch(() => {
         // no-op: optional enhancement
       });
+
+    perfLog('effect setup done', effectStartedAt);
   }, []);
 
   return null;
