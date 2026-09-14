@@ -2,6 +2,19 @@ const { app, BrowserWindow, Menu, dialog, shell, clipboard, nativeTheme, net } =
 const path = require('node:path');
 const fs = require('node:fs');
 
+const PERF_LOG_ENABLED = process.env.MASTER_HUB_PERF_LOG === '1';
+const PERF_AUTO_RELOAD_ONCE = process.env.MASTER_HUB_PERF_AUTO_RELOAD === '1';
+
+function perfNowMs() {
+  return Date.now();
+}
+
+function perfLog(label, startedAtMs) {
+  if (!PERF_LOG_ENABLED) return;
+  const elapsed = Math.max(0, perfNowMs() - startedAtMs);
+  console.log(`[perf][desktop] ${label}: ${elapsed}ms`);
+}
+
 function normalizeHttpUrl(raw) {
   const s = (raw || '').trim();
   if (!s) return null;
@@ -306,9 +319,15 @@ async function showAbout(win) {
 async function clearDesktopAppCache(ses) {
   if (!ses) return;
 
+  const startedAt = perfNowMs();
+  const clearCacheStartedAt = perfNowMs();
+
   try {
     await ses.clearCache();
   } catch {}
+  perfLog('clearCache', clearCacheStartedAt);
+
+  const clearStorageStartedAt = perfNowMs();
 
   try {
     await ses.clearStorageData({
@@ -316,6 +335,8 @@ async function clearDesktopAppCache(ses) {
       storages: ['serviceworkers', 'cachestorage'],
     });
   } catch {}
+  perfLog('clearStorageData(serviceworkers+cachestorage)', clearStorageStartedAt);
+  perfLog('clearDesktopAppCache(total)', startedAt);
 }
 
 function createAppMenu(win) {
@@ -366,6 +387,10 @@ function createAppMenu(win) {
 }
 
 function createWindow() {
+  const windowStartedAt = perfNowMs();
+  let firstDidFinishLoadAt = 0;
+  let autoReloadTriggered = false;
+  let autoReloadMeasured = false;
   const iconCandidates = [
     path.join(app.getAppPath(), 'build', 'icon.ico'),
     path.join(app.getAppPath(), 'build', 'icon.png'),
@@ -391,8 +416,23 @@ function createWindow() {
   win.setTitle('Master Hub');
   createAppMenu(win);
 
+  if (PERF_LOG_ENABLED) {
+    win.webContents.on('console-message', (_event, _level, message) => {
+      if (typeof message === 'string' && message.startsWith('[perf]')) {
+        console.log(message);
+      }
+    });
+  }
+
+  const clearStartedAt = perfNowMs();
   void clearDesktopAppCache(win.webContents.session).finally(() => {
+    perfLog('before loadURL wait', clearStartedAt);
+    const loadStartedAt = perfNowMs();
     void win.loadURL(DEFAULT_URL);
+    if (PERF_LOG_ENABLED) {
+      console.log(`[perf][desktop] loadURL called: ${DEFAULT_URL}`);
+    }
+    perfLog('loadURL call latency', loadStartedAt);
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -411,10 +451,31 @@ function createWindow() {
   });
 
   win.webContents.once('did-finish-load', () => {
+    perfLog('createWindow -> did-finish-load', windowStartedAt);
+    firstDidFinishLoadAt = perfNowMs();
+
+    if (PERF_AUTO_RELOAD_ONCE && !autoReloadTriggered) {
+      autoReloadTriggered = true;
+      console.log('[perf][desktop] auto reload once (F5 simulation) start');
+      win.webContents.reload();
+    }
+
     setTimeout(() => {
       void checkForUpdates(win, { silentIfCurrent: true });
     }, 1500);
   });
+
+  if (PERF_AUTO_RELOAD_ONCE) {
+    win.webContents.on('did-finish-load', () => {
+      if (!firstDidFinishLoadAt) return;
+      if (!autoReloadTriggered || autoReloadMeasured) return;
+      const delta = perfNowMs() - firstDidFinishLoadAt;
+      if (delta > 50) {
+        console.log(`[perf][desktop] did-finish-load after reload: ${delta}ms`);
+        autoReloadMeasured = true;
+      }
+    });
+  }
 
   return win;
 }

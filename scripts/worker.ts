@@ -1,13 +1,17 @@
 import "dotenv/config";
-import { startRemindersWorker } from "../src/server/queue/worker";
+import type { Worker } from "bullmq";
+import { startRemindersWorker, startSharedSyncPoller, startSharedSyncWorker } from "../src/server/queue/worker";
 import { RedisUnavailableError } from "../src/server/queue/connection";
 
-let worker;
+const workers: Worker[] = [];
+let stopSharedSyncPoller: (() => void) | null = null;
 try {
-  worker = startRemindersWorker();
+  workers.push(startRemindersWorker());
+  workers.push(startSharedSyncWorker());
+  stopSharedSyncPoller = startSharedSyncPoller();
 } catch (e) {
   if (e instanceof RedisUnavailableError) {
-    console.warn('[worker] Redis is unavailable; reminders worker is not started.');
+    console.warn('[worker] Redis is unavailable; workers are not started.');
     console.warn('[worker] Start Docker Desktop then run: npm run docker:up');
 
     // In development, allow the command to succeed even if Redis is not configured.
@@ -20,16 +24,34 @@ try {
   throw e;
 }
 
-worker.on('completed', (job) => {
-  console.log(`completed ${job.id}`);
+for (const worker of workers) {
+  worker.on('completed', (job, result) => {
+    console.log(`completed queue=${worker.name} id=${job.id} result=${JSON.stringify(result)}`);
+  });
+
+  worker.on('failed', (job, err) => {
+    console.error(`failed queue=${worker.name} id=${job?.id}`, err);
+  });
+
+  worker.on('error', (err) => {
+    console.error(`worker error queue=${worker.name}`, err);
+  });
+}
+
+const closeAll = async () => {
+  if (stopSharedSyncPoller) {
+    stopSharedSyncPoller();
+    stopSharedSyncPoller = null;
+  }
+  await Promise.all(workers.map((worker) => worker.close().catch(() => undefined)));
+};
+
+process.on('SIGINT', () => {
+  void closeAll().finally(() => process.exit(0));
 });
 
-worker.on('failed', (job, err) => {
-  console.error(`failed ${job?.id}`, err);
+process.on('SIGTERM', () => {
+  void closeAll().finally(() => process.exit(0));
 });
 
-worker.on('error', (err) => {
-  console.error('worker error', err);
-});
-
-console.log('Reminders worker started');
+console.log('Workers started: reminders + shared-sync poller');

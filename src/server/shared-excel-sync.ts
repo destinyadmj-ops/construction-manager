@@ -74,6 +74,17 @@ export type SharedSyncRunResult = SharedSyncPreview & {
   counts: SharedSyncCounts;
 };
 
+export type SharedSyncSourceVersion = {
+  kind: SiteKind;
+  sharedDir: string;
+  hasSources: boolean;
+  key: string | null;
+  workTableFileName: string | null;
+  workTableMtimeMs: number | null;
+  workSlipFileName: string | null;
+  workSlipMtimeMs: number | null;
+};
+
 export class SharedSyncError extends Error {
   code: 'MISSING_SOURCE' | 'PASSWORD_PROTECTED' | 'SYNC_FAILED';
 
@@ -759,6 +770,30 @@ export async function getSharedSyncPreview(input: { kind: SiteKind; targetTerm?:
   if (files.workSlipCandidates > 1) warnings.push(`作業伝票候補が ${files.workSlipCandidates} 件あります。対象期一致 > 更新日時の優先順で選択します。`);
 
   return buildPreview({ files, kind: input.kind, warnings });
+}
+
+export async function getSharedSyncSourceVersion(input: {
+  kind: SiteKind;
+  targetTerm?: number | null;
+}): Promise<SharedSyncSourceVersion> {
+  const files = await discoverSharedFiles(input.targetTerm ?? null);
+  const workTableMtimeMs = files.workTable?.mtimeMs ?? null;
+  const workSlipMtimeMs = files.workSlip?.mtimeMs ?? null;
+  const hasSources = !!files.workTable && !!files.workSlip;
+  const key = hasSources
+    ? `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`
+    : null;
+
+  return {
+    kind: input.kind,
+    sharedDir: files.sharedDir,
+    hasSources,
+    key,
+    workTableFileName: files.workTable?.fileName ?? null,
+    workTableMtimeMs,
+    workSlipFileName: files.workSlip?.fileName ?? null,
+    workSlipMtimeMs,
+  };
 }
 
 export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncRunResult> {

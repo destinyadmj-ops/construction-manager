@@ -2591,6 +2591,8 @@ function WeekHubInner() {
     () => Array.from(new Set((data?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))),
     [data?.users],
   );
+  const hasLoggedWeekFetchRef = useRef(false);
+  const hasLoadedWeekOnceRef = useRef(false);
 
   useEffect(() => {
     if (mode !== 'week') {
@@ -2649,7 +2651,14 @@ function WeekHubInner() {
     if (mode !== 'week') return;
 
     const controller = new AbortController();
+    const effectStartedAt = performance.now();
+    const initialDelayMs = hasLoadedWeekOnceRef.current ? 250 : 0;
+    hasLoadedWeekOnceRef.current = true;
     const timer = window.setTimeout(() => {
+      const fetchStartedAt = performance.now();
+      if (!hasLoggedWeekFetchRef.current) {
+        console.info(`[perf][week-hub] week fetch start: weekStart=${toYmd(weekStart)} kind=${kindQuery}`);
+      }
       void (async () => {
         setIsLoading(true);
         try {
@@ -2668,6 +2677,12 @@ function WeekHubInner() {
               }
               const json = (await res.json()) as ApiResponse;
               setData(json);
+              if (!hasLoggedWeekFetchRef.current) {
+                const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
+                const total = Math.max(0, Math.round(performance.now() - effectStartedAt));
+                console.info(`[perf][week-hub] week fetch success: fetch=${elapsed}ms totalSinceEffect=${total}ms`);
+                hasLoggedWeekFetchRef.current = true;
+              }
               return;
             } catch {
               if (controller.signal.aborted) return;
@@ -2682,18 +2697,59 @@ function WeekHubInner() {
           // Keep UI usable even if API is not ready.
           setData(null);
         } finally {
+          if (!hasLoggedWeekFetchRef.current) {
+            const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
+            const total = Math.max(0, Math.round(performance.now() - effectStartedAt));
+            console.info(`[perf][week-hub] week fetch finished (fallback): fetch=${elapsed}ms totalSinceEffect=${total}ms`);
+            hasLoggedWeekFetchRef.current = true;
+          }
           if (!controller.signal.aborted) {
             setIsLoading(false);
           }
         }
       })();
-    }, 250);
+    }, initialDelayMs);
 
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
   }, [kindQuery, mode, weekStart]);
+
+  useEffect(() => {
+    if (!isElectronShell || mode !== 'week') return;
+
+    let cancelled = false;
+    let inFlight = false;
+    const intervalMs = 2_000;
+
+    const tick = async () => {
+      if (cancelled || inFlight) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      inFlight = true;
+      try {
+        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          setData((await res.json()) as ApiResponse);
+        }
+      } catch {
+        // ignore background refresh errors
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      void tick();
+    }, intervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isElectronShell, kindQuery, mode, weekStart]);
 
   const viewMonth = useMemo(() => {
     return `${cursorDate.getFullYear()}-${pad2(cursorDate.getMonth() + 1)}`;

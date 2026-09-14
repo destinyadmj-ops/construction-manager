@@ -67,6 +67,7 @@
 | done | B | src/server/shared-excel-sync.ts | 作業表☆の赤黒混在を色別グループ保存へ修正し、shared sync の1日ずれ根因（startAt日付境界）を修正。lint/typecheck通過、rowKey日付不一致0、再同期非増殖を確認 | 2026-09-08 |
 | done | B | scripts/package-desktop.ps1, public/desktop-release.json, apps/desktop/package.json, apps/desktop/package-lock.json, public/downloads/Master-Hub-Setup-0.1.4.exe | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置。/api/desktop-release=0.1.4、SHA256一致、Desktop出力まで確認 | 2026-09-12 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx | 作業表☆同期の不整合修正（斎藤忠夫重複統合、黒赤グループ保証、ふりがな除去）を最小差分で実装。preview→sync→再sync検証、lint/typecheck通過 | 2026-09-12 |
+| done | B | apps/desktop/main.cjs, app/sw-register.tsx, app/week-hub.tsx, src/server/shared-excel-sync.ts, app/api/sites/shared-sync/route.ts, src/server/queue/queues.ts, scripts/worker.ts | Desktop再読込遅延の計測と最小改善、作業表☆自動検知同期（interval polling + queue/worker）実装と検証 | 2026-09-15 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
@@ -99,6 +100,8 @@
 - (B) desktop packaging は既存 `scripts/package-desktop.ps1` 導線を再利用し、wrapper 基準版を 0.1.4 へ更新。公開物は `public/downloads/Master-Hub-Setup-0.1.4.exe` と `public/desktop-release.json` を一致させ、`src/server/desktop-release.ts` は挙動変更なしで運用。
 - (B) shared sync 実行時に同一正規化ユーザー名を canonical ID（global user order 優先、fallback=createdAt最古）へ寄せる方針を追加。duplicate User は hard delete せず showInSchedule=false 化。
 - (B) sharedExcelSync 色は API 側で meta 優先を固定し、meta 色欠落時も scheduleGroupIndex から昼(default)/夜(red)を復元する方針を week/month へ適用。
+- (B) Desktop 再読込遅延の最小差分方針として、SW/Cache リセット責務を `apps/desktop/main.cjs` に一本化し、`app/sw-register.tsx` の Electron 分岐は no-op 化。`app/week-hub.tsx` は初回 fetch のみ待機0ms・2回目以降のみ 250ms を維持。
+- (B) 作業表☆自動同期は BullMQ `shared-sync` queue を新設し、worker 常駐 polling（既定2秒）で共有フォルダの source key（作業表/作業伝票の file+mtime）変化時のみ enqueue 実行する方針。初回起動時の自動実行は既定OFF（`SHARED_SYNC_POLL_SYNC_ON_START=1` で有効化）。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
@@ -116,6 +119,8 @@
 - (B) 1日ずれ根因を特定: `dayYmd` 自体は正しい一方、shared sync が `startAt` をローカル0時で保存していたため、API実行環境のTZ差で前日化。対策として shared sync 保存時刻をUTC日中帯へ固定し、cleanup抽出範囲を±1日拡張して既存ずれデータの再構成漏れを防止。
 - (B) desktop 0.1.4 installer 生成時、コード署名証明書未設定のため未署名（Status: NotSigned）。配布は可能だが SmartScreen 警告リスクあり。
 - (B) shared-sync route 検証で preview→sync→再sync は成功。2回目で shared 件数再増殖なし（1768→1768）を確認。sync 検証で .storage/sites 配下に作業伝票コピーが新規生成される点は既存仕様どおり。
+- (B) Desktop perf 計測で `npm run dev --prefix apps/desktop` は `node main.cjs` 起動のため Electron API が使えず失敗（app undefined）。計測実行は `npx electron apps/desktop/main.cjs` または packaging 後 exe 起動で行う。
+- (B) shared-sync 自動同期の実行検証は `npm run worker` で Redis 未接続（`REDIS_URL` 未設定）により本番経路まで未確認。型検査/lint は通過済み。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。
