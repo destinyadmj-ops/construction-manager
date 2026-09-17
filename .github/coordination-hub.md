@@ -68,6 +68,7 @@
 | done | B | scripts/package-desktop.ps1, public/desktop-release.json, apps/desktop/package.json, apps/desktop/package-lock.json, public/downloads/Master-Hub-Setup-0.1.4.exe | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置。/api/desktop-release=0.1.4、SHA256一致、Desktop出力まで確認 | 2026-09-12 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx | 作業表☆同期の不整合修正（斎藤忠夫重複統合、黒赤グループ保証、ふりがな除去）を最小差分で実装。preview→sync→再sync検証、lint/typecheck通過 | 2026-09-12 |
 | done | B | apps/desktop/main.cjs, app/sw-register.tsx, app/week-hub.tsx, src/server/shared-excel-sync.ts, app/api/sites/shared-sync/route.ts, src/server/queue/queues.ts, scripts/worker.ts | Desktop再読込遅延の計測と最小改善、作業表☆自動検知同期（interval polling + queue/worker）実装と検証 | 2026-09-15 |
+| editing | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx, app/api/sites/shared-sync/route.ts | 作業表☆→週予定DBの未反映修正（duplicate canonicalization強化、既存shared行の再構成、site名正規化統一、preview/sync再検証） | 2026-09-18 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
