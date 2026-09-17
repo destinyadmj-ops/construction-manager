@@ -3,6 +3,7 @@ import { Prisma } from '@/generated/prisma';
 import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { readGlobalScheduleUserOrder, saveGlobalScheduleUserOrder } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
+import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -56,6 +57,13 @@ type SharedSyncCounts = {
   workSlipsCreated: number;
   workSlipsSkipped: number;
   unknownUsers: number;
+};
+
+type SharedSyncUserRecord = {
+  id: string;
+  name: string | null;
+  showInSchedule: boolean;
+  createdAt: Date | null;
 };
 
 export type SharedSyncPreview = {
@@ -190,7 +198,7 @@ function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ 
   let buf = '';
   let bufColor: 'default' | 'red' = 'default';
   const flush = () => {
-    const normalized = normalizeRegistryText(buf);
+    const normalized = normalizeTextStrippingReadingParens(buf);
     buf = '';
     if (!normalized) {
       return;
@@ -512,7 +520,7 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
 
     for (const col of dateCols) {
       const dayYmd = parseDateToYmd((grid[headerRowIndex] ?? [])[col], fallbackYear);
-      const siteName = normalizeRegistryText(toCellText(row[col]));
+      const siteName = normalizeTextStrippingReadingParens(toCellText(row[col]));
       if (!dayYmd || !siteName) continue;
 
       const addr = XLSX.utils.encode_cell({ r: rowIndex, c: col });
@@ -554,7 +562,7 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
       let emptyRun = 0;
       for (let rowIndex = found.headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
         const row = grid[rowIndex] ?? [];
-        const siteName = normalizeRegistryText(toCellText(row[found.indexMap.site]));
+        const siteName = normalizeTextStrippingReadingParens(toCellText(row[found.indexMap.site]));
         const dateYmd = parseDateToYmd(row[found.indexMap.date], fallbackYear);
         const companyName = normalizeRegistryText(toCellText(row[found.indexMap.company]));
         const lead = normalizeRegistryText(toCellText(row[found.indexMap.lead]));
@@ -633,7 +641,7 @@ function extractWorkSlipLedgerRows(workbook: XLSX.WorkBook): WorkSlipLedgerRow[]
     for (let rowIndex = found.headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
       const row = grid[rowIndex] ?? [];
       const companyName = normalizeRegistryText(toCellText(row[found.indexMap.company]));
-      const siteName = normalizeRegistryText(toCellText(row[found.indexMap.site]));
+      const siteName = normalizeTextStrippingReadingParens(toCellText(row[found.indexMap.site]));
       const amount = parseAmount(row[found.indexMap.amount]);
 
       if (!companyName && !siteName && amount == null) {
@@ -704,6 +712,135 @@ function hasSharedExcelSyncMeta(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const obj = value as Record<string, unknown>;
   return !!obj.sharedExcelSync && typeof obj.sharedExcelSync === 'object' && !Array.isArray(obj.sharedExcelSync);
+}
+
+function hasLegacySharedExcelSyncShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.labelColor === 'string' ||
+    typeof obj.scheduleGroupIndex === 'number' ||
+    typeof obj.scheduleItemIndex === 'number'
+  );
+}
+
+function normalizedSummaryMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftKey = normalizeKey(left);
+  const rightKey = normalizeKey(right);
+  if (!leftKey || !rightKey) return true;
+  return leftKey === rightKey;
+}
+
+async function listSharedSyncUsers(
+  db: Pick<Prisma.TransactionClient, 'user'> | typeof prisma,
+  kind: SiteKind,
+): Promise<SharedSyncUserRecord[]> {
+  try {
+    return await db.user.findMany({
+      where: { kind },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, showInSchedule: true, createdAt: true },
+      take: 500,
+    });
+  } catch (error) {
+    try {
+      const fallbackUsers = await db.user.findMany({
+        where: { kind },
+        orderBy: { id: 'asc' },
+        select: { id: true, name: true, showInSchedule: true },
+        take: 500,
+      });
+      return fallbackUsers.map((user) => ({ ...user, createdAt: null }));
+    } catch {
+      const minimalUsers = await db.user.findMany({
+        where: { kind },
+        orderBy: { id: 'asc' },
+        select: { id: true, name: true },
+        take: 500,
+      });
+      return minimalUsers.map((user) => ({ ...user, showInSchedule: true, createdAt: null }));
+    }
+  }
+}
+
+async function updateSharedSyncUsers(
+  db: Pick<Prisma.TransactionClient, 'user' | '$executeRaw'> | typeof prisma,
+  userIds: string[],
+  patch: { name?: string | null; showInSchedule?: boolean },
+): Promise<void> {
+  if (userIds.length === 0) return;
+
+  const assignments: Prisma.Sql[] = [];
+  if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+    assignments.push(Prisma.sql`"name" = ${patch.name ?? null}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'showInSchedule')) {
+    assignments.push(Prisma.sql`"showInSchedule" = ${patch.showInSchedule === true}`);
+  }
+  if (assignments.length === 0) return;
+
+  if (userIds.length === 1) {
+    try {
+      await db.user.update({
+        where: { id: userIds[0] },
+        data: patch,
+        select: { id: true },
+      });
+      return;
+    } catch {
+      // Fall through to raw SQL below.
+    }
+  } else {
+    try {
+      await db.user.updateMany({
+        where: { id: { in: userIds } },
+        data: patch,
+      });
+      return;
+    } catch {
+      // Fall through to raw SQL below.
+    }
+  }
+
+  try {
+    await db.$executeRaw(
+      Prisma.sql`UPDATE "User" SET ${Prisma.join(assignments, Prisma.sql`, `)} WHERE "id" IN (${Prisma.join(userIds)})`,
+    );
+  } catch (error) {
+    if (Object.prototype.hasOwnProperty.call(patch, 'showInSchedule')) {
+      if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+        await updateSharedSyncUsers(db, userIds, { name: patch.name ?? null });
+      }
+      return;
+    }
+    throw error;
+  }
+}
+
+async function createSharedSyncUser(kind: SiteKind, assigneeName: string): Promise<{ id: string; name: string | null; showInSchedule: boolean } | null> {
+  try {
+    return await prisma.user.create({
+      data: {
+        kind,
+        name: assigneeName,
+        showInSchedule: true,
+      },
+      select: { id: true, name: true, showInSchedule: true },
+    });
+  } catch {
+    try {
+      const created = await prisma.user.create({
+        data: {
+          kind,
+          name: assigneeName,
+        },
+        select: { id: true, name: true },
+      });
+      return { ...created, showInSchedule: true };
+    } catch {
+      return null;
+    }
+  }
 }
 
 function todayYmdTokyo(): string {
@@ -815,6 +952,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
 
   const scheduleRows = extractWorkTableRows(workTableBook);
   const ledgerRows = extractWorkSlipLedgerRows(workSlipBook);
+  const warnings: string[] = [];
 
   const counts: SharedSyncCounts = {
     sitesCreated: 0,
@@ -892,12 +1030,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     touchedSiteIds.add(created.id);
   }
 
-  const users = await prisma.user.findMany({
-    where: { kind },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, showInSchedule: true, createdAt: true },
-    take: 500,
-  });
+  const users = await listSharedSyncUsers(prisma, kind);
   const globalOrder = await readGlobalScheduleUserOrder(kind);
   const globalOrderIndex = new Map<string, number>(globalOrder.map((id, index) => [id, index] as const));
 
@@ -912,25 +1045,33 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     }
   }
 
-  const selectCanonicalUser = (candidates: Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>) => {
+  const selectCanonicalUser = (candidates: SharedSyncUserRecord[]) => {
     const sorted = [...candidates].sort((left, right) => {
       const leftOrder = globalOrderIndex.get(left.id);
       const rightOrder = globalOrderIndex.get(right.id);
       if (leftOrder != null && rightOrder != null && leftOrder !== rightOrder) return leftOrder - rightOrder;
       if (leftOrder != null && rightOrder == null) return -1;
       if (leftOrder == null && rightOrder != null) return 1;
-      const createdDiff = left.createdAt.getTime() - right.createdAt.getTime();
-      if (createdDiff !== 0) return createdDiff;
+      if (left.createdAt && right.createdAt) {
+        const createdDiff = left.createdAt.getTime() - right.createdAt.getTime();
+        if (createdDiff !== 0) return createdDiff;
+      } else if (left.createdAt && !right.createdAt) {
+        return -1;
+      } else if (!left.createdAt && right.createdAt) {
+        return 1;
+      }
       return left.id.localeCompare(right.id);
     });
     return sorted[0] ?? null;
   };
 
-  const consolidateDuplicateUsers = async (sourceUsers: Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>) => {
-    const byNameKey = new Map<string, Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>>();
+  const duplicateUserIds = new Set<string>();
+
+  const consolidateDuplicateUsers = async (sourceUsers: SharedSyncUserRecord[]) => {
+    const byNameKey = new Map<string, SharedSyncUserRecord[]>();
     for (const user of sourceUsers) {
       const key = normalizeKey(user.name);
-      if (!key || !assigneeNameByKey.has(key)) continue;
+      if (!key) continue;
       const hit = byNameKey.get(key) ?? [];
       hit.push(user);
       byNameKey.set(key, hit);
@@ -943,36 +1084,26 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       if (!canonical) continue;
       const duplicateIds = candidates.filter((candidate) => candidate.id !== canonical.id).map((candidate) => candidate.id);
       if (duplicateIds.length === 0) continue;
+      duplicateIds.forEach((id) => duplicateUserIds.add(id));
       mergePlan.push({ canonicalId: canonical.id, duplicateIds });
     }
 
     if (mergePlan.length === 0) return;
 
-    await prisma.$transaction(async (tx) => {
-      for (const plan of mergePlan) {
-        await tx.workEntry.updateMany({
-          where: { kind, userId: { in: plan.duplicateIds } },
-          data: { userId: plan.canonicalId },
-        });
-
-        await tx.user.updateMany({
-          where: { id: { in: plan.duplicateIds } },
-          data: { showInSchedule: false },
-        });
-      }
-    });
+    for (const plan of mergePlan) {
+      await prisma.workEntry.updateMany({
+        where: { kind, userId: { in: plan.duplicateIds } },
+        data: { userId: plan.canonicalId },
+      });
+      await updateSharedSyncUsers(prisma, plan.duplicateIds, { showInSchedule: false });
+    }
   };
 
   await consolidateDuplicateUsers(users);
-  const usersAfterConsolidation = await prisma.user.findMany({
-    where: { kind },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, name: true, showInSchedule: true, createdAt: true },
-    take: 500,
-  });
+  const usersAfterConsolidation = await listSharedSyncUsers(prisma, kind);
 
   const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
-  const usersAfterByKey = new Map<string, Array<{ id: string; name: string | null; showInSchedule: boolean; createdAt: Date }>>();
+  const usersAfterByKey = new Map<string, SharedSyncUserRecord[]>();
   for (const user of usersAfterConsolidation) {
     const key = normalizeKey(user.name);
     if (!key) continue;
@@ -997,23 +1128,14 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       if (!existing.showInSchedule) patch.showInSchedule = true;
 
       if (Object.keys(patch).length > 0) {
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: patch,
-          select: { id: true },
-        });
+        await updateSharedSyncUsers(prisma, [existing.id], patch);
         existing.name = patch.name ?? existing.name;
         existing.showInSchedule = patch.showInSchedule ?? existing.showInSchedule;
       }
       continue;
     }
 
-    const refreshedUsers = await prisma.user.findMany({
-      where: { kind },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, showInSchedule: true, createdAt: true },
-      take: 500,
-    });
+    const refreshedUsers = await listSharedSyncUsers(prisma, kind);
     const refreshedCandidates = refreshedUsers.filter((user) => normalizeKey(user.name) === key);
     const refreshedCanonical = selectCanonicalUser(refreshedCandidates);
     if (refreshedCanonical) {
@@ -1025,14 +1147,8 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       continue;
     }
 
-    const created = await prisma.user.create({
-      data: {
-        kind,
-        name: assigneeName,
-        showInSchedule: true,
-      },
-      select: { id: true, name: true, showInSchedule: true },
-    });
+    const created = await createSharedSyncUser(kind, assigneeName);
+    if (!created) continue;
     userByName.set(key, { id: created.id, name: created.name ?? assigneeName, showInSchedule: created.showInSchedule });
   }
 
@@ -1040,7 +1156,14 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     .map((key) => userByName.get(key)?.id ?? null)
     .filter((id): id is string => !!id);
   const activeUserIds = usersAfterConsolidation.filter((user) => user.showInSchedule).map((user) => user.id);
-  const globalUserOrderIds = Array.from(new Set([...scheduledUserOrderIds, ...activeUserIds]));
+  const activeUserIdSet = new Set(activeUserIds);
+  const globalUserOrderIds = Array.from(
+    new Set([
+      ...globalOrder.filter((id) => activeUserIdSet.has(id) && !duplicateUserIds.has(id)),
+      ...scheduledUserOrderIds,
+      ...activeUserIds,
+    ]),
+  );
   await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
 
   const preparedRows: Array<{
@@ -1124,11 +1247,14 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   }
 
   const finalRows = Array.from(uniqueRows.values());
+  const finalRowsByCellSiteKey = new Map<string, (typeof finalRows)[number]>();
+  for (const row of finalRows) {
+    finalRowsByCellSiteKey.set(`${row.userId}|${row.dayYmd}|${row.siteId}`, row);
+  }
   if (finalRows.length > 0) {
-    const dayList = finalRows.map((x) => x.dayYmd).sort();
+    const dayList = scheduleRows.map((row) => row.dayYmd).sort();
     const minDay = dayList[0] ?? null;
     const maxDay = dayList[dayList.length - 1] ?? null;
-    const userIds = Array.from(new Set(finalRows.map((x) => x.userId)));
 
     let existingRows: Array<{
       id: string;
@@ -1138,7 +1264,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       siteId: string | null;
       accountingMeta: Prisma.JsonValue | null;
     }> = [];
-    if (minDay && maxDay && userIds.length > 0) {
+    if (minDay && maxDay) {
       const minDayForQuery = addDaysYmd(minDay, -1);
       const maxDayForQueryExclusive = addDaysYmd(maxDay, 2);
 
@@ -1146,7 +1272,6 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
         existingRows = await tx.workEntry.findMany({
           where: {
             kind,
-            userId: { in: userIds },
             startAt: { gte: startOfDayUtc(minDayForQuery), lt: startOfDayUtc(maxDayForQueryExclusive) },
           },
           select: {
@@ -1159,12 +1284,43 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
           },
         });
 
-        const sharedIds = existingRows.filter((row) => hasSharedExcelSyncMeta(row.accountingMeta)).map((row) => row.id);
-        if (sharedIds.length > 0) {
-          await tx.workEntry.deleteMany({ where: { id: { in: sharedIds } } });
+        const sharedIds = new Set(existingRows.filter((row) => hasSharedExcelSyncMeta(row.accountingMeta)).map((row) => row.id));
+        for (const row of existingRows) {
+          if (sharedIds.has(row.id)) continue;
+          if (!row.siteId) continue;
+          if (!hasLegacySharedExcelSyncShape(row.accountingMeta)) continue;
+          const dayYmd = toYmdLocal(row.startAt);
+          const matched = finalRowsByCellSiteKey.get(`${row.userId}|${dayYmd}|${row.siteId}`);
+          if (!matched) continue;
+
+          const meta = row.accountingMeta && typeof row.accountingMeta === 'object' && !Array.isArray(row.accountingMeta)
+            ? (row.accountingMeta as Record<string, unknown>)
+            : null;
+          const labelColor = typeof meta?.labelColor === 'string' ? meta.labelColor : null;
+          const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
+          const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
+          const sharedMeta = meta?.sharedExcelSync && typeof meta.sharedExcelSync === 'object' && !Array.isArray(meta.sharedExcelSync)
+            ? (meta.sharedExcelSync as Record<string, unknown>)
+            : null;
+          const hasConsistentSharedMeta =
+            sharedMeta?.source === '作業表☆' &&
+            sharedMeta?.fileName === workTableFileName &&
+            sharedMeta?.rowKey === matched.sourceKey &&
+            labelColor === matched.labelColor &&
+            groupIndex === matched.groupIndex &&
+            itemIndex === matched.itemIndex;
+
+          if (hasConsistentSharedMeta && normalizedSummaryMatches(row.summary, matched.summary)) continue;
+          if (!normalizedSummaryMatches(row.summary, matched.summary)) continue;
+          sharedIds.add(row.id);
         }
 
-        const baseRows = existingRows.filter((row) => !hasSharedExcelSyncMeta(row.accountingMeta));
+        const deleteIds = Array.from(sharedIds);
+        if (deleteIds.length > 0) {
+          await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
+        }
+
+        const baseRows = existingRows.filter((row) => !sharedIds.has(row.id));
         const existingSiteKeySet = new Set<string>();
         const existingCountByCell = new Map<string, number>();
 
@@ -1240,62 +1396,66 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const siteIds = Array.from(touchedSiteIds);
 
   if (siteIds.length > 0) {
-    const sites = await prisma.site.findMany({
-      where: { id: { in: siteIds } },
-      select: { id: true, name: true },
-    });
-
-    for (const site of sites) {
-      const existing = await prisma.storedDocument.findFirst({
-        where: {
-          siteId: site.id,
-          kind: 'WORK_SLIP',
-          fileName: files.workSlip.fileName,
-          subject,
-        },
-        select: { id: true },
+    try {
+      const sites = await prisma.site.findMany({
+        where: { id: { in: siteIds } },
+        select: { id: true, name: true },
       });
 
-      if (existing) {
-        counts.workSlipsSkipped += 1;
-        continue;
-      }
-
-      const { workSlipsDir } = await ensureSiteDayFolders({
-        siteId: site.id,
-        siteName: site.name,
-        dayYmd: todayYmd,
-      });
-
-      const storedName = `${stamp}__shared-sync__${fileSafeName}`;
-      const storedPath = join(workSlipsDir, storedName);
-      await writeFile(storedPath, slipBuffer);
-
-      await prisma.storedDocument.create({
-        data: {
-          siteId: site.id,
-          kind: 'WORK_SLIP',
-          subject,
-          bizDateYmd: todayYmd,
-          fileName: files.workSlip.fileName,
-          mimeType: workSlipMimeByExtension(files.workSlip.extension),
-          sizeBytes: slipBuffer.length,
-          storedPath,
-          tags: {
-            sharedSync: true,
-            source: '作業伝票',
-            sourceFileName: files.workSlip.fileName,
-            sourceMtimeIso: new Date(files.workSlip.mtimeMs).toISOString(),
+      for (const site of sites) {
+        const existing = await prisma.storedDocument.findFirst({
+          where: {
+            siteId: site.id,
+            kind: 'WORK_SLIP',
+            fileName: files.workSlip.fileName,
+            subject,
           },
-        },
-        select: { id: true },
-      });
+          select: { id: true },
+        });
 
-      counts.workSlipsCreated += 1;
+        if (existing) {
+          counts.workSlipsSkipped += 1;
+          continue;
+        }
+
+        const { workSlipsDir } = await ensureSiteDayFolders({
+          siteId: site.id,
+          siteName: site.name,
+          dayYmd: todayYmd,
+        });
+
+        const storedName = `${stamp}__shared-sync__${fileSafeName}`;
+        const storedPath = join(workSlipsDir, storedName);
+        await writeFile(storedPath, slipBuffer);
+
+        await prisma.storedDocument.create({
+          data: {
+            siteId: site.id,
+            kind: 'WORK_SLIP',
+            subject,
+            bizDateYmd: todayYmd,
+            fileName: files.workSlip.fileName,
+            mimeType: workSlipMimeByExtension(files.workSlip.extension),
+            sizeBytes: slipBuffer.length,
+            storedPath,
+            tags: {
+              sharedSync: true,
+              source: '作業伝票',
+              sourceFileName: files.workSlip.fileName,
+              sourceMtimeIso: new Date(files.workSlip.mtimeMs).toISOString(),
+            },
+          },
+          select: { id: true },
+        });
+
+        counts.workSlipsCreated += 1;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`作業伝票コピーはスキップしました: ${message}`);
     }
   }
 
-  const warnings: string[] = [];
   if (counts.unknownUsers > 0) {
     warnings.push(`担当者名が一致しない行が ${counts.unknownUsers} 件あり、週予定へは未反映です。`);
   }

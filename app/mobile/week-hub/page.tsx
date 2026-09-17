@@ -18,6 +18,7 @@ import {
   type WeekGridPrefs,
 } from '@/shared/week-grid-prefs';
 import { readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
+import { normalizeSiteLookupKey } from '@/shared/site-lookup';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -348,17 +349,6 @@ function cellSiteNames(cell: ApiCell | null | undefined) {
         .map((entry) => entry.label.trim()),
     )
     .filter((entry): entry is string => entry.length > 0);
-}
-
-function normalizeSiteLookupKey(value: string) {
-  return value
-    .replace(/（追記[:：].*?）$/u, '')
-    .replace(/\(追記[:：].*?\)$/u, '')
-    .replace(/^追記[:：]\s*/u, '')
-    .replace(/[（(]\s*[ぁ-ゖァ-ヺー・･\s]+\s*[）)]/gu, ' ')
-    .replace(/\s\+\d+$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 function asObject(value: unknown): JsonObject | null {
