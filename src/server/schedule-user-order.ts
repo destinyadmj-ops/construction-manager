@@ -24,13 +24,35 @@ function normalizeOrderIds(value: unknown): string[] {
   return result;
 }
 
+function normalizeScheduleUserNameKey(value: string | null | undefined): string {
+  return (value ?? '').normalize('NFKC').replace(/\s+/g, '').toLocaleLowerCase('ja-JP').trim();
+}
+
+export function collapseDuplicateScheduleUsers<T extends { id: string; name: string | null }>(users: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+
+  for (const user of users) {
+    const key = normalizeScheduleUserNameKey(user.name);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    result.push(user);
+  }
+
+  return result;
+}
+
 export async function readGlobalScheduleUserOrder(kind: ScheduleKind): Promise<string[]> {
   const key = buildUserOrderKey(kind);
-  const setting = await prisma.userUiSetting.findUnique({
-    where: { userId_key: { userId: GLOBAL_UI_SETTINGS_USER_ID, key } },
-    select: { value: true },
-  });
-  return normalizeOrderIds(setting?.value);
+  try {
+    const setting = await prisma.userUiSetting.findUnique({
+      where: { userId_key: { userId: GLOBAL_UI_SETTINGS_USER_ID, key } },
+      select: { value: true },
+    });
+    return normalizeOrderIds(setting?.value);
+  } catch {
+    return [];
+  }
 }
 
 export async function applyGlobalScheduleUserOrder<T extends { id: string }>(kind: ScheduleKind, users: T[]): Promise<T[]> {
@@ -58,21 +80,45 @@ export async function applyGlobalScheduleUserOrder<T extends { id: string }>(kin
   return sorted;
 }
 
+export async function listVisibleScheduleUsers(kind: ScheduleKind): Promise<Array<{ id: string; name: string | null; email: string | null }>> {
+  try {
+    const usersRaw = await prisma.user.findMany({
+      where: { kind, showInSchedule: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, email: true },
+      take: 200,
+    });
+    return applyGlobalScheduleUserOrder(kind, usersRaw);
+  } catch {
+    const fallbackUsers = await prisma.user.findMany({
+      where: { kind },
+      orderBy: { id: 'asc' },
+      select: { id: true, name: true, email: true },
+      take: 200,
+    });
+    const ordered = await applyGlobalScheduleUserOrder(kind, fallbackUsers);
+    return collapseDuplicateScheduleUsers(ordered);
+  }
+}
+
 export async function saveGlobalScheduleUserOrder(kind: ScheduleKind, orderIds: string[]): Promise<void> {
   const normalized = normalizeOrderIds(orderIds);
-  if (normalized.length === 0) return;
 
   const key = buildUserOrderKey(kind);
-  await prisma.userUiSetting.upsert({
-    where: { userId_key: { userId: GLOBAL_UI_SETTINGS_USER_ID, key } },
-    create: {
-      userId: GLOBAL_UI_SETTINGS_USER_ID,
-      key,
-      value: normalized as Prisma.InputJsonValue,
-    },
-    update: {
-      value: normalized as Prisma.InputJsonValue,
-    },
-    select: { id: true },
-  });
+  try {
+    await prisma.userUiSetting.upsert({
+      where: { userId_key: { userId: GLOBAL_UI_SETTINGS_USER_ID, key } },
+      create: {
+        userId: GLOBAL_UI_SETTINGS_USER_ID,
+        key,
+        value: normalized as Prisma.InputJsonValue,
+      },
+      update: {
+        value: normalized as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+  } catch {
+    // Legacy DBs may reject the synthetic global userId. Keep sync functional without persistence.
+  }
 }

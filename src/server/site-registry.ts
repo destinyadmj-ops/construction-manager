@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { normalizeSiteLookupKey, normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 
 export type RegistrySiteKind = 'NORMAL' | 'DAILY';
 
@@ -14,14 +15,7 @@ type PartnerCandidate = {
 };
 
 export function normalizeRegistryText(input: string | null | undefined): string {
-  return (input ?? '')
-    .normalize('NFKC')
-    .replace(/[（(]\s*[ぁ-ゖァ-ヺー・･\s]+\s*[）)]/gu, ' ')
-    .replace(/\u3000/g, ' ')
-    .replace(/[\u0000-\u001f]+/g, ' ')
-    .replace(/[‐‑‒–—―−]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeTextStrippingReadingParens(input);
 }
 
 export function normalizeOptionalRegistryText(input: string | null | undefined): string | null {
@@ -31,6 +25,10 @@ export function normalizeOptionalRegistryText(input: string | null | undefined):
 
 function normalizeRegistryKey(input: string | null | undefined): string {
   return normalizeRegistryText(input).replace(/\s+/g, '').toLocaleLowerCase('ja-JP');
+}
+
+function normalizeSiteRegistryKey(input: string | null | undefined): string {
+  return normalizeSiteLookupKey(input ?? '').replace(/\s+/g, '').toLocaleLowerCase('ja-JP');
 }
 
 async function listSiteCandidates(kind: RegistrySiteKind, excludeId?: string): Promise<SiteCandidate[]> {
@@ -93,12 +91,12 @@ export async function findMatchingSite(input: {
   kind: RegistrySiteKind;
   excludeId?: string;
 }): Promise<{ site: SiteCandidate | null; matchType: 'exact' | 'name-only' | null }> {
-  const nameKey = normalizeRegistryKey(input.name);
+  const nameKey = normalizeSiteRegistryKey(input.name);
   if (!nameKey) return { site: null, matchType: null };
 
   const companyKey = normalizeRegistryKey(input.companyName);
   const candidates = (await listSiteCandidates(input.kind, input.excludeId)).filter(
-    (site) => normalizeRegistryKey(site.name) === nameKey,
+    (site) => normalizeSiteRegistryKey(site.name) === nameKey,
   );
 
   if (candidates.length === 0) {
