@@ -125,10 +125,10 @@ async function main() {
 
   const weekRes = await getWeek(new Request(`http://localhost/api/schedule/week?weekStart=${weekStart}&kind=normal`));
   const weekJson = await weekRes.json();
-  const users = Array.isArray(weekJson.users) ? weekJson.users : [];
+  const users: unknown[] = Array.isArray(weekJson.users) ? weekJson.users : [];
   const grid = weekJson.grid && typeof weekJson.grid === 'object' ? weekJson.grid : {};
   const saitoUsers = users.filter(
-    (user): user is { id: string; name: string | null } => typeof user?.id === 'string' && typeof user?.name === 'string' && user.name.includes('斎藤忠夫'),
+    (user): user is { id: string; name: string | null } => typeof (user as { id?: unknown })?.id === 'string' && typeof (user as { name?: unknown })?.name === 'string' && (user as { name: string }).name.includes('斎藤忠夫'),
   );
 
   let groupedSample: {
@@ -146,7 +146,7 @@ async function main() {
     routeGroupedCell = sampleGrid[sampleGroupedCell.day] ?? null;
   }
 
-  for (const user of users) {
+  for (const user of users as Array<{ id?: unknown; name?: unknown }>) {
     const userId = typeof user?.id === 'string' ? user.id : '';
     if (!userId) continue;
     const byDay = grid[userId] && typeof grid[userId] === 'object' ? (grid[userId] as Record<string, unknown>) : {};

@@ -804,7 +804,7 @@ async function updateSharedSyncUsers(
 
   try {
     await db.$executeRaw(
-      Prisma.sql`UPDATE "User" SET ${Prisma.join(assignments, Prisma.sql`, `)} WHERE "id" IN (${Prisma.join(userIds)})`,
+      Prisma.sql`UPDATE "User" SET ${Prisma.join(assignments, ', ')} WHERE "id" IN (${Prisma.join(userIds)})`,
     );
   } catch (error) {
     if (Object.prototype.hasOwnProperty.call(patch, 'showInSchedule')) {
