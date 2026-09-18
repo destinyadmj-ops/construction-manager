@@ -108,7 +108,7 @@
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
   - 原因1: scripts/tmp-validate-shared-sync.ts の検証用一時スクリプトが暗黙 any 型でtypecheckに失敗（デバッグ用にpushされたまま）。
   - 原因2: src/server/shared-excel-sync.ts:807 で `Prisma.join(assignments, Prisma.sql\`, \`)` と区切り文字にSqlオブジェクトを渡していた（正しくは文字列 `', '`）。
-  - 対策: 両ファイルを最小修正（型注釈追加・区切り文字を文字列化）。typecheck/lint通過を確認後コミット予定。B（作業表☆同期担当）は次回このtmpスクリプトをコミット対象から外すかbuild除外を検討してください。
+  - 対策: 両ファイルを最小修正（型注釈追加・区切り文字を文字列化）。typecheck/lint通過を確認しコミット8baf02f/4ce88c1でpush済み。deploy run 35308262847 success で本番反映済み（2026-09-18 13:51頃 JST）。B（作業表☆同期担当）は次回このtmpスクリプトをコミット対象から外すかbuild除外を検討してください。
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
   - 原因1: gridPrefs 読込が remote ui-setting を常に優先し、local の新しい値を古い remote で上書き。
   - 原因2: AppHeader/WeekHub が UserGate より先に mount し、silent restore 前は anon キー保存→user キー読込で分裂。
