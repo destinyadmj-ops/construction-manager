@@ -105,6 +105,10 @@
 - (B) 作業表☆自動同期は BullMQ `shared-sync` queue を新設し、worker 常駐 polling（既定2秒）で共有フォルダの source key（作業表/作業伝票の file+mtime）変化時のみ enqueue 実行する方針。初回起動時の自動実行は既定OFF（`SHARED_SYNC_POLL_SYNC_ON_START=1` で有効化）。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
+- (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
+  - 原因1: scripts/tmp-validate-shared-sync.ts の検証用一時スクリプトが暗黙 any 型でtypecheckに失敗（デバッグ用にpushされたまま）。
+  - 原因2: src/server/shared-excel-sync.ts:807 で `Prisma.join(assignments, Prisma.sql\`, \`)` と区切り文字にSqlオブジェクトを渡していた（正しくは文字列 `', '`）。
+  - 対策: 両ファイルを最小修正（型注釈追加・区切り文字を文字列化）。typecheck/lint通過を確認後コミット予定。B（作業表☆同期担当）は次回このtmpスクリプトをコミット対象から外すかbuild除外を検討してください。
 - (B) 症状: 週表「日付幅」を195にしても戻る／週月年が個別保存に見えない。
   - 原因1: gridPrefs 読込が remote ui-setting を常に優先し、local の新しい値を古い remote で上書き。
   - 原因2: AppHeader/WeekHub が UserGate より先に mount し、silent restore 前は anon キー保存→user キー読込で分裂。
