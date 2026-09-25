@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   mergeUserCandidates,
   readCachedUserCandidates,
@@ -36,6 +36,51 @@ type MeResponse =
 
 type ExistingLoginMode = 'select' | 'password' | 'setup';
 type GateScreen = 'home' | 'existing-auth';
+
+type AuthMeContextUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  canEditSchedule: boolean;
+  canGrantScheduleEdit: boolean;
+};
+
+type AuthMeContextValue = {
+  user: AuthMeContextUser | null;
+  editConfigured: boolean;
+  editEnabled: boolean;
+};
+
+const DEFAULT_AUTH_ME_CONTEXT: AuthMeContextValue = { user: null, editConfigured: false, editEnabled: true };
+
+// UserGate が起動時に一度だけ取得した /api/auth/me の結果を子ツリー全体で共有するための Context。
+// week-hub 側の独自 /api/auth/me 再取得を廃止し、この Context を参照させることで重複フェッチを解消する。
+const AuthMeContext = createContext<AuthMeContextValue>(DEFAULT_AUTH_ME_CONTEXT);
+
+export function useAuthMeContext(): AuthMeContextValue {
+  return useContext(AuthMeContext);
+}
+
+function parseAuthMeContextValue(obj: Record<string, unknown> | null): AuthMeContextValue {
+  if (!obj || obj.ok !== true) return DEFAULT_AUTH_ME_CONTEXT;
+  const editMode = asObject(obj.editMode);
+  const raw = asObject(obj.user);
+  const user: AuthMeContextUser | null =
+    raw && typeof raw.id === 'string'
+      ? {
+          id: raw.id,
+          name: typeof raw.name === 'string' ? raw.name : null,
+          email: typeof raw.email === 'string' ? raw.email : null,
+          canEditSchedule: raw.canEditSchedule === true,
+          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
+        }
+      : null;
+  return {
+    user,
+    editConfigured: editMode?.configured === true,
+    editEnabled: editMode ? editMode.enabled === true : true,
+  };
+}
 
 const LOGIN_MEMORY_KEY = 'masterHub.loginMemory.v1';
 const DEVICE_KEY_STORAGE_KEY = 'masterHub.deviceKey.v1';
@@ -196,6 +241,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<{ id: string; name: string | null; email: string | null } | null>(null);
+  const [authMeCtx, setAuthMeCtx] = useState<AuthMeContextValue>(DEFAULT_AUTH_ME_CONTEXT);
   const [open, setOpen] = useState(false);
 
   const [users, setUsers] = useState<ApiUser[]>([]);
@@ -261,6 +307,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = performance.now();
     void (async () => {
       const restoreRememberedUser = async () => {
         const memory = readLoginMemory();
@@ -290,12 +337,17 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           if (!restore.ok || restoredObj?.ok !== true) return false;
 
           const meRes = await fetch('/api/auth/me');
-          const meJson = (await meRes.json().catch(() => null)) as MeResponse;
-          if (!meRes.ok || meJson.ok !== true || !meJson.user) return false;
+          const meRaw = (await meRes.json().catch(() => null)) as unknown;
+          const meObj = asObject(meRaw);
+          if (!meRes.ok || meObj?.ok !== true) return false;
+          const meUserObj = asObject(meObj.user);
+          const meUserId = getString(meUserObj, 'id');
+          if (!meUserId) return false;
 
           if (cancelled) return true;
-          setMe({ id: meJson.user.id, name: meJson.user.name, email: meJson.user.email });
-          writeLoginMemory(meJson.user.id, meJson.user.kind);
+          setMe({ id: meUserId, name: getString(meUserObj, 'name'), email: getString(meUserObj, 'email') });
+          setAuthMeCtx(parseAuthMeContextValue(meObj));
+          writeLoginMemory(meUserId, getString(meUserObj, 'kind') === 'DAILY' ? 'DAILY' : 'NORMAL');
           setOpen(false);
           return true;
         } catch {
@@ -306,6 +358,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       try {
         const r = await fetch('/api/auth/me');
         const j = (await r.json().catch(() => null)) as unknown;
+        console.info(`[perf][user-gate] auth/me fetch: ${Math.round(performance.now() - startedAt)}ms`);
         const obj = asObject(j);
         if (!r.ok || obj?.ok !== true) {
           if (cancelled) return;
@@ -326,6 +379,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         if (id) {
           setMe({ id, name: nameVal, email: emailVal });
+          setAuthMeCtx(parseAuthMeContextValue(obj));
           writeLoginMemory(id, kindVal === 'DAILY' ? 'DAILY' : 'NORMAL');
           setOpen(false);
         } else {
@@ -453,7 +507,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return userId ? users.find((user) => user.id === userId) ?? null : null;
   })();
 
-  if (loading) return <>{children}</>;
+  if (loading) return <AuthMeContext.Provider value={authMeCtx}>{children}</AuthMeContext.Provider>;
 
   const closeIfPossible = () => {
     if (!me) return;
@@ -663,7 +717,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <>
+    <AuthMeContext.Provider value={authMeCtx}>
       <div className="min-h-screen">
         {children}
       </div>
@@ -870,6 +924,6 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       ) : null}
-    </>
+    </AuthMeContext.Provider>
   );
 }

@@ -85,3 +85,6 @@ run-dev*.cmd
 
 # stray local debug capture
 utputFormat
+
+# ad-hoc validation scripts (never commit debug tooling)
+/scripts/tmp-*.ts

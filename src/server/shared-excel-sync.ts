@@ -57,6 +57,8 @@ type SharedSyncCounts = {
   workSlipsCreated: number;
   workSlipsSkipped: number;
   unknownUsers: number;
+  furiganaSitesBackfilled: number;
+  furiganaSummariesBackfilled: number;
 };
 
 type SharedSyncUserRecord = {
@@ -126,6 +128,32 @@ function normalizeHeader(text: string): string {
 
 function normalizeKey(text: string | null | undefined): string {
   return normalizeRegistryText(text).replace(/\s+/g, '').toLocaleLowerCase('ja-JP');
+}
+
+const USER_NAME_VARIANT_GROUPS: string[][] = [
+  ['斎', '斉', '齋', '齊'],
+  ['辺', '邊', '邉'],
+  ['高', '髙'],
+  ['崎', '﨑'],
+  ['桜', '櫻'],
+  ['沢', '澤'],
+  ['広', '廣'],
+  ['国', '國'],
+  ['浜', '濱'],
+];
+
+const USER_NAME_VARIANT_CHAR_MAP: ReadonlyMap<string, string> = new Map(
+  USER_NAME_VARIANT_GROUPS.flatMap((group) => group.map((ch) => [ch, group[0]] as const)),
+);
+
+// User-name matching only; must not affect site/company registry keys.
+function normalizeUserKey(text: string | null | undefined): string {
+  const base = normalizeKey(text);
+  let result = '';
+  for (const ch of base) {
+    result += USER_NAME_VARIANT_CHAR_MAP.get(ch) ?? ch;
+  }
+  return result;
 }
 
 function toCellText(value: unknown): string {
@@ -466,7 +494,7 @@ function splitAssignees(...inputs: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const token of tokens) {
-    const key = normalizeKey(token);
+    const key = normalizeUserKey(token);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     result.push(token);
@@ -731,6 +759,107 @@ function normalizedSummaryMatches(left: string | null | undefined, right: string
   return leftKey === rightKey;
 }
 
+function hasReadingParens(text: string): boolean {
+  return /[（(]\s*[ぁ-ゖァ-ヺー・･\s]+\s*[）)]/u.test(text);
+}
+
+async function listSitesForFuriganaBackfill(kind: SiteKind): Promise<Array<{ id: string; name: string; companyName: string | null }>> {
+  const items: Array<{ id: string; name: string; companyName: string | null }> = [];
+  let cursor: string | null = null;
+
+  for (;;) {
+    const args: Parameters<typeof prisma.site.findMany>[0] = {
+      where: { kind },
+      select: { id: true, name: true, companyName: true },
+      orderBy: { id: 'asc' },
+      take: 1000,
+    };
+    if (cursor) {
+      args.cursor = { id: cursor };
+      args.skip = 1;
+    }
+
+    const batch = await prisma.site.findMany(args);
+    items.push(...batch);
+    if (batch.length < 1000) break;
+    cursor = batch[batch.length - 1]?.id ?? null;
+    if (!cursor) break;
+  }
+
+  return items;
+}
+
+// Only strips reading-parens still absent from the current 作業表☆ site names, so unrelated parens survive.
+async function backfillFuriganaFromWorkTable(
+  kind: SiteKind,
+  scheduleRows: WorkTableRow[],
+): Promise<{ sitesUpdated: number; summariesUpdated: number }> {
+  const currentSiteNameKeys = new Set<string>();
+  const currentCompanyNameKeys = new Set<string>();
+  for (const row of scheduleRows) {
+    if (row.companyName) currentCompanyNameKeys.add(normalizeKey(row.companyName));
+    for (const entry of row.entries) currentSiteNameKeys.add(normalizeKey(entry.siteName));
+  }
+
+  let sitesUpdated = 0;
+  const sites = await listSitesForFuriganaBackfill(kind);
+  for (const site of sites) {
+    const patch: { name?: string; companyName?: string | null } = {};
+
+    if (hasReadingParens(site.name)) {
+      const stripped = normalizeTextStrippingReadingParens(site.name);
+      if (stripped && stripped !== site.name && currentSiteNameKeys.has(normalizeKey(stripped))) {
+        patch.name = stripped;
+      }
+    }
+
+    if (site.companyName && hasReadingParens(site.companyName)) {
+      const strippedCompany = normalizeTextStrippingReadingParens(site.companyName);
+      if (strippedCompany && strippedCompany !== site.companyName && currentCompanyNameKeys.has(normalizeKey(strippedCompany))) {
+        patch.companyName = strippedCompany;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) continue;
+    await prisma.site.update({ where: { id: site.id }, data: patch, select: { id: true } });
+    sitesUpdated += 1;
+  }
+
+  let summariesUpdated = 0;
+  let cursor: string | null = null;
+  for (;;) {
+    const args: Parameters<typeof prisma.workEntry.findMany>[0] = {
+      where: { kind, summary: { not: null } },
+      select: { id: true, summary: true },
+      orderBy: { id: 'asc' },
+      take: 1000,
+    };
+    if (cursor) {
+      args.cursor = { id: cursor };
+      args.skip = 1;
+    }
+
+    const batch = await prisma.workEntry.findMany(args);
+    if (batch.length === 0) break;
+
+    for (const entry of batch) {
+      const summary = entry.summary ?? '';
+      if (!summary || !hasReadingParens(summary)) continue;
+      const stripped = normalizeTextStrippingReadingParens(summary);
+      if (!stripped || stripped === summary || !currentSiteNameKeys.has(normalizeKey(stripped))) continue;
+
+      await prisma.workEntry.update({ where: { id: entry.id }, data: { summary: stripped }, select: { id: true } });
+      summariesUpdated += 1;
+    }
+
+    if (batch.length < 1000) break;
+    cursor = batch[batch.length - 1]?.id ?? null;
+    if (!cursor) break;
+  }
+
+  return { sitesUpdated, summariesUpdated };
+}
+
 async function listSharedSyncUsers(
   db: Pick<Prisma.TransactionClient, 'user'> | typeof prisma,
   kind: SiteKind,
@@ -742,7 +871,7 @@ async function listSharedSyncUsers(
       select: { id: true, name: true, showInSchedule: true, createdAt: true },
       take: 500,
     });
-  } catch (error) {
+  } catch {
     try {
       const fallbackUsers = await db.user.findMany({
         where: { kind },
@@ -964,6 +1093,8 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     workSlipsCreated: 0,
     workSlipsSkipped: 0,
     unknownUsers: 0,
+    furiganaSitesBackfilled: 0,
+    furiganaSummariesBackfilled: 0,
   };
 
   const touchedSiteIds = new Set<string>();
@@ -1038,7 +1169,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const assigneeKeyOrder: string[] = [];
   for (const row of scheduleRows) {
     for (const assignee of row.assignees) {
-      const key = normalizeKey(assignee);
+      const key = normalizeUserKey(assignee);
       if (!key || assigneeNameByKey.has(key)) continue;
       assigneeNameByKey.set(key, assignee);
       assigneeKeyOrder.push(key);
@@ -1070,7 +1201,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const consolidateDuplicateUsers = async (sourceUsers: SharedSyncUserRecord[]) => {
     const byNameKey = new Map<string, SharedSyncUserRecord[]>();
     for (const user of sourceUsers) {
-      const key = normalizeKey(user.name);
+      const key = normalizeUserKey(user.name);
       if (!key) continue;
       const hit = byNameKey.get(key) ?? [];
       hit.push(user);
@@ -1105,7 +1236,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
   const usersAfterByKey = new Map<string, SharedSyncUserRecord[]>();
   for (const user of usersAfterConsolidation) {
-    const key = normalizeKey(user.name);
+    const key = normalizeUserKey(user.name);
     if (!key) continue;
     const hit = usersAfterByKey.get(key) ?? [];
     hit.push(user);
@@ -1124,7 +1255,8 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     const existing = userByName.get(key);
     if (existing) {
       const patch: { name?: string | null; showInSchedule?: boolean } = {};
-      if ((existing.name ?? '').trim() !== assigneeName) patch.name = assigneeName;
+      // Keep the canonical spelling instead of flipping between kanji variants each sync.
+      if (!(existing.name ?? '').trim()) patch.name = assigneeName;
       if (!existing.showInSchedule) patch.showInSchedule = true;
 
       if (Object.keys(patch).length > 0) {
@@ -1136,7 +1268,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     }
 
     const refreshedUsers = await listSharedSyncUsers(prisma, kind);
-    const refreshedCandidates = refreshedUsers.filter((user) => normalizeKey(user.name) === key);
+    const refreshedCandidates = refreshedUsers.filter((user) => normalizeUserKey(user.name) === key);
     const refreshedCanonical = selectCanonicalUser(refreshedCandidates);
     if (refreshedCanonical) {
       userByName.set(key, {
@@ -1211,7 +1343,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     }
 
     for (const assignee of row.assignees) {
-      const user = userByName.get(normalizeKey(assignee));
+      const user = userByName.get(normalizeUserKey(assignee));
       if (!user) {
         counts.unknownUsers += 1;
         continue;
@@ -1455,6 +1587,10 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
       warnings.push(`作業伝票コピーはスキップしました: ${message}`);
     }
   }
+
+  const furiganaBackfill = await backfillFuriganaFromWorkTable(kind, scheduleRows);
+  counts.furiganaSitesBackfilled = furiganaBackfill.sitesUpdated;
+  counts.furiganaSummariesBackfilled = furiganaBackfill.summariesUpdated;
 
   if (counts.unknownUsers > 0) {
     warnings.push(`担当者名が一致しない行が ${counts.unknownUsers} 件あり、週予定へは未反映です。`);

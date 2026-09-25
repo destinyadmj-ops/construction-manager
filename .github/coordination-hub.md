@@ -68,11 +68,13 @@
 | done | B | scripts/package-desktop.ps1, public/desktop-release.json, apps/desktop/package.json, apps/desktop/package-lock.json, public/downloads/Master-Hub-Setup-0.1.4.exe | 既存0.1.3導線を流用して desktop installer 基準版 0.1.4 を作成・配置。/api/desktop-release=0.1.4、SHA256一致、Desktop出力まで確認 | 2026-09-12 |
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx | 作業表☆同期の不整合修正（斎藤忠夫重複統合、黒赤グループ保証、ふりがな除去）を最小差分で実装。preview→sync→再sync検証、lint/typecheck通過 | 2026-09-12 |
 | done | B | apps/desktop/main.cjs, app/sw-register.tsx, app/week-hub.tsx, src/server/shared-excel-sync.ts, app/api/sites/shared-sync/route.ts, src/server/queue/queues.ts, scripts/worker.ts | Desktop再読込遅延の計測と最小改善、作業表☆自動検知同期（interval polling + queue/worker）実装と検証 | 2026-09-15 |
-| editing | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx, app/api/sites/shared-sync/route.ts | 作業表☆→週予定DBの未反映修正（duplicate canonicalization強化、既存shared行の再構成、site名正規化統一、preview/sync再検証） | 2026-09-18 |
+| done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx, app/api/sites/shared-sync/route.ts | 作業表☆→週予定DBの未反映修正（duplicate canonicalization強化、既存shared行の再構成、site名正規化統一、preview/sync再検証） | 2026-09-18 |
+| done | B | src/server/shared-excel-sync.ts | ユーザー名異体字統合（斎/齊/齋 等の同値マップ）とMASTERHUB側ふりがなbackfill追加。合成データで統合/backfillとも動作確認、実データでreはsync非増殖(155→155)確認 | 2026-09-24 |
+| done | B | app/user-gate.tsx, app/week-hub.tsx, app/api/schedule/week/route.ts | ブラウザ版reload/初期表示10秒の実測(perf計装)と最小差分修正(auth/me重複解消・並列化)。prisma/schema.prismaは実測結果により未変更 | 2026-09-25 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
-- B（エラー調査）: gridPrefs「日付幅195が戻る」修正は production(build 09:48:49Z)に**完全反映済み・revert不要**と確認。lint/typecheck OK。台帳を Git 追跡正本化（.github/coordination-hub.md）し PC 間引き継ぎを構築。
+- B（エラー調査）: gridPrefs「日付幅195が戻る」修正は production(build 09:48:49Z)に**完全反映済み・revert不要**と確認。lint/typecheck OK。台帳を Git 追跡正本化（.github/coordination-hub.md）し PC 間引き継ぎを構築。ブラウザ版reload10秒調査は完了（auth/me重複5→3・並列化・index追加なしの判断、詳細は決定・方針ログ/失敗ログ参照）。lint/typecheck OK、実ビルドでの前後実測OK、e2e失敗は既存(環境要因)で今回変更と無関係と確認済み。次はElectronメモリ調査(未着手)。
 - C（日本語設定）: TEAM-VERIFY-TEMPLATE.md を追加し、app/live-build-sync.tsx を layout に導入。production build 10:50:04.139Z に反映済み。Desktop 0.1.3 導入済み環境では、通常の Web-only deploy は約15秒または focus 復帰で追従する前提へ更新。
 
 ## バージョン基準（現状アプリ・2026-06-02）
@@ -103,6 +105,9 @@
 - (B) sharedExcelSync 色は API 側で meta 優先を固定し、meta 色欠落時も scheduleGroupIndex から昼(default)/夜(red)を復元する方針を week/month へ適用。
 - (B) Desktop 再読込遅延の最小差分方針として、SW/Cache リセット責務を `apps/desktop/main.cjs` に一本化し、`app/sw-register.tsx` の Electron 分岐は no-op 化。`app/week-hub.tsx` は初回 fetch のみ待機0ms・2回目以降のみ 250ms を維持。
 - (B) 作業表☆自動同期は BullMQ `shared-sync` queue を新設し、worker 常駐 polling（既定2秒）で共有フォルダの source key（作業表/作業伝票の file+mtime）変化時のみ enqueue 実行する方針。初回起動時の自動実行は既定OFF（`SHARED_SYNC_POLL_SYNC_ON_START=1` で有効化）。
+- (B) shared sync 未反映修正では、duplicate user 統合を「今回Excelに出た担当者」依存から全同名ユーザー対象へ拡張し、shared既存行は meta欠落/不整合でも userId+day+siteId+summary 一致なら再構成対象へ寄せる。site名は server/mobile で同一正規化（ふりがな括弧のみ除去）を共有する。
+- (B) ユーザー名照合専用に漢字異体字同値マップ（斎/斉/齋/齊、辺/邊/邉、高/髙、崎/﨑 等）を追加し、site/company名の正規化キーとは分離した `normalizeUserKey()` でのみ適用。canonical選定は既存どおり global order優先→createdAt最古→id比較。表示名は canonical 側の既存表記を優先し、名前欄が空の場合のみ Excel 側表記で埋める（variant間での表記揺れ・巻き戻りを防止）。
+- (B) MASTERHUB側だけに残るふりがなの backfill を追加。現在の 作業表☆ から得た site 名/会社名のキー集合と突き合わせ、Site.name/companyName と WorkEntry.summary の読み仮名括弧のみを安全に除去（一致しないものは保持）。sharedExcelSync 管理範囲内の行は通常の再構成で既にクリーンな表記に置き換わるため、backfill は主に管理範囲外の旧データに効く。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
@@ -126,6 +131,13 @@
 - (B) shared-sync route 検証で preview→sync→再sync は成功。2回目で shared 件数再増殖なし（1768→1768）を確認。sync 検証で .storage/sites 配下に作業伝票コピーが新規生成される点は既存仕様どおり。
 - (B) Desktop perf 計測で `npm run dev --prefix apps/desktop` は `node main.cjs` 起動のため Electron API が使えず失敗（app undefined）。計測実行は `npx electron apps/desktop/main.cjs` または packaging 後 exe 起動で行う。
 - (B) shared-sync 自動同期の実行検証は `npm run worker` で Redis 未接続（`REDIS_URL` 未設定）により本番経路まで未確認。型検査/lint は通過済み。
+- (B) 2026-09-18 shared-sync 検証: preview 200 / sync 200 / 再sync 後 shared件数 148→148 で再増殖なし。week route で黒(default)+赤(red)2段groups を確認、ふりがな括弧残存は shared行・week payload とも未検出。ローカルDBは `User.showInSchedule` と `StoredDocumentKind.WORK_SLIP` 非対応の旧schemaだったため、そこは best-effort fallback を追加。
+- (B) 2026-09-24 異体字統合/ふりがなbackfill検証: 実データ(NORMAL)で preview 200 / sync→再sync で shared件数 155→155 非増殖、黒(default)+赤(red)2段groups維持を確認。実データに現状 斎藤/髙橋 等の異体字重複・残存ふりがなは無かったため、合成テスト（同読み異体字ユーザー2件を作成しWorkEntryを付与→sync実行でcanonical側へ再付け替えを確認／Site.name・WorkEntry.summaryへ読み仮名括弧を注入→sync実行で除去を確認、いずれもテストデータは実行後に削除）で動作を直接検証。ローカルDBは `User.createdAt` 列はあるが `showInSchedule` 列が無い旧schemaのため、canonical選定は事実上 id文字列比較にフォールバックする点に留意。
+- (B) 2026-09-25 ブラウザ版reload10秒調査: 実測用に本番相当ビルド(`next build`+`next start` port 3001、既存port 3000は他chat/実利用中のため触らず)で計測。修正前は `/api/auth/me` がreload毎に**5回**発火（UserGate本体1回＋週表(app/week-hub.tsx)独自fetch1回＋app/header.tsx・app/color-edit-controller.tsxの独自fetch各1回相当＋復元系1回）。`/api/schedule/week`のServer-Timingは users=20-320ms/entries=50-680ms/total=80-430ms程度で推移し、報告の10秒に対して支配的ではないと判断（**`(kind,startAt)`複合indexは追加しない**、実測未確認のためprisma/schema.prismaは無変更で確定）。
+- (B) 対策: UserGate(app/user-gate.tsx)がmount時に取得した`/api/auth/me`結果(user+editMode)を`AuthMeContext`として子ツリーへ提供し、app/week-hub.tsxは独自fetchをやめてcontext参照のみに変更（fetch回数 週表分は1→0）。またapp/week-hub.tsxの`resolveEffectiveUserId→loadUserOrder→loadGridPrefs`直列awaitのうち、loadGridPrefsはuidに依存しないためPromise.allで並列化。再ビルド後の実測でreload毎の`/api/auth/me`発火は5→3（残り3件はapp/header.tsx・app/color-edit-controller.tsxの独自fetchおよびUserGate本体で、今回のロック範囲外のため未着手＝follow-up候補）。lint/typecheck OK。
+- (B) 追加の実測所見（未修正・follow-up候補）: `resolveEffectiveUserId`の依存配列に`data?.users`等スケジュールデータが含まれるため、初期表示中にスケジュールが数回更新される間に同effectが2〜3回再実行され、その都度`/api/ui-settings`（userOrder/gridPrefs）へ本物の再フェッチが発生し200〜800ms程度を追加消費している。依存を安定化する修正は挙動変化のリスクがあり今回のスコープ外と判断し実施せず、原因のみ記録。
+- (B) 2026-09-25 e2e確認: `npm run e2e`実行結果、`schedule cell/swap-cells/auto-fill`系や`weekhub: drag...`系は`/api/sites`へのadmin POSTやloginAsが早期に失敗（管理者トークン/Redis未設定等、環境要因）しており、修正前ビルド(port 3000の旧buildそのまま)・修正後ビルド(port 3001)の両方で同一の15件が失敗＝**今回の変更に起因する回帰ではない**ことを確認。DBへの実書き込みは早期失敗のため発生せず（`E2E Gate User`等の汚染行なし、`total users`はテスト前後で一致）。
+- (B) 【重要・全chat向け】このPCの`.env.local`の`DATABASE_URL`はlocalhost Dockerではなく**リモートSupabase pooler**（aws-1-ap-northeast-1.pooler.supabase.com、実在の従業員名/現場名を含む本番相当データ）を指しており、dotenvは`.env`より`.env.local`を優先するため、ローカルの`npm run dev`/`build`/`start`/`e2e`は全てこのリモートDBに対して実行される。`.env`/`.env.local`はgitignore対象でPC固有のため、他PC/他chatでは値が異なる可能性がある。e2eや検証スクリプトを書く/実行する前に、必ず有効な`DATABASE_URL`のhostを確認してから書き込み系操作を行うこと（既知の落とし穴として/memories/repo/build-notes.mdにも追記）。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。

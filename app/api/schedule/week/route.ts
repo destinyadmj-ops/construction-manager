@@ -236,6 +236,7 @@ function buildCellGroups(items: Array<{ label: string; color: LabelColor; kind: 
 // - columns: 7 days
 // - cell: up to 2 WorkEntry notes (sorted by startAt)
 export async function GET(request: Request) {
+  const handlerStartedAt = performance.now();
   const url = new URL(request.url);
   const weekStartParam = (url.searchParams.get('weekStart') ?? '').trim();
   const kindParam = (url.searchParams.get('kind') ?? '').trim().toLowerCase();
@@ -250,8 +251,11 @@ export async function GET(request: Request) {
 
   const days = Array.from({ length: 7 }, (_, i) => toYmd(addDays(weekStart, i)));
 
+  const usersStartedAt = performance.now();
   const users = await listVisibleScheduleUsers(kind);
+  const usersElapsedMs = Math.round(performance.now() - usersStartedAt);
 
+  const entriesStartedAt = performance.now();
   const entries = await prisma.workEntry.findMany({
     where: {
       startAt: { gte: since, lt: until },
@@ -268,6 +272,8 @@ export async function GET(request: Request) {
       site: { select: { name: true, companyName: true, scheduleLabelColor: true } },
     },
   });
+  const entriesElapsedMs = Math.round(performance.now() - entriesStartedAt);
+
 
   const grid: Record<
     string,
@@ -340,5 +346,15 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({ ok: true, weekStart: toYmd(weekStart), days, users, grid }, { headers: NO_STORE_HEADERS });
+  const totalElapsedMs = Math.round(performance.now() - handlerStartedAt);
+  console.info(
+    `[perf][api/schedule/week] users=${usersElapsedMs}ms entries=${entriesElapsedMs}ms total=${totalElapsedMs}ms userCount=${users.length} entryCount=${entries.length}`,
+  );
+
+  return Response.json({ ok: true, weekStart: toYmd(weekStart), days, users, grid }, {
+    headers: {
+      ...NO_STORE_HEADERS,
+      'Server-Timing': `users;dur=${usersElapsedMs}, entries;dur=${entriesElapsedMs}, total;dur=${totalElapsedMs}`,
+    },
+  });
 }

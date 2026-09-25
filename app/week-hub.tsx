@@ -60,6 +60,7 @@ import {
 } from '@/shared/schedule-return';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { useHeaderActions } from './header-actions';
+import { useAuthMeContext } from './user-gate';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
 type ViewMode = 'week' | 'month' | 'year';
@@ -1050,6 +1051,7 @@ function WeekHubInner() {
   const [editEnabled, setEditEnabled] = useState(true);
   const [editActive, setEditActive] = useState(false);
   const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
+  const authMeContextValue = useAuthMeContext();
   const [rememberedGridPrefsOwnerId] = useState<string | null>(() => readRememberedLoginUserId());
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editPassword, setEditPassword] = useState('');
@@ -1748,48 +1750,32 @@ function WeekHubInner() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as unknown;
-        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!mounted || o?.ok !== true) return;
-        const editMode = o.editMode && typeof o.editMode === 'object' ? (o.editMode as Record<string, unknown>) : null;
-        setEditConfigured(editMode?.configured === true);
-        setEditEnabled(editMode ? editMode.enabled === true : true);
-        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
-        if (!raw || typeof raw.id !== 'string') {
-          setAuthMeUser(null);
-          return;
-        }
-        setAuthMeUser({
-          id: raw.id,
-          name: typeof raw.name === 'string' ? raw.name : null,
-          email: typeof raw.email === 'string' ? raw.email : null,
-          canEditSchedule: raw.canEditSchedule === true,
-          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
-        });
-      })
-      .catch(() => {
-        if (mounted) setAuthMeUser(null);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    console.info('[perf][week-hub] auth/me from UserGate context (no independent fetch)');
+    setEditConfigured(authMeContextValue.editConfigured);
+    setEditEnabled(authMeContextValue.editEnabled);
+    setAuthMeUser(authMeContextValue.user);
+  }, [authMeContextValue]);
 
   useEffect(() => {
     let mounted = true;
+    const startedAt = performance.now();
     void (async () => {
       const uid = await resolveEffectiveUserId();
+      const afterResolve = Math.round(performance.now() - startedAt);
       if (!mounted) return;
-      await loadUserOrder(uid);
-      await loadGridPrefs(gridPrefsOwnerId, gridPrefsRemoteUserId, gridPrefsKey);
+      // loadUserOrder は uid のみ、loadGridPrefs は gridPrefsOwnerId/gridPrefsRemoteUserId のみに依存し、
+      //互いの結果を待つ必要が無いため並列実行する。
+      await Promise.all([loadUserOrder(uid), loadGridPrefs(gridPrefsOwnerId, gridPrefsRemoteUserId, gridPrefsKey)]);
+      const afterBoth = Math.round(performance.now() - startedAt);
+      console.info(
+        `[perf][week-hub] resolveEffectiveUserId=${afterResolve}ms loadUserOrder+loadGridPrefs(parallel)=${afterBoth - afterResolve}ms total=${afterBoth}ms`,
+      );
     })();
     return () => {
       mounted = false;
     };
   }, [gridPrefsKey, gridPrefsOwnerId, gridPrefsRemoteUserId, loadGridPrefs, loadUserOrder, resolveEffectiveUserId]);
+
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
