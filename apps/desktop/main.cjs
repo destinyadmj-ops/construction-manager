@@ -4,6 +4,8 @@ const fs = require('node:fs');
 
 const PERF_LOG_ENABLED = process.env.MASTER_HUB_PERF_LOG === '1';
 const PERF_AUTO_RELOAD_ONCE = process.env.MASTER_HUB_PERF_AUTO_RELOAD === '1';
+const MEM_LOG_ENABLED = process.env.MASTER_HUB_MEM_LOG === '1';
+const MEM_LOG_INTERVAL_MS = Number(process.env.MASTER_HUB_MEM_LOG_INTERVAL_MS) || 15000;
 
 function perfNowMs() {
   return Date.now();
@@ -13,6 +15,26 @@ function perfLog(label, startedAtMs) {
   if (!PERF_LOG_ENABLED) return;
   const elapsed = Math.max(0, perfNowMs() - startedAtMs);
   console.log(`[perf][desktop] ${label}: ${elapsed}ms`);
+}
+
+function startMemorySampling() {
+  if (!MEM_LOG_ENABLED) return;
+  const startedAt = perfNowMs();
+  const sample = () => {
+    const elapsedSec = Math.round((perfNowMs() - startedAt) / 1000);
+    const main = process.memoryUsage();
+    console.log(
+      `[mem][desktop] t=${elapsedSec}s main.rss=${Math.round(main.rss / 1024 / 1024)}MB main.heapUsed=${Math.round(main.heapUsed / 1024 / 1024)}MB`,
+    );
+    for (const proc of app.getAppMetrics()) {
+      const wsMb = Math.round((proc.memory?.workingSetSize || 0) / 1024);
+      console.log(
+        `[mem][desktop] t=${elapsedSec}s pid=${proc.pid} type=${proc.type} workingSet=${wsMb}MB`,
+      );
+    }
+  };
+  sample();
+  setInterval(sample, MEM_LOG_INTERVAL_MS);
 }
 
 function normalizeHttpUrl(raw) {
@@ -493,6 +515,7 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+  startMemorySampling();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

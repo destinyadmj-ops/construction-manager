@@ -71,6 +71,7 @@
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx, app/api/sites/shared-sync/route.ts | 作業表☆→週予定DBの未反映修正（duplicate canonicalization強化、既存shared行の再構成、site名正規化統一、preview/sync再検証） | 2026-09-18 |
 | done | B | src/server/shared-excel-sync.ts | ユーザー名異体字統合（斎/齊/齋 等の同値マップ）とMASTERHUB側ふりがなbackfill追加。合成データで統合/backfillとも動作確認、実データでreはsync非増殖(155→155)確認 | 2026-09-24 |
 | done | B | app/user-gate.tsx, app/week-hub.tsx, app/api/schedule/week/route.ts | ブラウザ版reload/初期表示10秒の実測(perf計装)と最小差分修正(auth/me重複解消・並列化)。prisma/schema.prismaは実測結果により未変更 | 2026-09-25 |
+| editing | B | apps/desktop/main.cjs | Windows Electronデスクトップ版のメモリ消費増大の実測(RSS/heap計測)と原因究明。まず計測のみ、修正は原因確定後 | 2026-09-25 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
