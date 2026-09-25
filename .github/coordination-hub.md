@@ -71,11 +71,11 @@
 | done | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, src/server/site-registry.ts, app/api/schedule/week/route.ts, app/api/schedule/month/route.ts, app/mobile/week-hub/page.tsx, app/api/sites/shared-sync/route.ts | 作業表☆→週予定DBの未反映修正（duplicate canonicalization強化、既存shared行の再構成、site名正規化統一、preview/sync再検証） | 2026-09-18 |
 | done | B | src/server/shared-excel-sync.ts | ユーザー名異体字統合（斎/齊/齋 等の同値マップ）とMASTERHUB側ふりがなbackfill追加。合成データで統合/backfillとも動作確認、実データでreはsync非増殖(155→155)確認 | 2026-09-24 |
 | done | B | app/user-gate.tsx, app/week-hub.tsx, app/api/schedule/week/route.ts | ブラウザ版reload/初期表示10秒の実測(perf計装)と最小差分修正(auth/me重複解消・並列化)。prisma/schema.prismaは実測結果により未変更 | 2026-09-25 |
-| editing | B | apps/desktop/main.cjs | Windows Electronデスクトップ版のメモリ消費増大の実測(RSS/heap計測)と原因究明。まず計測のみ、修正は原因確定後 | 2026-09-25 |
+| done | B | apps/desktop/main.cjs | Windows Electronデスクトップ版のメモリ消費増大の実測(RSS/heap計測)。短時間(約5分)の試験では不定形増大なしと判断し修正は未実施(計測道具のみ残し、既定動作は不変) | 2026-09-25 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
-- B（エラー調査）: gridPrefs「日付幅195が戻る」修正は production(build 09:48:49Z)に**完全反映済み・revert不要**と確認。lint/typecheck OK。台帳を Git 追跡正本化（.github/coordination-hub.md）し PC 間引き継ぎを構築。ブラウザ版reload10秒調査は完了（auth/me重複5→3・並列化・index追加なしの判断、詳細は決定・方針ログ/失敗ログ参照）。lint/typecheck OK、実ビルドでの前後実測OK、e2e失敗は既存(環境要因)で今回変更と無関係と確認済み。次はElectronメモリ調査(未着手)。
+- B（エラー調査）: gridPrefs「日付幅195が戻る」修正は production(build 09:48:49Z)に**完全反映済み・revert不要**と確認。lint/typecheck OK。台帳を Git 追跡正本化（.github/coordination-hub.md）し PC 間引き継ぎを構築。ブラウザ版reload10秒調査は完了（auth/me重複5→3・並列化・index追加なしの判断、詳細は決定・方針ログ/失敗ログ参照）。lint/typecheck OK、実ビルドでの前後実測OK、e2e失敗は既存(環境要因)で今回変更と無関係と確認済み。Electronメモリ調査も完了（~5分観測でリーク未確認、修正なし。opt-in計測ツールのみ main.cjs に残置）。
 - C（日本語設定）: TEAM-VERIFY-TEMPLATE.md を追加し、app/live-build-sync.tsx を layout に導入。production build 10:50:04.139Z に反映済み。Desktop 0.1.3 導入済み環境では、通常の Web-only deploy は約15秒または focus 復帰で追従する前提へ更新。
 
 ## バージョン基準（現状アプリ・2026-06-02）
@@ -139,6 +139,7 @@
 - (B) 追加の実測所見（未修正・follow-up候補）: `resolveEffectiveUserId`の依存配列に`data?.users`等スケジュールデータが含まれるため、初期表示中にスケジュールが数回更新される間に同effectが2〜3回再実行され、その都度`/api/ui-settings`（userOrder/gridPrefs）へ本物の再フェッチが発生し200〜800ms程度を追加消費している。依存を安定化する修正は挙動変化のリスクがあり今回のスコープ外と判断し実施せず、原因のみ記録。
 - (B) 2026-09-25 e2e確認: `npm run e2e`実行結果、`schedule cell/swap-cells/auto-fill`系や`weekhub: drag...`系は`/api/sites`へのadmin POSTやloginAsが早期に失敗（管理者トークン/Redis未設定等、環境要因）しており、修正前ビルド(port 3000の旧buildそのまま)・修正後ビルド(port 3001)の両方で同一の15件が失敗＝**今回の変更に起因する回帰ではない**ことを確認。DBへの実書き込みは早期失敗のため発生せず（`E2E Gate User`等の汚染行なし、`total users`はテスト前後で一致）。
 - (B) 【重要・全chat向け】このPCの`.env.local`の`DATABASE_URL`はlocalhost Dockerではなく**リモートSupabase pooler**（aws-1-ap-northeast-1.pooler.supabase.com、実在の従業員名/現場名を含む本番相当データ）を指しており、dotenvは`.env`より`.env.local`を優先するため、ローカルの`npm run dev`/`build`/`start`/`e2e`は全てこのリモートDBに対して実行される。`.env`/`.env.local`はgitignore対象でPC固有のため、他PC/他chatでは値が異なる可能性がある。e2eや検証スクリプトを書く/実行する前に、必ず有効な`DATABASE_URL`のhostを確認してから書き込み系操作を行うこと（既知の落とし穴として/memories/repo/build-notes.mdにも追記）。
+- (B) 2026-09-25 Electronデスクトップメモリ調査: `apps/desktop/main.cjs`にオプトイン計測(`MASTER_HUB_MEM_LOG=1`で`app.getAppMetrics()`+`process.memoryUsage()`を定期ログ、既定はOFFで挙動不変)を追加し、本番同等の pinned electron v35(apps/desktopの devDependency)で実測。ローカルserver(weekタブ表示、操作なし放置)を約2回合計約5分計測した結果、Browser約85-120MB/GPU約130-151MB/Utility約53MB/Tab(renderer)約90-99MBで推移し合計約400MB前後で安定しており、単調増加(リーク)は確認できなかった（t=120s付近で一時的に2つ目GPUプロセスが現れたが短時間で消えた。Chromiumの GPU Info Collection 相当と推定し問題なしと判断）。**実測範囲内ではリーク未確認のため、修正は実施していない**（合計~400MBはElectron/Chromiumベースのアプリとして異常な水準ではない）。一方で、`app/week-hub.tsx`に`isElectronShell && mode==='week'`限定の**2秒間隔で週全体を再 fetch+setData**する背景ポーリングが存在し（Browser版には無いElectron固有ロジック）、長時間使用でのCPU/GC負荷・体感メモリ増大の最有力候補としてfollow-up候補に記録(今回の短時間計測ではこれも目立った増加は見られず、推測の域を出ない。数時間規模の長時間計測は本セッションでは未実施)。lint/typecheck OK。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。
