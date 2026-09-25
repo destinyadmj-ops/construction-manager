@@ -88,3 +88,6 @@ utputFormat
 
 # ad-hoc validation scripts (never commit debug tooling)
 /scripts/tmp-*.ts
+
+# runtime document storage (real business documents; local/prod volume only, never git)
+/.storage/
