@@ -73,6 +73,7 @@
 | done | B | app/user-gate.tsx, app/week-hub.tsx, app/api/schedule/week/route.ts | ブラウザ版reload/初期表示10秒の実測(perf計装)と最小差分修正(auth/me重複解消・並列化)。prisma/schema.prismaは実測結果により未変更 | 2026-09-25 |
 | done | B | apps/desktop/main.cjs | Windows Electronデスクトップ版のメモリ消費増大の実測(RSS/heap計測)。短時間(約5分)の試験では不定形増大なしと判断し修正は未実施(計測道具のみ残し、既定動作は不変) | 2026-09-25 |
 | editing | B | src/server/shared-excel-sync.ts, src/server/site-registry.ts, app/api/sites/shared-sync/route.ts | shared-sync未反映(斎藤忠夫重複)・赤文字/文字化け/現場リンクずれの切り分け(Phase0環境検証→Phase1-4) | 2026-09-25 |
+| editing | B | .git（全履歴・force-push予定） | 【要:全PC作業停止】.storageの実データ混入をgit historyから完全削除(filter-branch)。作業中は他PC/他chatでのpull/pushを保留すること。完了後この行にrewrite後の対応手順を追記 | 2026-09-29 |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
