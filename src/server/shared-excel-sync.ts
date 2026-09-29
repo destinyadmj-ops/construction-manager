@@ -208,13 +208,14 @@ function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: st
     result.push({ text, color });
   }
 
-  if (result.length > 0) return result;
-
-  const plainTextMatches = Array.from(rawRich.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
-  const plain = decodeXmlText(plainTextMatches.map((x) => x[1] ?? '').join(''));
-  if (!plain) return [];
-  return [{ text: plain, color: 'default' }];
+  // <r> run が無いセルはフォールバックで raw <t> を素朴に全走査しない。
+  // <rPh>(ふりがな注記)も内部に <t> を持つため、フォールバックだと本文+読み仮名が連結され文字化けする
+  // (実データ確認例: セル値「月」+ <rPh>「ゲツ」→ 誤って「月ゲツ」になる)。
+  // run が無い場合は呼び出し側 (splitSiteEntriesFromCell) の fallbackText(=cell.v由来の正常値)と
+  // detectCellEntryColor(セル単位のstyle色)に判定を委ねる。
+  return result;
 }
+
 
 function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
   const c = cell as { r?: unknown } | null;
