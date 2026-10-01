@@ -81,6 +81,12 @@ MASTER_HUB_STORAGE_DIR="/data/masterhub-storage"
 PRINT_OUTBOX_DIR="/data/masterhub-outbox/print"
 FAX_OUTBOX_DIR="/data/masterhub-outbox/fax"
 
+# 共有フォルダ(作業表☆/作業伝票)自動同期用。
+# 本番を動かす Docker Desktop のPCが共有フォルダのホストPCと同一の場合、
+# ネットワーク越しのCIFSマウントは不要。ホスト側ローカルパスを bind mount で直接コンテナへ渡す。
+SHARED_SOURCE_HOST_PATH="C:/path/to/共有フォルダ"
+MASTER_HUB_SHARED_SOURCE_DIR="/shared-source"
+
 # 認証（任意の強力なパスワードを設定）
 NEXTAUTH_SECRET="<ランダムな文字列>"
 
@@ -103,6 +109,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 - `masterhub_storage` ボリュームに写真・帳票の保存先を載せる
 - `masterhub_outbox` ボリュームに印刷/FAX 出力ファイルを載せる
 - まずは 1 台構成で十分で、Redis を外出しするのは負荷や可用性要件が出てからでよい
+- 共有フォルダ(作業表☆/作業伝票)自動同期を使う場合、本番ホスト上で共有フォルダが置かれているローカルパスを `SHARED_SOURCE_HOST_PATH` に設定する（未設定時はダミーの空フォルダがマウントされ同期は「ファイル無し」扱いになるだけで起動は失敗しない）。共有フォルダがこの本番PC自体でホストされている前提のため、別PC/NAS宛のネットワーク越しマウント設定は不要。
 
 #### 4. 動作確認
 
