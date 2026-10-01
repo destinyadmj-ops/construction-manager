@@ -113,7 +113,9 @@ export async function findMatchingSite(input: {
     return { site: blankCompany, matchType: 'name-only' };
   }
 
-  return { site: candidates[0] ?? null, matchType: candidates[0] ? 'name-only' : null };
+  // 会社名が完全一致せず、かつ会社名が空の候補も無い場合は、同名でも別会社の現場の可能性が高いため
+  // 妥協的に candidates[0] を選ばず「不一致」として扱う（誤った現場リンクを防止）。
+  return { site: null, matchType: null };
 }
 
 export async function backfillSiteCompanyName(siteId: string, companyName: string | null | undefined) {
