@@ -72,7 +72,7 @@
 | done | B | src/server/shared-excel-sync.ts | ユーザー名異体字統合（斎/齊/齋 等の同値マップ）とMASTERHUB側ふりがなbackfill追加。合成データで統合/backfillとも動作確認、実データでreはsync非増殖(155→155)確認 | 2026-09-24 |
 | done | B | app/user-gate.tsx, app/week-hub.tsx, app/api/schedule/week/route.ts | ブラウザ版reload/初期表示10秒の実測(perf計装)と最小差分修正(auth/me重複解消・並列化)。prisma/schema.prismaは実測結果により未変更 | 2026-09-25 |
 | done | B | apps/desktop/main.cjs | Windows Electronデスクトップ版のメモリ消費増大の実測(RSS/heap計測)。短時間(約5分)の試験では不定形増大なしと判断し修正は未実施(計測道具のみ残し、既定動作は不変) | 2026-09-25 |
-| editing | B | src/server/shared-excel-sync.ts, src/server/site-registry.ts, app/api/sites/shared-sync/route.ts | shared-sync未反映(斎藤忠夫重複)・赤文字/文字化け/現場リンクずれの切り分け(Phase0環境検証→Phase1-4) | 2026-09-25 |
+| done | B | src/server/shared-excel-sync.ts, src/server/site-registry.ts, app/api/sites/shared-sync/route.ts | shared-sync未反映(斎藤忠夫重複)・赤文字/文字化け/現場リンクずれの切り分け(Phase0環境検証→Phase1-4)。全Phase完了：Phase1斎藤忠夫重複統合(既存セッション済み)、Phase2/3 parseRichRunParts()のrPh混入フォールバック撤廃で赤字反映・文字化け(月ゲツ等)を根本修正、Phase4 findMatchingSiteの同名別会社への妥協リンク(candidates[0])を撤廃し不一致時はnull(blank会社フォールバックのみ維持)。実データでpreview→sync→再sync検証(sitesCreated93→sitesMatched750で冪等、scheduleCreated2237で非増殖)、対象週(2026-09-28)の相原雄一/堤慎一郎/近森大翔のDB実データで文字化け解消・赤色(labelColor:red)維持を直接確認。lint/typecheck OK。Desktop(apps/desktop/main.cjs)はloadURLのみでブラウザと同一API/buildのため追加調査不要と確認。 | 2026-10-01 |
 | done | B | .git（全履歴・force-push済） | .storageの実データ混入をgit historyから完全削除(filter-branch)完了。main+関連4タグをforce-push済み。**全PC/全chat: 次にpullする前に必ず下記手順を実施すること** | 2026-09-29 |
 
 ## ステータスボード（各チャットの現在地）
