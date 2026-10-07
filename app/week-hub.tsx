@@ -2712,7 +2712,7 @@ function WeekHubInner() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [kindQuery, mode, weekStart]);
+  }, [applyWeekPayloadText, kindQuery, mode, weekStart]);
 
   useEffect(() => {
     if (!isElectronShell || mode !== 'week') return;
@@ -2750,7 +2750,7 @@ function WeekHubInner() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [isElectronShell, kindQuery, mode, weekStart]);
+  }, [applyWeekPayloadText, isElectronShell, kindQuery, mode, weekStart]);
 
   const viewMonth = useMemo(() => {
     return `${cursorDate.getFullYear()}-${pad2(cursorDate.getMonth() + 1)}`;
