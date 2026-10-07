@@ -24,8 +24,8 @@ type SharedSyncJobData = {
 };
 
 function readSharedSyncPollIntervalMs() {
-  const raw = Number(process.env.SHARED_SYNC_POLL_INTERVAL_MS ?? 2_000);
-  if (!Number.isFinite(raw) || raw < 500) return 2_000;
+  const raw = Number(process.env.SHARED_SYNC_POLL_INTERVAL_MS ?? 5 * 60_000);
+  if (!Number.isFinite(raw) || raw < 60_000) return 5 * 60_000;
   return Math.floor(raw);
 }
 
@@ -64,6 +64,8 @@ export function startSharedSyncPoller() {
   const syncOnStart = process.env.SHARED_SYNC_POLL_SYNC_ON_START === '1';
   const queue = getSharedSyncQueue();
   let polling = false;
+
+  console.log(`[worker][shared-sync] poller started: intervalMs=${intervalMs} syncOnStart=${syncOnStart ? '1' : '0'}`);
 
   const tick = async () => {
     if (polling) return;

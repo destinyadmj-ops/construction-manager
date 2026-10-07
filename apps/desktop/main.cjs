@@ -6,6 +6,12 @@ const PERF_LOG_ENABLED = process.env.MASTER_HUB_PERF_LOG === '1';
 const PERF_AUTO_RELOAD_ONCE = process.env.MASTER_HUB_PERF_AUTO_RELOAD === '1';
 const MEM_LOG_ENABLED = process.env.MASTER_HUB_MEM_LOG === '1';
 const MEM_LOG_INTERVAL_MS = Number(process.env.MASTER_HUB_MEM_LOG_INTERVAL_MS) || 15000;
+const CACHE_GATE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.MASTER_HUB_CACHE_GATE_TIMEOUT_MS ?? 350);
+  if (!Number.isFinite(raw) || raw < 50) return 350;
+  return Math.floor(raw);
+})();
+const CACHE_STATE_FILE_NAME = 'desktop-cache-state.json';
 
 function perfNowMs() {
   return Date.now();
@@ -110,10 +116,14 @@ const DEFAULT_RELEASE_URL =
   `${DEFAULT_ORIGIN}/api/desktop-release`;
 
 async function fetchJson(url) {
+  let timeoutMs = 2500;
+  if (arguments.length > 1 && arguments[1] && Number.isFinite(arguments[1].timeoutMs)) {
+    timeoutMs = Number(arguments[1].timeoutMs);
+  }
   if (typeof fetch !== 'function') return null;
   try {
     const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 2500);
+    const t = setTimeout(() => ac.abort(), timeoutMs);
     const r = await fetch(url, { signal: ac.signal, cache: 'no-store' });
     clearTimeout(t);
     if (!r.ok) return null;
@@ -121,6 +131,70 @@ async function fetchJson(url) {
   } catch {
     return null;
   }
+}
+
+function normalizeBuildMarker(info) {
+  if (!info || typeof info !== 'object' || Array.isArray(info)) return null;
+  const buildTime = typeof info.buildTime === 'string' ? info.buildTime.trim() : '';
+  const gitSha = typeof info.gitSha === 'string' ? info.gitSha.trim() : '';
+  if (!buildTime && !gitSha) return null;
+  return `${buildTime}::${gitSha}`;
+}
+
+function getDesktopCacheStatePath() {
+  return path.join(app.getPath('userData'), CACHE_STATE_FILE_NAME);
+}
+
+function readStoredBuildMarker() {
+  try {
+    const statePath = getDesktopCacheStatePath();
+    if (!fs.existsSync(statePath)) return null;
+    const raw = fs.readFileSync(statePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const marker = parsed && typeof parsed.lastBuildMarker === 'string' ? parsed.lastBuildMarker.trim() : '';
+    return marker || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredBuildMarker(marker) {
+  if (!marker) return;
+  try {
+    const statePath = getDesktopCacheStatePath();
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ lastBuildMarker: marker }, null, 2), 'utf8');
+  } catch {
+    // ignore state persistence failures
+  }
+}
+
+async function resolveDesktopCacheGate() {
+  const previousMarker = readStoredBuildMarker();
+  const versionStartedAt = perfNowMs();
+  const versionJson = await fetchJson(`${DEFAULT_ORIGIN}/api/version`, { timeoutMs: CACHE_GATE_TIMEOUT_MS });
+  perfLog('fetch version for cache gate', versionStartedAt);
+
+  const info =
+    versionJson &&
+    versionJson.ok &&
+    versionJson.info &&
+    typeof versionJson.info === 'object' &&
+    !Array.isArray(versionJson.info)
+      ? versionJson.info
+      : null;
+
+  const nextMarker = normalizeBuildMarker(info);
+  if (!nextMarker) {
+    return { action: 'keep', reason: 'marker-unavailable', previousMarker, nextMarker: null };
+  }
+  if (previousMarker == null) {
+    return { action: 'clear', reason: 'first-marker', previousMarker, nextMarker };
+  }
+  if (previousMarker !== nextMarker) {
+    return { action: 'clear', reason: 'marker-changed', previousMarker, nextMarker };
+  }
+  return { action: 'keep', reason: 'marker-match', previousMarker, nextMarker };
 }
 
 function downloadInstaller(win, url, destPath) {
@@ -413,6 +487,7 @@ function createWindow() {
   let firstDidFinishLoadAt = 0;
   let autoReloadTriggered = false;
   let autoReloadMeasured = false;
+  let pendingBuildMarker = null;
   const iconCandidates = [
     path.join(app.getAppPath(), 'build', 'icon.ico'),
     path.join(app.getAppPath(), 'build', 'icon.png'),
@@ -446,16 +521,28 @@ function createWindow() {
     });
   }
 
-  const clearStartedAt = perfNowMs();
-  void clearDesktopAppCache(win.webContents.session).finally(() => {
-    perfLog('before loadURL wait', clearStartedAt);
-    const loadStartedAt = perfNowMs();
-    void win.loadURL(DEFAULT_URL);
-    if (PERF_LOG_ENABLED) {
-      console.log(`[perf][desktop] loadURL called: ${DEFAULT_URL}`);
-    }
-    perfLog('loadURL call latency', loadStartedAt);
-  });
+  const gateStartedAt = perfNowMs();
+  void resolveDesktopCacheGate()
+    .then(async (gate) => {
+      pendingBuildMarker = gate.nextMarker;
+      if (PERF_LOG_ENABLED) {
+        console.log(
+          `[perf][desktop] cache gate: action=${gate.action} reason=${gate.reason} prev=${gate.previousMarker ?? 'none'} next=${gate.nextMarker ?? 'none'}`,
+        );
+      }
+      if (gate.action === 'clear') {
+        await clearDesktopAppCache(win.webContents.session);
+      }
+    })
+    .finally(() => {
+      perfLog('before loadURL wait', gateStartedAt);
+      const loadStartedAt = perfNowMs();
+      void win.loadURL(DEFAULT_URL);
+      if (PERF_LOG_ENABLED) {
+        console.log(`[perf][desktop] loadURL called: ${DEFAULT_URL}`);
+      }
+      perfLog('loadURL call latency', loadStartedAt);
+    });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Open external links in the default browser.
@@ -475,6 +562,9 @@ function createWindow() {
   win.webContents.once('did-finish-load', () => {
     perfLog('createWindow -> did-finish-load', windowStartedAt);
     firstDidFinishLoadAt = perfNowMs();
+    if (pendingBuildMarker) {
+      writeStoredBuildMarker(pendingBuildMarker);
+    }
 
     if (PERF_AUTO_RELOAD_ONCE && !autoReloadTriggered) {
       autoReloadTriggered = true;

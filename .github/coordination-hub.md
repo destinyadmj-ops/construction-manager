@@ -75,6 +75,7 @@
 | done | B | src/server/shared-excel-sync.ts, src/server/site-registry.ts, app/api/sites/shared-sync/route.ts | shared-sync未反映(斎藤忠夫重複)・赤文字/文字化け/現場リンクずれの切り分け(Phase0環境検証→Phase1-4)。全Phase完了：Phase1斎藤忠夫重複統合(既存セッション済み)、Phase2/3 parseRichRunParts()のrPh混入フォールバック撤廃で赤字反映・文字化け(月ゲツ等)を根本修正、Phase4 findMatchingSiteの同名別会社への妥協リンク(candidates[0])を撤廃し不一致時はnull(blank会社フォールバックのみ維持)。実データでpreview→sync→再sync検証(sitesCreated93→sitesMatched750で冪等、scheduleCreated2237で非増殖)、対象週(2026-09-28)の相原雄一/堤慎一郎/近森大翔のDB実データで文字化け解消・赤色(labelColor:red)維持を直接確認。lint/typecheck OK。Desktop(apps/desktop/main.cjs)はloadURLのみでブラウザと同一API/buildのため追加調査不要と確認。 | 2026-10-01 |
 | done | B | .git（全履歴・force-push済） | .storageの実データ混入をgit historyから完全削除(filter-branch)完了。main+関連4タグをforce-push済み。**全PC/全chat: 次にpullする前に必ず下記手順を実施すること** | 2026-09-29 |
 | done | B | docker-compose.prod.yml, .env.production.example, DEPLOYMENT.md | 本番shared-sync未実行の恒久対策。本番=Docker Desktop(共有フォルダホストPCと同一PC)と判明したためCIFS不要と判断し、web/worker両方へ`SHARED_SOURCE_HOST_PATH`のbind mount(/shared-source)を追加。.env.production.example/DEPLOYMENT.mdに設定手順追記。lint/typecheck OK。**残作業はユーザー側**: 本番PCの.env.productionへ実パス設定→再起動が必要（詳細は失敗・不具合・原因ログ参照） | 2026-10-01 |
+| editing | B | .github/coordination-hub.md, apps/desktop/main.cjs, app/week-hub.tsx, src/server/queue/worker.ts, app/live-build-sync.tsx | Desktop reload遅延の見直し。一方通行バッチ同期前提へ常時キャッシュ破棄/短間隔pollingを簡略化し、perf実測を更新 | 2026-10-06 JST |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。

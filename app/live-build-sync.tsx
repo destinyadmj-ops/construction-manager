@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-const LIVE_BUILD_SYNC_INTERVAL_MS = 15000;
+const LIVE_BUILD_SYNC_INTERVAL_MS = 60_000;
 
 type VersionInfo = {
   buildTime?: string;
@@ -12,6 +12,11 @@ type VersionInfo = {
 function isElectronRuntime() {
   if (typeof navigator === 'undefined') return false;
   return /\bElectron\//.test(navigator.userAgent);
+}
+
+function perfLog(label: string, startedAt: number) {
+  const elapsed = Math.max(0, Math.round(performance.now() - startedAt));
+  console.info(`[perf][live-build-sync] ${label}: ${elapsed}ms`);
 }
 
 function normalizeBuildMarker(info: VersionInfo | null) {
@@ -37,6 +42,7 @@ async function fetchVersionInfo() {
 }
 
 async function clearRuntimeCaches() {
+  const startedAt = performance.now();
   if ('serviceWorker' in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
     await Promise.all(registrations.map((registration) => registration.unregister().catch(() => false)));
@@ -46,6 +52,8 @@ async function clearRuntimeCaches() {
     const keys = await window.caches.keys().catch(() => [] as string[]);
     await Promise.all(keys.filter((key) => key.startsWith('master-hub-')).map((key) => window.caches.delete(key)));
   }
+
+  perfLog('clearRuntimeCaches', startedAt);
 }
 
 function hasInteractiveFocus() {
@@ -76,6 +84,7 @@ export default function LiveBuildSync() {
 
     const reloadToLatestBuild = async (marker: string) => {
       if (reloadInFlightRef.current) return;
+      const reloadStartedAt = performance.now();
       reloadInFlightRef.current = true;
       currentMarkerRef.current = marker;
       pendingMarkerRef.current = null;
@@ -85,11 +94,19 @@ export default function LiveBuildSync() {
       });
 
       if (disposed) return;
+      perfLog('reloadToLatestBuild -> location.replace', reloadStartedAt);
       window.location.replace(buildReloadUrl());
     };
 
-    const checkLatestBuild = async ({ allowReload }: { allowReload: boolean }) => {
+    const checkLatestBuild = async ({
+      allowReload,
+      source,
+    }: {
+      allowReload: boolean;
+      source: 'init' | 'interval' | 'focus' | 'visibility';
+    }) => {
       if (requestInFlightRef.current || disposed) return;
+      const checkStartedAt = performance.now();
       requestInFlightRef.current = true;
 
       try {
@@ -99,6 +116,7 @@ export default function LiveBuildSync() {
 
         if (!currentMarkerRef.current) {
           currentMarkerRef.current = nextMarker;
+          perfLog(`initial marker captured (${source})`, checkStartedAt);
           return;
         }
 
@@ -108,6 +126,7 @@ export default function LiveBuildSync() {
         }
 
         pendingMarkerRef.current = nextMarker;
+        perfLog(`marker changed (${source}, allowReload=${allowReload ? '1' : '0'})`, checkStartedAt);
 
         if (!allowReload || hasInteractiveFocus()) return;
         await reloadToLatestBuild(nextMarker);
@@ -122,21 +141,22 @@ export default function LiveBuildSync() {
       void reloadToLatestBuild(pendingMarker);
     };
 
-    void checkLatestBuild({ allowReload: false });
+    void checkLatestBuild({ allowReload: false, source: 'init' });
 
     const intervalId = window.setInterval(() => {
-      void checkLatestBuild({ allowReload: true });
+      if (document.visibilityState !== 'visible') return;
+      void checkLatestBuild({ allowReload: true, source: 'interval' });
     }, LIVE_BUILD_SYNC_INTERVAL_MS);
 
     const handleFocus = () => {
       flushPendingReload();
-      void checkLatestBuild({ allowReload: true });
+      void checkLatestBuild({ allowReload: true, source: 'focus' });
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
       flushPendingReload();
-      void checkLatestBuild({ allowReload: true });
+      void checkLatestBuild({ allowReload: true, source: 'visibility' });
     };
 
     window.addEventListener('focus', handleFocus);

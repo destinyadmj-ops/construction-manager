@@ -87,6 +87,7 @@ type WeekHubHistoryState = {
 };
 
 const WEEK_HUB_HISTORY_STATE_KEY = 'masterHub.weekHubState';
+const ELECTRON_WEEK_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
@@ -2579,6 +2580,15 @@ function WeekHubInner() {
   );
   const hasLoggedWeekFetchRef = useRef(false);
   const hasLoadedWeekOnceRef = useRef(false);
+  const weekPayloadTextRef = useRef<string | null>(null);
+
+  const applyWeekPayloadText = useCallback((text: string) => {
+    if (weekPayloadTextRef.current === text) return false;
+    const json = JSON.parse(text) as ApiResponse;
+    weekPayloadTextRef.current = text;
+    setData(json);
+    return true;
+  }, []);
 
   useEffect(() => {
     if (mode !== 'week') {
@@ -2661,8 +2671,9 @@ function WeekHubInner() {
                 }
                 throw new Error(`Failed to load (${res.status})`);
               }
-              const json = (await res.json()) as ApiResponse;
-              setData(json);
+              const text = await res.text();
+              if (controller.signal.aborted) return;
+              applyWeekPayloadText(text);
               if (!hasLoggedWeekFetchRef.current) {
                 const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
                 const total = Math.max(0, Math.round(performance.now() - effectStartedAt));
@@ -2681,6 +2692,7 @@ function WeekHubInner() {
           }
         } catch {
           // Keep UI usable even if API is not ready.
+          weekPayloadTextRef.current = null;
           setData(null);
         } finally {
           if (!hasLoggedWeekFetchRef.current) {
@@ -2707,7 +2719,7 @@ function WeekHubInner() {
 
     let cancelled = false;
     let inFlight = false;
-    const intervalMs = 2_000;
+    const intervalMs = ELECTRON_WEEK_POLL_INTERVAL_MS;
 
     const tick = async () => {
       if (cancelled || inFlight) return;
@@ -2718,7 +2730,10 @@ function WeekHubInner() {
           cache: 'no-store',
         });
         if (res.ok) {
-          setData((await res.json()) as ApiResponse);
+          const text = await res.text();
+          if (!cancelled) {
+            applyWeekPayloadText(text);
+          }
         }
       } catch {
         // ignore background refresh errors
@@ -2749,7 +2764,9 @@ function WeekHubInner() {
         const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
           cache: 'no-store',
         });
-        if (res.ok) setData((await res.json()) as ApiResponse);
+        if (res.ok) {
+          applyWeekPayloadText(await res.text());
+        }
         return;
       }
       if (mode === 'month') {
@@ -2769,7 +2786,7 @@ function WeekHubInner() {
     } catch {
       // ignore
     }
-  }, [kindQuery, mode, viewMonth, viewYear, weekStart]);
+  }, [applyWeekPayloadText, kindQuery, mode, viewMonth, viewYear, weekStart]);
 
   const createUser = useCallback(
     async (input: { name: string; email: string }) => {
