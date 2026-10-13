@@ -76,6 +76,7 @@
 | done | B | .git（全履歴・force-push済） | .storageの実データ混入をgit historyから完全削除(filter-branch)完了。main+関連4タグをforce-push済み。**全PC/全chat: 次にpullする前に必ず下記手順を実施すること** | 2026-09-29 |
 | done | B | docker-compose.prod.yml, .env.production.example, DEPLOYMENT.md | 本番shared-sync未実行の恒久対策。本番=Docker Desktop(共有フォルダホストPCと同一PC)と判明したためCIFS不要と判断し、web/worker両方へ`SHARED_SOURCE_HOST_PATH`のbind mount(/shared-source)を追加。.env.production.example/DEPLOYMENT.mdに設定手順追記。lint/typecheck OK。**残作業はユーザー側**: 本番PCの.env.productionへ実パス設定→再起動が必要（詳細は失敗・不具合・原因ログ参照） | 2026-10-01 |
 | done | B | .github/coordination-hub.md, apps/desktop/main.cjs, app/week-hub.tsx, src/server/queue/worker.ts, app/live-build-sync.tsx | Desktop reload遅延の見直し完了。一方通行バッチ同期前提へ起動時cache clearをbuild marker不一致時のみに縮小、week/shared-sync pollを5分化、live-build-syncは可視時60秒確認へ緩和。lint/typecheck OK、perf実測更新済み | 2026-10-07 JST |
+| editing | B | .github/coordination-hub.md, apps/desktop/dist/** | 最新desktop dist再生成と配布実体の再計測（既存プロセス停止前提） | 2026-10-13 JST |
 
 ## ステータスボード（各チャットの現在地）
 - A（設定方法）: 完了。Desktop 0.1.3 のアプリ内更新導線は本番反映済み。/api/desktop-release は 0.1.3 を返し、ユーザー環境も 0.1.3 導入済み前提で運用可能。
