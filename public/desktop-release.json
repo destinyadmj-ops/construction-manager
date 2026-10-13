@@ -1,7 +1,7 @@
 {
   "version": "0.1.4",
   "downloadUrl": "https://masterhubapp.org/downloads/Master-Hub-Setup-0.1.4.exe",
-  "notes": "0.1.4 基準版。作業表☆同期の赤黒分離表示と日付ずれ修正を含む現行コード状態を反映。既存の更新確認導線とPWA運用は維持。",
-  "publishedAt": "2026-09-12T00:00:00Z",
+  "notes": "0.1.4 再パッケージ版。デスクトップ版の起動と再読み込みを見直し、画面更新時の待ち時間を減らしました。既存の更新確認導線とPWA運用はそのまま使えます。",
+  "publishedAt": "2026-10-13T00:00:00Z",
   "channel": "stable"
 }
