@@ -1,6 +1,6 @@
 {
   "version": "0.1.5",
-  "downloadUrl": "https://masterhubapp.org/downloads/Master-Hub-Setup-0.1.5.exe",
+  "downloadUrl": "https://masterhubapp.org/api/desktop-release/download",
   "notes": "0.1.5 修正版。起動先設定を修正し、起動後に白画面になることがある問題を解消しました。更新確認からそのまま入れ替えできます。",
   "publishedAt": "2026-10-15T00:00:00Z",
   "channel": "stable"

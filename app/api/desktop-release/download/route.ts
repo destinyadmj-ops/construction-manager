@@ -3,12 +3,16 @@ import { Readable } from 'node:stream';
 
 import { NextResponse } from 'next/server';
 
-import { getBundledDesktopInstaller } from '@/server/desktop-release';
+import { getBundledDesktopInstaller, getDesktopReleaseInfo, getPublicDesktopInstallerForVersion } from '@/server/desktop-release';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const installer = getBundledDesktopInstaller();
+  const release = getDesktopReleaseInfo();
+  const installer =
+    getPublicDesktopInstallerForVersion(release.version) ??
+    getPublicDesktopInstallerForVersion() ??
+    getBundledDesktopInstaller();
   if (!installer) {
     return NextResponse.json(
       { ok: false, error: 'Desktop installer not found' },

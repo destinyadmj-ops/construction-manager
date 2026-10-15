@@ -125,6 +125,10 @@ function getRepoDesktopReleaseInfo(): DesktopReleaseInfo | null {
   );
 }
 
+export function getPublicDesktopInstallerForVersion(version?: string): { fileName: string; filePath: string; version: string } | null {
+  return getPublicDesktopInstaller(version);
+}
+
 function getEnvDesktopReleaseInfo(): DesktopReleaseInfo | null {
   const version = readEnv('DESKTOP_APP_VERSION');
   const downloadUrl = readEnv('DESKTOP_APP_DOWNLOAD_URL');
