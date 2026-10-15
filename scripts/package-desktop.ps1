@@ -10,7 +10,8 @@ param(
     [string]$WindowsCertFile = "",
     [string]$WindowsCertPassword = "",
     [string]$WindowsCertSha1 = "",
-    [switch]$AllowLocalhostUrl
+    [switch]$AllowLocalhostUrl,
+    [switch]$AllowLocalhostInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +41,16 @@ if ($isLocalhostUrl -and -not $AllowLocalhostUrl) {
     Write-Host "Error: localhost/127.0.0.1 packaging is blocked by default to prevent broken distribution builds." -ForegroundColor Red
     Write-Host "Use a deployed URL such as https://masterhubapp.org/ or pass -AllowLocalhostUrl intentionally." -ForegroundColor Red
     exit 1
+}
+
+if ($isLocalhostUrl -and -not $DirOnly -and -not $AllowLocalhostInstaller) {
+    Write-Host "Error: localhost/127.0.0.1 installer packaging is blocked by default." -ForegroundColor Red
+    Write-Host "Use -DirOnly for local perf checks, or pass -AllowLocalhostInstaller only when you intentionally need a local-only installer." -ForegroundColor Red
+    exit 1
+}
+
+if ($isLocalhostUrl) {
+    Write-Host "Warning: packaging against localhost/127.0.0.1 creates a local-only desktop build." -ForegroundColor Yellow
 }
 
 # 1. Build Next.js production if not skipped

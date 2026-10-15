@@ -53,6 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
+| active | B | .github/coordination-hub.md, scripts/package-desktop.ps1, public/downloads/Master-Hub-Setup-0.1.4.exe, C:/Users/tsutsumi_s/AppData/Local/Programs/master-hub-desktop/** | localhost 向け desktop 実体の白画面原因を切り分けし、production URL 向け installer へ再修正して実画面確認する | 2026-10-15 13:35 JST |
 | done | A | apps/desktop/main.cjs | ヘルプ→更新を確認 からアプリ内DL＋インストーラ自動起動で更新適用できるよう構築（0.1.3） | 2026-06-02 ~10:05 |
 | done | C | coordination-hub | 運用開始・現行ベースライン確認 | 2026-06-02 19:05 JST |
 | done | C | app/layout.tsx, app/live-build-sync.tsx, TEAM-VERIFY-TEMPLATE.md | Electron実体向け live build sync と A/B/C 共通確認テンプレ追加。ba486b2 を含む build 10:50:04.139Z で本番反映済み | 2026-06-02 19:25 JST |
