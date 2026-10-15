@@ -1,7 +1,7 @@
 {
-  "version": "0.1.4",
-  "downloadUrl": "https://masterhubapp.org/downloads/Master-Hub-Setup-0.1.4.exe",
-  "notes": "0.1.4 再パッケージ版。デスクトップ版の起動と再読み込みを見直し、画面更新時の待ち時間を減らしました。既存の更新確認導線とPWA運用はそのまま使えます。",
-  "publishedAt": "2026-10-13T00:00:00Z",
+  "version": "0.1.5",
+  "downloadUrl": "https://masterhubapp.org/downloads/Master-Hub-Setup-0.1.5.exe",
+  "notes": "0.1.5 修正版。起動先設定を修正し、起動後に白画面になることがある問題を解消しました。更新確認からそのまま入れ替えできます。",
+  "publishedAt": "2026-10-15T00:00:00Z",
   "channel": "stable"
 }
