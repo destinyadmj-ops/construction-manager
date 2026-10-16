@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
 import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
-import { readGlobalScheduleUserOrder, saveGlobalScheduleUserOrder } from '@/server/schedule-user-order';
+import { readGlobalScheduleUserOrder, saveScheduleUserOrderForAllUsers } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { writeFile } from 'node:fs/promises';
@@ -1288,16 +1288,17 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const scheduledUserOrderIds = assigneeKeyOrder
     .map((key) => userByName.get(key)?.id ?? null)
     .filter((id): id is string => !!id);
-  const activeUserIds = usersAfterConsolidation.filter((user) => user.showInSchedule).map((user) => user.id);
-  const activeUserIdSet = new Set(activeUserIds);
+  const scheduledUserIdSet = new Set(scheduledUserOrderIds);
+  const activeUserIds = usersAfterConsolidation
+    .filter((user) => user.showInSchedule && !duplicateUserIds.has(user.id))
+    .map((user) => user.id);
   const globalUserOrderIds = Array.from(
     new Set([
-      ...globalOrder.filter((id) => activeUserIdSet.has(id) && !duplicateUserIds.has(id)),
       ...scheduledUserOrderIds,
-      ...activeUserIds,
+      ...activeUserIds.filter((id) => !scheduledUserIdSet.has(id)),
     ]),
   );
-  await saveGlobalScheduleUserOrder(kind, globalUserOrderIds);
+  await saveScheduleUserOrderForAllUsers(kind, globalUserOrderIds);
 
   const preparedRows: Array<{
     userId: string;

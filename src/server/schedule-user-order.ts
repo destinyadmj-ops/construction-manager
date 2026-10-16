@@ -122,3 +122,38 @@ export async function saveGlobalScheduleUserOrder(kind: ScheduleKind, orderIds: 
     // Legacy DBs may reject the synthetic global userId. Keep sync functional without persistence.
   }
 }
+
+export async function saveScheduleUserOrderForAllUsers(kind: ScheduleKind, orderIds: string[]): Promise<void> {
+  const normalized = normalizeOrderIds(orderIds);
+  const key = buildUserOrderKey(kind);
+
+  await saveGlobalScheduleUserOrder(kind, normalized);
+
+  try {
+    const users = await prisma.user.findMany({
+      where: { kind },
+      select: { id: true },
+      take: 500,
+    });
+    if (users.length === 0) return;
+
+    await prisma.$transaction(
+      users.map((user) =>
+        prisma.userUiSetting.upsert({
+          where: { userId_key: { userId: user.id, key } },
+          create: {
+            userId: user.id,
+            key,
+            value: normalized as Prisma.InputJsonValue,
+          },
+          update: {
+            value: normalized as Prisma.InputJsonValue,
+          },
+          select: { id: true },
+        }),
+      ),
+    );
+  } catch {
+    // Best effort only. The global order remains the source of truth.
+  }
+}
