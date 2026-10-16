@@ -53,7 +53,8 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
-| active | B | .github/coordination-hub.md, src/server/desktop-release.ts, app/api/desktop-release/download/route.ts, public/desktop-release.json | production の desktop downloadUrl が 404 のため、配布経路を API 経由へ是正して 0.1.5 の更新導線を実復旧する | 2026-10-15 14:00 JST |
+| done | B | .github/coordination-hub.md, src/server/desktop-release.ts, app/api/desktop-release/download/route.ts, public/desktop-release.json | production の desktop downloadUrl が 404 のため、配布経路を API 経由へ是正して 0.1.5 の更新導線を実復旧する | 2026-10-15 14:00 JST |
+| active | B | src/server/shared-excel-sync.ts, src/server/schedule-user-order.ts, app/week-hub.tsx, app/mobile/week-hub/page.tsx, prisma/schema.prisma | 作業表☆と週予定画面の一致修正（Excel順固定、個人並び替えのsync時リセット、名前色のExcel基準化、全文表示の統一）を実装・検証する | 2026-10-16 10:05 JST |
 | done | B | .github/coordination-hub.md, scripts/package-desktop.ps1, apps/desktop/package.json, apps/desktop/package-lock.json, public/desktop-release.json, public/downloads/Master-Hub-Setup-0.1.5.exe, C:/Users/tsutsumi_s/AppData/Local/Programs/master-hub-desktop/** | localhost 向け 0.1.4 installer が白画面になる根因を修正。localhost installer は追加 opt-in 必須化、wrapper/public manifest を 0.1.5 へ更新し production URL 向け installer を再配布。インストール済み実体の実画面で正常表示を確認 | 2026-10-15 13:50 JST |
 | done | A | apps/desktop/main.cjs | ヘルプ→更新を確認 からアプリ内DL＋インストーラ自動起動で更新適用できるよう構築（0.1.3） | 2026-06-02 ~10:05 |
 | done | C | coordination-hub | 運用開始・現行ベースライン確認 | 2026-06-02 19:05 JST |
