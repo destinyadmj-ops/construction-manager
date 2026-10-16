@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "nameLabelColor" TEXT NOT NULL DEFAULT 'default';

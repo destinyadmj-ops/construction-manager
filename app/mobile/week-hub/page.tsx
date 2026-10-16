@@ -36,6 +36,7 @@ type ApiUser = {
   id: string;
   name: string | null;
   email: string | null;
+  nameLabelColor?: LabelColor | null;
 };
 
 type ApiCell = {
@@ -209,6 +210,10 @@ function labelTextClass(color: LabelColor): string {
   if (color === 'blue') return 'text-blue-600 dark:text-blue-400';
   if (color === 'purple') return 'text-violet-600 dark:text-violet-400';
   return 'text-pink-600 dark:text-pink-400';
+}
+
+function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null | undefined): LabelColor {
+  return isLabelColor(user?.nameLabelColor) ? user.nameLabelColor : 'default';
 }
 
 function groupDisplayEntry(group: NormalizedCellGroup): ScheduleEntryDisplay | null {
@@ -1338,6 +1343,7 @@ function MobileWeekHubInner() {
                   >
                     {orderedUsers.map((user) => {
                       const isCurrentUser = user.id === authUser?.id;
+                      const userNameColor = resolveUserNameLabelColor(user);
                       return (
                         <Fragment key={user.id}>
                           <div
@@ -1346,7 +1352,7 @@ function MobileWeekHubInner() {
                             }`}
                             style={{ minHeight: `${weekGridCellMinH}px` }}
                           >
-                            {userLabel(user)}
+                            <span className={labelTextClass(userNameColor)}>{userLabel(user)}</span>
                           </div>
                           {dayLabels.map((day) => {
                             const groups = cellGroups(schedule.grid?.[user.id]?.[day.key]);

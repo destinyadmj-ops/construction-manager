@@ -103,7 +103,7 @@ type ApiCellEntry = {
 };
 type ApiCellGroup = { items: ApiCellEntry[]; note?: string | null };
 
-type ApiUser = { id: string; name: string | null; email: string | null };
+type ApiUser = { id: string; name: string | null; email: string | null; nameLabelColor?: LabelColor | null };
 
 type AuthMeUser = {
   id: string;
@@ -366,6 +366,10 @@ function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): strin
   if (color === 'blue') return tone === 'primary' ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500 dark:text-blue-300';
   if (color === 'purple') return tone === 'primary' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-500 dark:text-violet-300';
   return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
+}
+
+function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null | undefined): LabelColor {
+  return isLabelColor(user?.nameLabelColor) ? user.nameLabelColor : 'default';
 }
 
 function OverflowPlusLabel({ children, measureKey }: { children: ReactNode; measureKey: string }) {
@@ -6520,7 +6524,6 @@ function Row({
   suggestionLoading?: boolean;
 }) {
   const isSelectedUser = selectedUserId === user.id;
-  const isCurrentUser = currentUserId === user.id;
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const lastContextMenuWheelAtRef = useRef(0);
   const [slotContextMenu, setSlotContextMenu] = useState<SlotContextMenuState | null>(null);
@@ -7524,6 +7527,24 @@ function Row({
           : undefined;
       const hoverMenuItems = input.hoverMenuItems ?? [];
       const hasHoverMenu = hoverMenuItems.length > 0;
+      const hoverMenuTrigger = hasHoverMenu ? (
+        <button
+          type="button"
+          aria-label="全文を表示"
+          aria-haspopup="menu"
+          className="absolute right-1 top-1 z-[81] rounded border border-zinc-200 bg-white/95 px-1 py-0.5 text-[10px] leading-none text-zinc-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/95 dark:text-zinc-300"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          ▼
+        </button>
+      ) : null;
       const hoverMenu = hasHoverMenu ? (
         <div
           className="pointer-events-none invisible absolute left-0 top-full z-[80] min-w-[220px] max-w-[320px] overflow-hidden rounded-md border border-zinc-300 bg-white opacity-0 shadow-lg transition group-hover/slot:visible group-hover/slot:pointer-events-auto group-hover/slot:opacity-100 group-focus-within/slot:visible group-focus-within/slot:pointer-events-auto group-focus-within/slot:opacity-100 dark:border-zinc-700 dark:bg-zinc-950"
@@ -7578,7 +7599,7 @@ function Row({
           <div className="group/slot relative">
             <div
               data-color-edit-ignore-contextmenu
-              className={input.className}
+              className={`${input.className} ${hasHoverMenu ? 'pr-5' : ''}`}
               style={{ fontSize: input.fontSize }}
               draggable={Boolean(dragState)}
               onDragStart={handleDragStart}
@@ -7588,6 +7609,7 @@ function Row({
             >
               {input.displayValue}
             </div>
+            {hoverMenuTrigger}
             {hoverMenu}
           </div>
         );
@@ -7637,13 +7659,14 @@ function Row({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDoubleClick={handleInlineEdit}
-            className={`${input.className} w-full cursor-pointer text-left hover:underline`}
+            className={`${input.className} ${hasHoverMenu ? 'pr-5' : ''} w-full cursor-pointer text-left hover:underline`}
             style={{ fontSize: input.fontSize }}
             title={input.tooltipValue}
             aria-label={`${siteName} の詳細を開く`}
           >
             {input.displayValue}
           </div>
+          {hoverMenuTrigger}
           {hoverMenu}
         </div>
       );
@@ -7693,8 +7716,10 @@ function Row({
         const siteItems = renderedItems.filter((item) => isSiteCellEntry(item.entry));
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
+        const shouldShowSingleSiteFullTextMenu =
+          siteItems.length === 1 && noteItems.length === 0 && !groupNote && tooltipValue.length > 18;
         const hoverMenuItems: CellHoverMenuItem[] =
-          siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote)
+          siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote) || shouldShowSingleSiteFullTextMenu
             ? [
                 ...siteItems.map((item, itemIndex) => ({
                   key: `hover-site:${day}:${groupIndex}:${itemIndex}`,
@@ -8438,6 +8463,7 @@ function Row({
         data-user-row={user.id}
         data-user-kind={apiKind}
         data-user-label={(user.name ?? user.email ?? user.id).trim()}
+        data-current-user={currentUserId === user.id ? 'true' : undefined}
         data-testid={`user-row-${user.id}`}
         aria-current={isSelectedUser ? 'true' : undefined}
         className={`sticky left-0 z-10 border-b border-r border-zinc-400 bg-white px-1.5 py-2 text-left text-[13px] dark:border-zinc-600 dark:bg-black relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-zinc-400 dark:after:bg-zinc-600 sm:px-2 ${
@@ -8462,7 +8488,7 @@ function Row({
             ) : null}
             <div
               data-user-label
-              className={`min-w-0 truncate font-medium ${isCurrentUser ? 'text-red-500 dark:text-red-300' : ''}`}
+              className={`min-w-0 truncate font-medium ${labelTextClass(resolveUserNameLabelColor(user), 'primary')}`}
             >
               {user.name ?? user.email ?? user.id}
             </div>

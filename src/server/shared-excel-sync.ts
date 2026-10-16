@@ -38,7 +38,7 @@ type WorkTableRow = {
   dayYmd: string;
   companyName: string | null;
   entries: Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }>;
-  assignees: string[];
+  assignees: Array<{ name: string; color: 'default' | 'red' }>;
 };
 
 type WorkSlipLedgerRow = {
@@ -64,6 +64,7 @@ type SharedSyncCounts = {
 type SharedSyncUserRecord = {
   id: string;
   name: string | null;
+  nameLabelColor: 'default' | 'red';
   showInSchedule: boolean;
   createdAt: Date | null;
 };
@@ -190,6 +191,10 @@ function detectCellEntryColor(cell: unknown): 'default' | 'red' {
   const styleColor = font?.color as Record<string, unknown> | undefined;
   const rgb = typeof styleColor?.rgb === 'string' ? styleColor.rgb : '';
   return isRedColorToken(rgb) ? 'red' : 'default';
+}
+
+function normalizeNameLabelColor(value: unknown): 'default' | 'red' {
+  return value === 'red' ? 'red' : 'default';
 }
 
 function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: string; color: 'default' | 'red' }> {
@@ -480,26 +485,38 @@ function parseDateToYmd(value: unknown, fallbackYear: number): string | null {
   return null;
 }
 
-function splitAssignees(...inputs: Array<string | null | undefined>): string[] {
-  const tokens: string[] = [];
+function splitAssigneeTokens(input: string | null | undefined): string[] {
+  const normalized = normalizeRegistryText(input);
+  if (!normalized) return [];
+  return normalized
+    .split(/[、,，\/／・]+/)
+    .map((x) => normalizeRegistryText(x))
+    .filter(Boolean);
+}
+
+function splitAssigneesFromCells(
+  ...inputs: Array<{ text: string | null | undefined; cell?: unknown }>
+): Array<{ name: string; color: 'default' | 'red' }> {
+  const result: Array<{ name: string; color: 'default' | 'red' }> = [];
+  const indexByKey = new Map<string, number>();
+
   for (const input of inputs) {
-    const normalized = normalizeRegistryText(input);
-    if (!normalized) continue;
-    normalized
-      .split(/[、,，\/／・]+/)
-      .map((x) => normalizeRegistryText(x))
-      .filter(Boolean)
-      .forEach((x) => tokens.push(x));
+    const color = detectCellEntryColor(input.cell);
+    for (const token of splitAssigneeTokens(input.text)) {
+      const key = normalizeUserKey(token);
+      if (!key) continue;
+      const existingIndex = indexByKey.get(key);
+      if (existingIndex != null) {
+        if (color === 'red') {
+          result[existingIndex] = { ...result[existingIndex]!, color: 'red' };
+        }
+        continue;
+      }
+      indexByKey.set(key, result.length);
+      result.push({ name: token, color });
+    }
   }
 
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const token of tokens) {
-    const key = normalizeUserKey(token);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(token);
-  }
   return result;
 }
 
@@ -556,12 +573,14 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
       const cell = (sheet as Record<string, unknown>)[addr];
       const entries = splitSiteEntriesFromCell(cell, siteName);
       if (entries.length === 0) continue;
+      const assigneeAddr = XLSX.utils.encode_cell({ r: rowIndex, c: 0 });
+      const assigneeCell = (sheet as Record<string, unknown>)[assigneeAddr];
 
       rows.push({
         dayYmd,
         companyName: null,
         entries,
-        assignees: [assignee],
+        assignees: splitAssigneesFromCells({ text: assignee, cell: assigneeCell }),
       });
     }
   }
@@ -597,7 +616,20 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
         const lead = normalizeRegistryText(toCellText(row[found.indexMap.lead]));
         const members = normalizeRegistryText(toCellText(row[found.indexMap.members]));
         const driver = normalizeRegistryText(toCellText(row[found.indexMap.driver]));
-        const assignees = splitAssignees(lead, members, driver);
+        const assignees = splitAssigneesFromCells(
+          {
+            text: lead,
+            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.lead })],
+          },
+          {
+            text: members,
+            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.members })],
+          },
+          {
+            text: driver,
+            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.driver })],
+          },
+        );
         const addr = XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.site });
         const cell = (sheet as Record<string, unknown>)[addr];
         const entries = splitSiteEntriesFromCell(cell, siteName);
@@ -640,7 +672,7 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
 
     let hasNewKey = false;
     for (const assignee of row.assignees) {
-      const key = `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${filteredEntries.map((x) => `${normalizeKey(x.siteName)}:${x.color}`).join('|')}`;
+      const key = `${row.dayYmd}|${normalizeKey(assignee.name)}|${normalizeKey(row.companyName)}|${filteredEntries.map((x) => `${normalizeKey(x.siteName)}:${x.color}`).join('|')}`;
       if (seen.has(key)) continue;
       seen.add(key);
       hasNewKey = true;
@@ -866,12 +898,13 @@ async function listSharedSyncUsers(
   kind: SiteKind,
 ): Promise<SharedSyncUserRecord[]> {
   try {
-    return await db.user.findMany({
+    const users = await db.user.findMany({
       where: { kind },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, showInSchedule: true, createdAt: true },
+      select: { id: true, name: true, nameLabelColor: true, showInSchedule: true, createdAt: true },
       take: 500,
     });
+    return users.map((user) => ({ ...user, nameLabelColor: normalizeNameLabelColor(user.nameLabelColor) }));
   } catch {
     try {
       const fallbackUsers = await db.user.findMany({
@@ -880,7 +913,7 @@ async function listSharedSyncUsers(
         select: { id: true, name: true, showInSchedule: true },
         take: 500,
       });
-      return fallbackUsers.map((user) => ({ ...user, createdAt: null }));
+      return fallbackUsers.map((user) => ({ ...user, nameLabelColor: 'default' as const, createdAt: null }));
     } catch {
       const minimalUsers = await db.user.findMany({
         where: { kind },
@@ -888,7 +921,7 @@ async function listSharedSyncUsers(
         select: { id: true, name: true },
         take: 500,
       });
-      return minimalUsers.map((user) => ({ ...user, showInSchedule: true, createdAt: null }));
+      return minimalUsers.map((user) => ({ ...user, nameLabelColor: 'default' as const, showInSchedule: true, createdAt: null }));
     }
   }
 }
@@ -896,13 +929,16 @@ async function listSharedSyncUsers(
 async function updateSharedSyncUsers(
   db: Pick<Prisma.TransactionClient, 'user' | '$executeRaw'> | typeof prisma,
   userIds: string[],
-  patch: { name?: string | null; showInSchedule?: boolean },
+  patch: { name?: string | null; nameLabelColor?: 'default' | 'red'; showInSchedule?: boolean },
 ): Promise<void> {
   if (userIds.length === 0) return;
 
   const assignments: Prisma.Sql[] = [];
   if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
     assignments.push(Prisma.sql`"name" = ${patch.name ?? null}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'nameLabelColor')) {
+    assignments.push(Prisma.sql`"nameLabelColor" = ${patch.nameLabelColor ?? 'default'}`);
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'showInSchedule')) {
     assignments.push(Prisma.sql`"showInSchedule" = ${patch.showInSchedule === true}`);
@@ -937,6 +973,14 @@ async function updateSharedSyncUsers(
       Prisma.sql`UPDATE "User" SET ${Prisma.join(assignments, ', ')} WHERE "id" IN (${Prisma.join(userIds)})`,
     );
   } catch (error) {
+    if (Object.prototype.hasOwnProperty.call(patch, 'nameLabelColor')) {
+      const fallbackPatch = { ...patch };
+      delete fallbackPatch.nameLabelColor;
+      if (Object.keys(fallbackPatch).length > 0) {
+        await updateSharedSyncUsers(db, userIds, fallbackPatch);
+      }
+      return;
+    }
     if (Object.prototype.hasOwnProperty.call(patch, 'showInSchedule')) {
       if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
         await updateSharedSyncUsers(db, userIds, { name: patch.name ?? null });
@@ -947,16 +991,22 @@ async function updateSharedSyncUsers(
   }
 }
 
-async function createSharedSyncUser(kind: SiteKind, assigneeName: string): Promise<{ id: string; name: string | null; showInSchedule: boolean } | null> {
+async function createSharedSyncUser(
+  kind: SiteKind,
+  assigneeName: string,
+  assigneeColor: 'default' | 'red',
+): Promise<{ id: string; name: string | null; nameLabelColor: 'default' | 'red'; showInSchedule: boolean } | null> {
   try {
-    return await prisma.user.create({
+    const created = await prisma.user.create({
       data: {
         kind,
         name: assigneeName,
+        nameLabelColor: assigneeColor,
         showInSchedule: true,
       },
-      select: { id: true, name: true, showInSchedule: true },
+      select: { id: true, name: true, nameLabelColor: true, showInSchedule: true },
     });
+    return { ...created, nameLabelColor: normalizeNameLabelColor(created.nameLabelColor) };
   } catch {
     try {
       const created = await prisma.user.create({
@@ -966,7 +1016,7 @@ async function createSharedSyncUser(kind: SiteKind, assigneeName: string): Promi
         },
         select: { id: true, name: true },
       });
-      return { ...created, showInSchedule: true };
+      return { ...created, nameLabelColor: 'default', showInSchedule: true };
     } catch {
       return null;
     }
@@ -1166,14 +1216,21 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const globalOrder = await readGlobalScheduleUserOrder(kind);
   const globalOrderIndex = new Map<string, number>(globalOrder.map((id, index) => [id, index] as const));
 
-  const assigneeNameByKey = new Map<string, string>();
+  const assigneeByKey = new Map<string, { name: string; color: 'default' | 'red' }>();
   const assigneeKeyOrder: string[] = [];
   for (const row of scheduleRows) {
     for (const assignee of row.assignees) {
-      const key = normalizeUserKey(assignee);
-      if (!key || assigneeNameByKey.has(key)) continue;
-      assigneeNameByKey.set(key, assignee);
-      assigneeKeyOrder.push(key);
+      const key = normalizeUserKey(assignee.name);
+      if (!key) continue;
+      const existing = assigneeByKey.get(key);
+      if (!existing) {
+        assigneeByKey.set(key, { ...assignee });
+        assigneeKeyOrder.push(key);
+        continue;
+      }
+      if (existing.color !== 'red' && assignee.color === 'red') {
+        assigneeByKey.set(key, { ...existing, color: 'red' });
+      }
     }
   }
 
@@ -1234,7 +1291,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   await consolidateDuplicateUsers(users);
   const usersAfterConsolidation = await listSharedSyncUsers(prisma, kind);
 
-  const userByName = new Map<string, { id: string; name: string; showInSchedule: boolean }>();
+  const userByName = new Map<string, { id: string; name: string; nameLabelColor: 'default' | 'red'; showInSchedule: boolean }>();
   const usersAfterByKey = new Map<string, SharedSyncUserRecord[]>();
   for (const user of usersAfterConsolidation) {
     const key = normalizeUserKey(user.name);
@@ -1246,23 +1303,30 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   for (const [key, candidates] of usersAfterByKey.entries()) {
     const canonical = selectCanonicalUser(candidates);
     if (!canonical) continue;
-    userByName.set(key, { id: canonical.id, name: canonical.name ?? '', showInSchedule: canonical.showInSchedule });
+    userByName.set(key, {
+      id: canonical.id,
+      name: canonical.name ?? '',
+      nameLabelColor: canonical.nameLabelColor ?? 'default',
+      showInSchedule: canonical.showInSchedule,
+    });
   }
 
   for (const key of assigneeKeyOrder) {
-    const assigneeName = assigneeNameByKey.get(key);
-    if (!assigneeName) continue;
+    const assignee = assigneeByKey.get(key);
+    if (!assignee) continue;
 
     const existing = userByName.get(key);
     if (existing) {
-      const patch: { name?: string | null; showInSchedule?: boolean } = {};
+      const patch: { name?: string | null; nameLabelColor?: 'default' | 'red'; showInSchedule?: boolean } = {};
       // Keep the canonical spelling instead of flipping between kanji variants each sync.
-      if (!(existing.name ?? '').trim()) patch.name = assigneeName;
+      if (!(existing.name ?? '').trim()) patch.name = assignee.name;
+      if (existing.nameLabelColor !== assignee.color) patch.nameLabelColor = assignee.color;
       if (!existing.showInSchedule) patch.showInSchedule = true;
 
       if (Object.keys(patch).length > 0) {
         await updateSharedSyncUsers(prisma, [existing.id], patch);
         existing.name = patch.name ?? existing.name;
+        existing.nameLabelColor = patch.nameLabelColor ?? existing.nameLabelColor;
         existing.showInSchedule = patch.showInSchedule ?? existing.showInSchedule;
       }
       continue;
@@ -1274,15 +1338,21 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     if (refreshedCanonical) {
       userByName.set(key, {
         id: refreshedCanonical.id,
-        name: refreshedCanonical.name ?? assigneeName,
+        name: refreshedCanonical.name ?? assignee.name,
+        nameLabelColor: refreshedCanonical.nameLabelColor ?? assignee.color,
         showInSchedule: refreshedCanonical.showInSchedule,
       });
       continue;
     }
 
-    const created = await createSharedSyncUser(kind, assigneeName);
+    const created = await createSharedSyncUser(kind, assignee.name, assignee.color);
     if (!created) continue;
-    userByName.set(key, { id: created.id, name: created.name ?? assigneeName, showInSchedule: created.showInSchedule });
+    userByName.set(key, {
+      id: created.id,
+      name: created.name ?? assignee.name,
+      nameLabelColor: created.nameLabelColor ?? assignee.color,
+      showInSchedule: created.showInSchedule,
+    });
   }
 
   const scheduledUserOrderIds = assigneeKeyOrder
@@ -1345,7 +1415,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
     }
 
     for (const assignee of row.assignees) {
-      const user = userByName.get(normalizeUserKey(assignee));
+      const user = userByName.get(normalizeUserKey(assignee.name));
       if (!user) {
         counts.unknownUsers += 1;
         continue;
@@ -1369,7 +1439,7 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
           labelColor: entry.color,
           groupIndex,
           itemIndex: itemIndexInGroup < 0 ? entry.itemIndex : itemIndexInGroup,
-          sourceKey: `${row.dayYmd}|${normalizeKey(assignee)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}|${entry.color}|${groupIndex}|${itemIndexInGroup < 0 ? entry.itemIndex : itemIndexInGroup}`,
+          sourceKey: `${row.dayYmd}|${normalizeKey(assignee.name)}|${normalizeKey(row.companyName)}|${normalizeKey(summary)}|${entry.color}|${groupIndex}|${itemIndexInGroup < 0 ? entry.itemIndex : itemIndexInGroup}`,
         });
       }
     }

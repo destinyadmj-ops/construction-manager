@@ -80,12 +80,12 @@ export async function applyGlobalScheduleUserOrder<T extends { id: string }>(kin
   return sorted;
 }
 
-export async function listVisibleScheduleUsers(kind: ScheduleKind): Promise<Array<{ id: string; name: string | null; email: string | null }>> {
+export async function listVisibleScheduleUsers(kind: ScheduleKind): Promise<Array<{ id: string; name: string | null; email: string | null; nameLabelColor: string | null }>> {
   try {
     const usersRaw = await prisma.user.findMany({
       where: { kind, showInSchedule: true },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, nameLabelColor: true },
       take: 200,
     });
     return applyGlobalScheduleUserOrder(kind, usersRaw);
@@ -96,7 +96,10 @@ export async function listVisibleScheduleUsers(kind: ScheduleKind): Promise<Arra
       select: { id: true, name: true, email: true },
       take: 200,
     });
-    const ordered = await applyGlobalScheduleUserOrder(kind, fallbackUsers);
+    const ordered = await applyGlobalScheduleUserOrder(
+      kind,
+      fallbackUsers.map((user) => ({ ...user, nameLabelColor: 'default' })),
+    );
     return collapseDuplicateScheduleUsers(ordered);
   }
 }
