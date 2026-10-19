@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../../header-actions';
+import { useSchedulePermissions } from '../../user-gate';
 import { buildRepeatRuleWithPace, formatPaceFromMonths, formatPaceText, parseRepeatRule, type RepeatRule } from '@/shared/pace';
 
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
@@ -184,12 +185,6 @@ type TimeClockItem = {
   note: string | null;
 };
 
-type AuthMeUser = {
-  id: string;
-  canEditSchedule: boolean;
-  canGrantScheduleEdit: boolean;
-};
-
 type ScheduleKind = 'normal' | 'daily';
 
 export default function SiteLedgerDetailPage() {
@@ -214,7 +209,6 @@ export default function SiteLedgerDetailPage() {
 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
   const [siteKind, setSiteKind] = useState<ScheduleKind | null>(null);
   const [monthAlert, setMonthAlert] = useState<SiteMonthAlert | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -256,10 +250,7 @@ export default function SiteLedgerDetailPage() {
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const hasEditPermission = useMemo(
-    () => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit),
-    [authMeUser],
-  );
+  const { hasScheduleEditPermission: hasEditPermission } = useSchedulePermissions();
   const isDetailReadOnly = isMobile || !hasEditPermission;
   const canSave = useMemo(() => !isMobile && hasEditPermission && name.trim().length > 0 && !!siteId, [hasEditPermission, isMobile, name, siteId]);
   const canUploadPhotos = isMobile || hasEditPermission;
@@ -308,32 +299,6 @@ export default function SiteLedgerDetailPage() {
       monthsOfYear: buildRepeatRuleWithPace(current, formatted).monthsOfYear,
     }));
   }, [pace]);
-
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/auth/me')
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as unknown;
-        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!mounted || o?.ok !== true) return;
-        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
-        if (!raw || typeof raw.id !== 'string') {
-          setAuthMeUser(null);
-          return;
-        }
-        setAuthMeUser({
-          id: raw.id,
-          canEditSchedule: raw.canEditSchedule === true,
-          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
-        });
-      })
-      .catch(() => {
-        if (mounted) setAuthMeUser(null);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const load = useCallback(async () => {
     if (!siteId) return;
