@@ -60,7 +60,7 @@ import {
 } from '@/shared/schedule-return';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { useHeaderActions } from './header-actions';
-import { useAuthMeContext } from './user-gate';
+import { useAuthMeContext, useSchedulePermissions } from './user-gate';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 
 type ViewMode = 'week' | 'month' | 'year';
@@ -1258,7 +1258,7 @@ function WeekHubInner() {
 
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
   const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
-  const hasScheduleEditPermission = !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit);
+  const { hasScheduleEditPermission } = useSchedulePermissions();
   const currentEditorLabel = authMeUser?.name ?? authMeUser?.email ?? '管理者';
   const gridPrefsDefaults = useMemo(() => defaultWeekGridPrefs(gridPrefsTarget), [gridPrefsTarget]);
 

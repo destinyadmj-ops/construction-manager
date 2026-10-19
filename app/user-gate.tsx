@@ -37,7 +37,7 @@ type MeResponse =
 type ExistingLoginMode = 'select' | 'password' | 'setup';
 type GateScreen = 'home' | 'existing-auth';
 
-type AuthMeContextUser = {
+export type AuthMeContextUser = {
   id: string;
   name: string | null;
   email: string | null;
@@ -49,9 +49,11 @@ type AuthMeContextValue = {
   user: AuthMeContextUser | null;
   editConfigured: boolean;
   editEnabled: boolean;
+  // 初回の /api/auth/me 解決が完了したか（未ログイン確定も含む）。各ページの authMeLoaded 相当。
+  loaded: boolean;
 };
 
-const DEFAULT_AUTH_ME_CONTEXT: AuthMeContextValue = { user: null, editConfigured: false, editEnabled: true };
+const DEFAULT_AUTH_ME_CONTEXT: AuthMeContextValue = { user: null, editConfigured: false, editEnabled: true, loaded: false };
 
 // UserGate が起動時に一度だけ取得した /api/auth/me の結果を子ツリー全体で共有するための Context。
 // week-hub 側の独自 /api/auth/me 再取得を廃止し、この Context を参照させることで重複フェッチを解消する。
@@ -59,6 +61,29 @@ const AuthMeContext = createContext<AuthMeContextValue>(DEFAULT_AUTH_ME_CONTEXT)
 
 export function useAuthMeContext(): AuthMeContextValue {
   return useContext(AuthMeContext);
+}
+
+export type SchedulePermissions = {
+  user: AuthMeContextUser | null;
+  loaded: boolean;
+  canEditSchedule: boolean;
+  canGrantScheduleEdit: boolean;
+  hasScheduleEditPermission: boolean;
+};
+
+// week-hub/management/site-ledger 等で重複していた「canEditSchedule || canGrantScheduleEdit」判定を一本化する共通フック。
+export function useSchedulePermissions(): SchedulePermissions {
+  const { user, loaded } = useAuthMeContext();
+  return useMemo<SchedulePermissions>(
+    () => ({
+      user,
+      loaded,
+      canEditSchedule: user?.canEditSchedule === true,
+      canGrantScheduleEdit: user?.canGrantScheduleEdit === true,
+      hasScheduleEditPermission: !!(user?.canEditSchedule || user?.canGrantScheduleEdit),
+    }),
+    [user, loaded],
+  );
 }
 
 function parseAuthMeContextValue(obj: Record<string, unknown> | null): AuthMeContextValue {
@@ -79,6 +104,7 @@ function parseAuthMeContextValue(obj: Record<string, unknown> | null): AuthMeCon
     user,
     editConfigured: editMode?.configured === true,
     editEnabled: editMode ? editMode.enabled === true : true,
+    loaded: true,
   };
 }
 
@@ -242,6 +268,11 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<{ id: string; name: string | null; email: string | null } | null>(null);
   const [authMeCtx, setAuthMeCtx] = useState<AuthMeContextValue>(DEFAULT_AUTH_ME_CONTEXT);
+  // loading(初回解決中)が消えた時点で loaded:true とする（未ログイン/失敗時も含む）。
+  const authMeContextValue = useMemo<AuthMeContextValue>(
+    () => ({ ...authMeCtx, loaded: !loading }),
+    [authMeCtx, loading],
+  );
   const [open, setOpen] = useState(false);
 
   const [users, setUsers] = useState<ApiUser[]>([]);
@@ -507,7 +538,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return userId ? users.find((user) => user.id === userId) ?? null : null;
   })();
 
-  if (loading) return <AuthMeContext.Provider value={authMeCtx}>{children}</AuthMeContext.Provider>;
+  if (loading) return <AuthMeContext.Provider value={authMeContextValue}>{children}</AuthMeContext.Provider>;
 
   const closeIfPossible = () => {
     if (!me) return;
@@ -717,7 +748,7 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthMeContext.Provider value={authMeCtx}>
+    <AuthMeContext.Provider value={authMeContextValue}>
       <div className="min-h-screen">
         {children}
       </div>

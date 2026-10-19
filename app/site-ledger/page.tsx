@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useHeaderActions } from '../header-actions';
+import { useSchedulePermissions } from '../user-gate';
 
 function scheduleLabelDotClass(color: string | null | undefined): string {
   const c = (color ?? 'default').toString();
@@ -127,12 +128,6 @@ type PhotoFolderSummary = {
   photoCount: number;
 };
 
-type AuthMeUser = {
-  id: string;
-  canEditSchedule: boolean;
-  canGrantScheduleEdit: boolean;
-};
-
 type SharedSyncPreview = {
   sharedDir: string;
   selected: {
@@ -215,7 +210,6 @@ export default function SiteLedgerPage() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [authMeUser, setAuthMeUser] = useState<AuthMeUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [q, setQ] = useState('');
@@ -266,8 +260,9 @@ export default function SiteLedgerPage() {
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newName, setNewName] = useState('');
   const [newThreshold, setNewThreshold] = useState('10');
-  const canEditSite = useMemo(() => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit), [authMeUser]);
-  const canDeleteSite = useMemo(() => authMeUser?.canGrantScheduleEdit === true, [authMeUser]);
+  const { hasScheduleEditPermission, canGrantScheduleEdit } = useSchedulePermissions();
+  const canEditSite = hasScheduleEditPermission;
+  const canDeleteSite = canGrantScheduleEdit;
 
   const handleCompactHighlightInput = useCallback((event: FormEvent<HTMLInputElement>) => {
     setCompactHighlightQuery(event.currentTarget.value);
@@ -334,32 +329,6 @@ export default function SiteLedgerPage() {
     },
     [scheduleKind],
   );
-
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/auth/me')
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as unknown;
-        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!mounted || o?.ok !== true) return;
-        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
-        if (!raw || typeof raw.id !== 'string') {
-          setAuthMeUser(null);
-          return;
-        }
-        setAuthMeUser({
-          id: raw.id,
-          canEditSchedule: raw.canEditSchedule === true,
-          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
-        });
-      })
-      .catch(() => {
-        if (mounted) setAuthMeUser(null);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const loadSites = useCallback(async () => {
     setStatusMsg(null);

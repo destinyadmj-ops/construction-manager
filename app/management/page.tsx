@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderActions } from '../header-actions';
 import { useOutsidePointerDown } from '../use-outside-pointerdown';
+import { useSchedulePermissions } from '../user-gate';
 
 type DailySummaryItem = {
   userId: string;
@@ -92,8 +93,6 @@ export default function ManagementPage() {
   });
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [users, setUsers] = useState<ApiUser[]>([]);
-  const [authMeUser, setAuthMeUser] = useState<ApiUser | null>(null);
-  const [authMeLoaded, setAuthMeLoaded] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
 
@@ -151,50 +150,13 @@ export default function ManagementPage() {
     return Array.from({ length: 7 }, (_, i) => toYmd(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i)));
   }, []);
 
-  const hasScheduleEditPermission = useMemo(
-    () => !!(authMeUser?.canEditSchedule || authMeUser?.canGrantScheduleEdit),
-    [authMeUser],
-  );
+  const { hasScheduleEditPermission, loaded: authMeLoaded } = useSchedulePermissions();
 
   useEffect(() => {
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
     const next = k === 'daily' ? 'daily' : 'normal';
     setScheduleKind(next);
   }, [searchParams]);
-
-  useEffect(() => {
-    let mounted = true;
-    setAuthMeLoaded(false);
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as unknown;
-        const o = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
-        if (!mounted || o?.ok !== true) return;
-        const raw = o.user && typeof o.user === 'object' ? (o.user as Record<string, unknown>) : null;
-        if (!raw || typeof raw.id !== 'string') {
-          setAuthMeUser(null);
-          return;
-        }
-        setAuthMeUser({
-          id: raw.id,
-          name: typeof raw.name === 'string' ? raw.name : null,
-          email: typeof raw.email === 'string' ? raw.email : null,
-          canEditSchedule: raw.canEditSchedule === true,
-          canGrantScheduleEdit: raw.canGrantScheduleEdit === true,
-          passwordConfigured: typeof raw.passwordConfigured === 'boolean' ? raw.passwordConfigured : undefined,
-          passwordSetAt: typeof raw.passwordSetAt === 'string' ? raw.passwordSetAt : null,
-        });
-      })
-      .catch(() => {
-        if (mounted) setAuthMeUser(null);
-      })
-      .finally(() => {
-        if (mounted) setAuthMeLoaded(true);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (scheduleKind !== 'daily') return;
