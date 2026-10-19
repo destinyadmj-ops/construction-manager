@@ -62,6 +62,7 @@ import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { useHeaderActions } from './header-actions';
 import { useAuthMeContext, useSchedulePermissions } from './user-gate';
 import { writeCachedUserCandidates } from './user-candidate-cache';
+import { fetchSharedInflight } from './fetch-inflight';
 
 type ViewMode = 'week' | 'month' | 'year';
 
@@ -2936,7 +2937,7 @@ function WeekHubInner() {
   const refreshSites = useCallback(async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await fetch(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`, {
+        const r = await fetchSharedInflight(`/api/sites?month=${encodeURIComponent(deprMonth)}&kind=${scheduleKind}`, {
           cache: 'no-store',
         });
         if (!r.ok) {
