@@ -63,6 +63,7 @@ import { useHeaderActions } from './header-actions';
 import { useAuthMeContext, useSchedulePermissions } from './user-gate';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 import { fetchSharedInflight } from './fetch-inflight';
+import { readWeekPayloadCache, writeWeekPayloadCache } from './week-payload-cache';
 
 type ViewMode = 'week' | 'month' | 'year';
 
@@ -2653,6 +2654,17 @@ function WeekHubInner() {
 
     const controller = new AbortController();
     const effectStartedAt = performance.now();
+    const cacheKey = `week:${toYmd(weekStart)}:${kindQuery}`;
+    const cachedText = readWeekPayloadCache(cacheKey);
+    let shownFromCache = false;
+    if (cachedText) {
+      try {
+        applyWeekPayloadText(cachedText);
+        shownFromCache = true;
+      } catch {
+        // ignore broken cache
+      }
+    }
     const initialDelayMs = hasLoadedWeekOnceRef.current ? 250 : 0;
     hasLoadedWeekOnceRef.current = true;
     const timer = window.setTimeout(() => {
@@ -2661,7 +2673,7 @@ function WeekHubInner() {
         console.info(`[perf][week-hub] week fetch start: weekStart=${toYmd(weekStart)} kind=${kindQuery}`);
       }
       void (async () => {
-        setIsLoading(true);
+        if (!shownFromCache) setIsLoading(true);
         try {
           for (let attempt = 0; attempt < 2; attempt++) {
             try {
@@ -2679,6 +2691,7 @@ function WeekHubInner() {
               const text = await res.text();
               if (controller.signal.aborted) return;
               applyWeekPayloadText(text);
+              writeWeekPayloadCache(cacheKey, text);
               if (!hasLoggedWeekFetchRef.current) {
                 const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
                 const total = Math.max(0, Math.round(performance.now() - effectStartedAt));
@@ -2697,8 +2710,10 @@ function WeekHubInner() {
           }
         } catch {
           // Keep UI usable even if API is not ready.
-          weekPayloadTextRef.current = null;
-          setData(null);
+          if (!shownFromCache) {
+            weekPayloadTextRef.current = null;
+            setData(null);
+          }
         } finally {
           if (!hasLoggedWeekFetchRef.current) {
             const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
@@ -2738,6 +2753,7 @@ function WeekHubInner() {
           const text = await res.text();
           if (!cancelled) {
             applyWeekPayloadText(text);
+            writeWeekPayloadCache(`week:${toYmd(weekStart)}:${kindQuery}`, text);
           }
         }
       } catch {
@@ -2770,7 +2786,9 @@ function WeekHubInner() {
           cache: 'no-store',
         });
         if (res.ok) {
-          applyWeekPayloadText(await res.text());
+          const text = await res.text();
+          applyWeekPayloadText(text);
+          writeWeekPayloadCache(`week:${toYmd(weekStart)}:${kindQuery}`, text);
         }
         return;
       }
