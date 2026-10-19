@@ -123,6 +123,7 @@
 - (B) ユーザー名照合専用に漢字異体字同値マップ（斎/斉/齋/齊、辺/邊/邉、高/髙、崎/﨑 等）を追加し、site/company名の正規化キーとは分離した `normalizeUserKey()` でのみ適用。canonical選定は既存どおり global order優先→createdAt最古→id比較。表示名は canonical 側の既存表記を優先し、名前欄が空の場合のみ Excel 側表記で埋める（variant間での表記揺れ・巻き戻りを防止）。
 - (B) MASTERHUB側だけに残るふりがなの backfill を追加。現在の 作業表☆ から得た site 名/会社名のキー集合と突き合わせ、Site.name/companyName と WorkEntry.summary の読み仮名括弧のみを安全に除去（一致しないものは保持）。sharedExcelSync 管理範囲内の行は通常の再構成で既にクリーンな表記に置き換わるため、backfill は主に管理範囲外の旧データに効く。
 - (B) Phase2/3 の色/文字化け修正方針: `parseRichRunParts()` は `<r>` runが無いセルで raw `<t>` を素朴に全走査するフォールバックを持っていたが、これは `<rPh>`(ふりがな注記)内部の`<t>`も拾ってしまう欠陥だったため撤廃し、runが無い場合は呼び出し側の `fallbackText`(cell.v由来の正常値)+`detectCellEntryColor`(セルstyle色)へ完全に委ねる方針に統一。実データ確認で赤色は常に `<r><rPr><color rgb="FFFF0000"/></rPr>` 形式のみ使用（theme/indexed色は不使用、全1383件のrPh-without-run混入セルでもstyle単体red=0件）と判明したため、色検出ロジック自体の拡張（theme/indexed対応）は不要と判断。
+- (別チャット/デスクトップ再読込遅延調査フォローアップ) 2026-10-13: Desktop reload遅延見直し(2026-10-07 B実装: cache clear build marker化・week/shared-sync poll 5分化・live-build-sync 60秒化)を現コードで再確認し、全て反映済みと確認（追加差分なし）。Further Considerationsだった shared-sync自動検知(BullMQ queue/worker, 既定5分間隔)の要否をユーザーに確認した結果、「5分間隔のまま維持」で確定。追加のqueue撤廃・間隔変更は行わない。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
