@@ -10,7 +10,6 @@ import UserGate from './user-gate';
 import ColorEditOverlay from './color-edit-overlay';
 import ColorEditController from './color-edit-controller';
 import UiThemeLoader from './ui-theme-loader';
-import PageThemeLoader from './page-theme-loader';
 
 export const metadata: Metadata = {
   title: "Master Hub",
@@ -48,7 +47,6 @@ export default function RootLayout({
             <LiveBuildSync />
             <PwaBackGuard />
             <UiThemeLoader />
-            <PageThemeLoader />
             <AppHeader />
             <ColorEditOverlay />
             <ColorEditController />

@@ -8,6 +8,7 @@ import PortalMenu from './components/portal-menu';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderActions } from './header-actions';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
+import { fetchAuthMeShared } from './auth-me-shared';
 import {
   applyUiTheme,
   defaultUiTheme,
@@ -742,8 +743,7 @@ export default function AppHeader() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch('/api/auth/me');
-        const j = (await r.json().catch(() => null)) as unknown;
+        const { json: j } = await fetchAuthMeShared();
         const obj = j && typeof j === 'object' ? (j as Record<string, unknown>) : null;
         const user = obj?.user && typeof obj.user === 'object' ? (obj.user as Record<string, unknown>) : null;
         const id = typeof user?.id === 'string' ? (user.id as string) : null;

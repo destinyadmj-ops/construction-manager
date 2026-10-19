@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readColorEditMode, writeColorEditMode } from './color-edit';
 import { ColorRamp, normalizeThemeShade } from './color-ramp';
+import { fetchAuthMeShared } from './auth-me-shared';
 import {
   applyUiTheme,
   buildUiThemeSlotCssVars,
@@ -446,8 +447,7 @@ export default function ColorEditController() {
     let cancelled = false;
     void (async () => {
       try {
-        const meRes = await fetch('/api/auth/me');
-        const meJson = (await meRes.json().catch(() => null)) as unknown;
+        const { json: meJson } = await fetchAuthMeShared();
         const meObj = asObject(meJson);
         const userObj = asObject(meObj?.user);
         const userId = typeof userObj?.id === 'string' ? (userObj.id as string) : null;
@@ -502,13 +502,16 @@ export default function ColorEditController() {
 
     // initial fetch + periodic polling so other clients pick up changes
     void fetchOnce();
-    pollId = window.setInterval(() => void fetchOnce(), 5000);
+    pollId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void fetchOnce();
+    }, 5000);
 
     return () => {
       cancelled = true;
       if (pollId) window.clearInterval(pollId);
     };
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     const onPageUpdated = (e: Event) => {

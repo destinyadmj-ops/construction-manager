@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchAuthMeShared } from './auth-me-shared';
 import {
   mergeUserCandidates,
   readCachedUserCandidates,
@@ -387,11 +388,10 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
       };
 
       try {
-        const r = await fetch('/api/auth/me');
-        const j = (await r.json().catch(() => null)) as unknown;
+        const { ok: meOk, json: j } = await fetchAuthMeShared();
         console.info(`[perf][user-gate] auth/me fetch: ${Math.round(performance.now() - startedAt)}ms`);
         const obj = asObject(j);
-        if (!r.ok || obj?.ok !== true) {
+        if (!meOk || obj?.ok !== true) {
           if (cancelled) return;
           const restored = await restoreRememberedUser();
           if (!restored) {
