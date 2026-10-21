@@ -3,6 +3,13 @@ import { Prisma } from '@/generated/prisma';
 import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { readGlobalScheduleUserOrder, saveScheduleUserOrderForAllUsers } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
+import {
+  DEFAULT_COLOR_PALETTE,
+  attachCellFontColors,
+  getCellFont,
+  isRedRgb,
+  resolveColorAttrs,
+} from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -172,35 +179,29 @@ function decodeXmlText(value: string): string {
     .replace(/&amp;/g, '&');
 }
 
-function isRedColorToken(value: string): boolean {
-  const normalized = value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
-  if (!normalized) return false;
-  return normalized.endsWith('FF0000') || normalized.endsWith('C00000') || normalized.endsWith('9C0006');
-}
-
+// SheetJS CE の cell.s はフォント色を持たない(塗りつぶしのみ)ため、セル全体の文字色は attachCellFontColors が styles.xml から付与した値を使う。
 function detectCellEntryColor(cell: unknown): 'default' | 'red' {
-  const c = cell as { s?: unknown; r?: unknown } | null;
-  const rich = typeof c?.r === 'string' ? c.r : '';
-  if (/<color\b[^>]*rgb="[^"]*"/i.test(rich)) {
-    const matches = rich.match(/<color\b[^>]*rgb="([^"]+)"/gi) ?? [];
-    if (matches.some((token) => isRedColorToken(token))) return 'red';
-  }
-
-  const style = c?.s as Record<string, unknown> | undefined;
-  const font = style?.font as Record<string, unknown> | undefined;
-  const styleColor = font?.color as Record<string, unknown> | undefined;
-  const rgb = typeof styleColor?.rgb === 'string' ? styleColor.rgb : '';
-  return isRedColorToken(rgb) ? 'red' : 'default';
+  const c = cell as { r?: unknown } | null;
+  const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null, cell);
+  if (parts.length > 0) return parts.some((part) => part.color === 'red') ? 'red' : 'default';
+  return isRedRgb(getCellFont(cell)?.rgb) ? 'red' : 'default';
 }
 
 function normalizeNameLabelColor(value: unknown): 'default' | 'red' {
   return value === 'red' ? 'red' : 'default';
 }
 
-function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: string; color: 'default' | 'red' }> {
+function parseRichRunParts(
+  rawRich: string | null | undefined,
+  cell?: unknown,
+): Array<{ text: string; color: 'default' | 'red' }> {
   if (!rawRich) return [];
   const runRegex = /<r>([\s\S]*?)<\/r>/g;
   const result: Array<{ text: string; color: 'default' | 'red' }> = [];
+  // run に <color> が無い場合は自動色(黒)。リッチ文字列の run はセルのフォント色を継承しない
+  // (Excel は run ごとに sz/rFont 等を全て書き出し、色が無い run は自動色として表示する)
+  const cellFont = getCellFont(cell);
+  const palette = cellFont?.palette ?? DEFAULT_COLOR_PALETTE;
 
   let runMatch: RegExpExecArray | null = null;
   while ((runMatch = runRegex.exec(rawRich)) !== null) {
@@ -208,9 +209,9 @@ function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: st
     const textMatches = Array.from(runBlock.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
     const text = decodeXmlText(textMatches.map((x) => x[1] ?? '').join(''));
     if (!text) continue;
-    const colorMatch = /<color\b[^>]*rgb="([^"]+)"/i.exec(runBlock);
-    const color = colorMatch && isRedColorToken(colorMatch[1] ?? '') ? 'red' : 'default';
-    result.push({ text, color });
+    const colorAttrs = /<color\b([^>]*)>/i.exec(runBlock)?.[1];
+    const rgb = colorAttrs != null ? resolveColorAttrs(colorAttrs, palette) : null;
+    result.push({ text, color: isRedRgb(rgb) ? 'red' : 'default' });
   }
 
   // <r> run が無いセルはフォールバックで raw <t> を素朴に全走査しない。
@@ -224,7 +225,7 @@ function parseRichRunParts(rawRich: string | null | undefined): Array<{ text: st
 
 function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
   const c = cell as { r?: unknown } | null;
-  const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null);
+  const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null, cell);
   const partList = parts.length > 0 ? parts : [{ text: fallbackText, color: detectCellEntryColor(cell) }];
   const delimiter = /([、,，\/／\r\n]+|[ \t]{2,}|　{2,})/;
 
@@ -402,14 +403,18 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
   };
 }
 
-function readWorkbook(filePath: string): XLSX.WorkBook {
+export function readWorkbook(filePath: string, options?: { fontColors?: boolean }): XLSX.WorkBook {
   try {
-    return XLSX.readFile(filePath, {
+    const workbook = XLSX.readFile(filePath, {
       cellDates: true,
       cellStyles: true,
       cellHTML: true,
       dense: false,
+      // セル全体の文字色は zip 内の styles.xml から読む(.xlsx のみ)
+      bookFiles: options?.fontColors === true,
     });
+    if (options?.fontColors === true) attachCellFontColors(workbook);
+    return workbook;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Excel 読み取りに失敗しました';
     const lowered = message.toLowerCase();
@@ -430,6 +435,31 @@ function gridFromSheet(sheet: XLSX.WorkSheet): unknown[][] {
     blankrows: false,
     defval: '',
   }) as unknown[][];
+}
+
+// gridFromSheet は空行を除外するため、grid の行添字と実セルの行番号がずれる(空行を含むシートで色/リッチ文字の取得元がずれる)。
+// grid 行添字 → 実シート行番号の対応を作り、色判定用のセル参照を実番地で行う。
+type GridCellResolver = (gridRow: number, gridCol: number) => unknown;
+
+function createGridCellResolver(sheet: XLSX.WorkSheet): GridCellResolver {
+  const ref = sheet['!ref'];
+  if (!ref) return () => undefined;
+  const range = XLSX.utils.decode_range(ref);
+  const rowNumbers: number[] = [];
+  for (let r = range.s.r; r <= range.e.r; r += 1) {
+    for (let c = range.s.c; c <= range.e.c; c += 1) {
+      const cell = (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r, c })] as { v?: unknown } | undefined;
+      if (cell && cell.v != null) {
+        rowNumbers.push(r);
+        break;
+      }
+    }
+  }
+  return (gridRow, gridCol) => {
+    const sheetRow = rowNumbers[gridRow];
+    if (sheetRow == null) return undefined;
+    return (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: sheetRow, c: range.s.c + gridCol })];
+  };
 }
 
 function parseDateToYmd(value: unknown, fallbackYear: number): string | null {
@@ -532,6 +562,7 @@ function looksLikeAssigneeName(value: unknown): boolean {
 function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][], fallbackYear: number): WorkTableRow[] {
   // Week-matrix format: first column is assignee, date headers are on one row.
   const rows: WorkTableRow[] = [];
+  const cellAt = createGridCellResolver(sheet);
 
   let headerRowIndex = -1;
   let dateCols: number[] = [];
@@ -569,12 +600,10 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
       const siteName = normalizeTextStrippingReadingParens(toCellText(row[col]));
       if (!dayYmd || !siteName) continue;
 
-      const addr = XLSX.utils.encode_cell({ r: rowIndex, c: col });
-      const cell = (sheet as Record<string, unknown>)[addr];
+      const cell = cellAt(rowIndex, col);
       const entries = splitSiteEntriesFromCell(cell, siteName);
       if (entries.length === 0) continue;
-      const assigneeAddr = XLSX.utils.encode_cell({ r: rowIndex, c: 0 });
-      const assigneeCell = (sheet as Record<string, unknown>)[assigneeAddr];
+      const assigneeCell = cellAt(rowIndex, 0);
 
       rows.push({
         dayYmd,
@@ -588,7 +617,7 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
   return rows;
 }
 
-function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
+export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
   const rows: WorkTableRow[] = [];
   const fallbackYear = new Date().getFullYear();
 
@@ -596,6 +625,7 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
     const grid = gridFromSheet(sheet);
+    const cellAt = createGridCellResolver(sheet);
     const sheetRows: WorkTableRow[] = [];
 
     const found = findHeaderRowAndColumns(grid, {
@@ -619,19 +649,18 @@ function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
         const assignees = splitAssigneesFromCells(
           {
             text: lead,
-            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.lead })],
+            cell: cellAt(rowIndex, found.indexMap.lead),
           },
           {
             text: members,
-            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.members })],
+            cell: cellAt(rowIndex, found.indexMap.members),
           },
           {
             text: driver,
-            cell: (sheet as Record<string, unknown>)[XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.driver })],
+            cell: cellAt(rowIndex, found.indexMap.driver),
           },
         );
-        const addr = XLSX.utils.encode_cell({ r: rowIndex, c: found.indexMap.site });
-        const cell = (sheet as Record<string, unknown>)[addr];
+        const cell = cellAt(rowIndex, found.indexMap.site);
         const entries = splitSiteEntriesFromCell(cell, siteName);
 
         if (!siteName && !dateYmd && assignees.length === 0) {
@@ -1127,12 +1156,15 @@ export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number
   const kind = input.kind;
   const workTableFileName = files.workTable.fileName;
 
-  const workTableBook = readWorkbook(files.workTable.filePath);
+  const workTableBook = readWorkbook(files.workTable.filePath, { fontColors: true });
   const workSlipBook = readWorkbook(files.workSlip.filePath);
 
   const scheduleRows = extractWorkTableRows(workTableBook);
   const ledgerRows = extractWorkSlipLedgerRows(workSlipBook);
   const warnings: string[] = [];
+  if (files.workTable.extension === '.xls') {
+    warnings.push('作業表☆が .xls のため、セル全体の赤文字は読み取れません(一部の文字だけ赤い場合のみ反映)。.xlsx で保存してください。');
+  }
 
   const counts: SharedSyncCounts = {
     sitesCreated: 0,
