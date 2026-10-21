@@ -64,7 +64,41 @@ function cleanupFamilyLabel(prefix: string) {
   }
 }
 
+// 同じ peerNames 配列(参照が同じ)に対する正規化結果と判定結果を使い回す。
+// 現場約1000件 × セル数ぶん呼ばれるため、毎回全件を正規化すると週切替のたびに数百msかかっていた。
+// 配列は呼び出し側で作り替えない前提(作り替えると参照が変わり、キャッシュは使われないだけで結果は同じ)。
+const peerInfoCache = new WeakMap<object, { texts: string[]; keys: string[] }>();
+const familyResultCache = new WeakMap<object, Map<string, SiteFamilyInfo>>();
+
+function getPeerInfo(peerNames: Array<string | null | undefined>) {
+  let info = peerInfoCache.get(peerNames);
+  if (!info) {
+    const texts = peerNames.map((name) => normalizeSiteFamilyText(name));
+    info = { texts, keys: texts.map((text) => normalizeSiteFamilyKey(text)) };
+    peerInfoCache.set(peerNames, info);
+  }
+  return info;
+}
+
 export function findSiteFamily(
+  anchorName: string | null | undefined,
+  peerNames: Array<string | null | undefined>,
+): SiteFamilyInfo {
+  const resultKey = anchorName ?? '';
+  let results = familyResultCache.get(peerNames);
+  const cachedResult = results?.get(resultKey);
+  if (cachedResult) return cachedResult;
+
+  const result = computeSiteFamily(anchorName, peerNames);
+  if (!results) {
+    results = new Map();
+    familyResultCache.set(peerNames, results);
+  }
+  results.set(resultKey, result);
+  return result;
+}
+
+function computeSiteFamily(
   anchorName: string | null | undefined,
   peerNames: Array<string | null | undefined>,
 ): SiteFamilyInfo {
@@ -72,13 +106,20 @@ export function findSiteFamily(
   const anchorKey = normalizeSiteFamilyKey(anchorName);
   if (!anchorKey) return { key: null, label: null, memberCount: 0 };
 
-  const peers = Array.from(
-    new Set([anchorDisplay, ...peerNames.map((name) => normalizeSiteFamilyText(name))].filter((name) => name.length > 0)),
-  );
+  const info = getPeerInfo(peerNames);
+  const seen = new Set<string>();
+  const peerKeys: string[] = [];
+  const addPeer = (text: string, key: string) => {
+    if (text.length === 0 || seen.has(text)) return;
+    seen.add(text);
+    peerKeys.push(key);
+  };
+  addPeer(anchorDisplay, normalizeSiteFamilyKey(anchorDisplay));
+  for (let i = 0; i < info.texts.length; i += 1) addPeer(info.texts[i], info.keys[i]);
+
   const candidates = new Map<string, string>();
 
-  for (const peer of peers) {
-    const peerKey = normalizeSiteFamilyKey(peer);
+  for (const peerKey of peerKeys) {
     if (!peerKey || peerKey === anchorKey) continue;
     const prefixLength = commonPrefixLength(anchorKey, peerKey);
     if (prefixLength < 2) continue;
@@ -91,10 +132,7 @@ export function findSiteFamily(
 
   let best: { key: string; label: string; memberCount: number } | null = null;
   for (const [candidateKey, candidateLabel] of candidates) {
-    const memberCount = peers.reduce(
-      (count, peer) => (normalizeSiteFamilyKey(peer).startsWith(candidateKey) ? count + 1 : count),
-      0,
-    );
+    const memberCount = peerKeys.reduce((count, peerKey) => (peerKey.startsWith(candidateKey) ? count + 1 : count), 0);
     if (memberCount < 2) continue;
     if (
       !best ||
