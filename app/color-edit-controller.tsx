@@ -107,25 +107,29 @@ function sameSlotSiblingIndex(el: Element): number {
   return index;
 }
 
-function describeElementSegment(el: Element): string {
+function describeElementSegment(el: Element, cache?: Map<Element, string>): string {
+  const cached = cache?.get(el);
+  if (cached !== undefined) return cached;
   const labelSeed = getElementLabelSeed(el);
   const slot = normalizeKeyToken(el.getAttribute('data-color-edit-slot'), 16);
   const label = labelSeed ? `:${labelSeed}` : '';
   const slotPart = slot ? `[${slot}]` : '';
-  return `${el.tagName.toLowerCase()}${slotPart}${label}#${sameSlotSiblingIndex(el)}`;
+  const segment = `${el.tagName.toLowerCase()}${slotPart}${label}#${sameSlotSiblingIndex(el)}`;
+  cache?.set(el, segment);
+  return segment;
 }
 
 function getExplicitThemeTargetId(el: Element): string | null {
   return normalizeKeyToken(el.getAttribute('data-color-edit-id'), 96);
 }
 
-function buildLegacyElementThemeKey(el: HTMLElement, slot: EditSlot): string {
+function buildLegacyElementThemeKey(el: HTMLElement, slot: EditSlot, cache?: Map<Element, string>): string {
   const segments: string[] = [slot];
   let cursor: Element | null = el;
   let depth = 0;
 
   while (cursor && cursor !== document.body && depth < 6) {
-    segments.unshift(describeElementSegment(cursor));
+    segments.unshift(describeElementSegment(cursor, cache));
     cursor = cursor.parentElement;
     depth += 1;
   }
@@ -134,7 +138,7 @@ function buildLegacyElementThemeKey(el: HTMLElement, slot: EditSlot): string {
   return segments.join('>');
 }
 
-function buildElementThemeKey(el: HTMLElement, slot: EditSlot): string {
+function buildElementThemeKey(el: HTMLElement, slot: EditSlot, cache?: Map<Element, string>): string {
   const explicitId = getExplicitThemeTargetId(el);
   if (explicitId) return `${slot}@${explicitId}`;
 
@@ -143,7 +147,7 @@ function buildElementThemeKey(el: HTMLElement, slot: EditSlot): string {
     if (labelSeed) return `${slot}@${labelSeed}`;
   }
 
-  return buildLegacyElementThemeKey(el, slot);
+  return buildLegacyElementThemeKey(el, slot, cache);
 }
 
 function describeEditableTarget(el: HTMLElement, slot: EditSlot): string {
@@ -198,6 +202,7 @@ function findCandidateElements(slot: EditSlot): HTMLElement[] {
 // 結果は従来と同じ: 文書順で最初に「通常キーまたは旧形式キー」が一致した要素。
 function createOverrideElementResolver(): (slot: EditSlot, targetKey: string) => HTMLElement | null {
   const bySlot = new Map<EditSlot, { resolved: HTMLElement[]; primary: Map<string, number> }>();
+  const segmentCache = new Map<Element, string>();
 
   const load = (slot: EditSlot) => {
     let entry = bySlot.get(slot);
@@ -209,7 +214,7 @@ function createOverrideElementResolver(): (slot: EditSlot, targetKey: string) =>
       if (!el) continue;
       const index = resolved.length;
       resolved.push(el);
-      const key = buildElementThemeKey(el, slot);
+      const key = buildElementThemeKey(el, slot, segmentCache);
       if (!primary.has(key)) primary.set(key, index);
     }
     entry = { resolved, primary };
@@ -232,7 +237,7 @@ function createOverrideElementResolver(): (slot: EditSlot, targetKey: string) =>
         if (!ownSegment.startsWith(tag)) continue;
         const next = ownSegment.charAt(tag.length);
         if (next !== '' && next !== '[' && next !== ':' && next !== '#') continue;
-        if (buildLegacyElementThemeKey(el, slot) === targetKey) {
+        if (buildLegacyElementThemeKey(el, slot, segmentCache) === targetKey) {
           bestIndex = i;
           break;
         }
