@@ -240,7 +240,7 @@ npm run db:migrate:raw
 	- ロールバック: `git reset --hard <commit>`
 - 表示高速化のキャッシュ/先読み仕様: 週予定(PC/モバイル)は `app/week-payload-cache.ts`(sessionStorage+メモリ)の前回データを即時表示し、必ず裏で再取得して置換する(PCは前後1週を先読み)。写真ダウンロードは `private, max-age=60` + ETag。無効化は週予定の `readWeekPayloadCache` 呼出と先読み(`prefetchTimer`)の除去、`app/api/documents/[id]/download/route.ts` の `DOWNLOAD_CACHE_CONTROL` 削除で元に戻る。
 	- 補足: `git commit -am` は「追跡済みファイル」しか含まれないため、新規ファイルがある場合は `git add -A` を使う。
-- 作業表☆同期の文字色(赤/黒)判定: セル全体の文字色は `.xlsx` 内の `styles.xml` から解決する(`src/server/excel-font-color.ts`。SheetJS の `cell.s` はフォント色を持たない)。rgb/theme(+tint)/indexed を RGB 化し、色相±10°・彩度70%以上・明度20〜65%を「赤」とする(橙/桃/茶/黄は赤にしない)。リッチ文字列は run 単位で判定し、色指定の無い run は自動(黒)扱い。担当者名も同じ判定で、値は赤/通常の2値のみ。
+- 作業表☆同期の文字色(赤/黒)判定: セル全体の文字色は `.xlsx` 内の `styles.xml` から解決する(`src/server/excel-font-color.ts`。SheetJS の `cell.s` はフォント色を持たない)。rgb/theme(+tint)/indexed を RGB 化し、色相±10°・彩度70%以上・明度20〜65%を「赤」とする(橙/桃/茶/黄は赤にしない)。リッチ文字列は run 単位で判定し、色指定の無い run はそのセルのフォント色を継承する(セルが赤なら赤、無色なら黒)。赤黒が混在するセルは色ごとに別エントリへ分割し、セル内の文字順を保つ。担当者名も同じ判定で、値は赤/通常の2値のみ。
 	- 制限: `.xls` 形式の作業表☆ではセル全体の文字色を読めない(リッチ文字列の run 色のみ反映。同期結果の警告に表示)。`.xlsx` で保存すること。空行を含むシートでも色取得セルがずれないよう、`gridFromSheet` の行添字を実セル番地へ対応付けている(`createGridCellResolver`)。
 
 ※ 親フォルダ（`Master Hub/`）には中継用の `package.json` を置いてあるため、親フォルダから `npm run dev` / `npm run dev:keep` なども実行できます（内部的に `master-hub/` へ転送）。
