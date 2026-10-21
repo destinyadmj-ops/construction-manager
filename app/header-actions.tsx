@@ -34,6 +34,9 @@ export type HeaderHistoryPanel = {
 	widthClassName?: string;
 };
 
+// week-hub の現在表示(タブは URL に出ないためヘッダーへ伝える)。ナビゲーションではクリアしない。
+export type HeaderWeekView = { mode: 'week' | 'month' | 'year'; kind: 'normal' | 'daily' };
+
 type HeaderActionsState = {
   add?: HeaderAction;
   history?: HeaderAction;
@@ -46,6 +49,8 @@ type HeaderActionsState = {
 
 type HeaderActionsContextValue = {
   actions: HeaderActionsState;
+  weekView: HeaderWeekView | null;
+  setWeekView: (view: HeaderWeekView | null) => void;
   setAddAction: (action: HeaderAction | undefined) => void;
   setHistoryAction: (action: HeaderAction | undefined) => void;
   setHistoryMenu: (menu: HeaderHistoryMenu | undefined) => void;
@@ -62,6 +67,10 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   const searchParams = useSearchParams();
   const searchKey = searchParams?.toString() ?? '';
   const [actions, setActions] = useState<HeaderActionsState>({});
+  const [weekView, setWeekViewState] = useState<HeaderWeekView | null>(null);
+  const setWeekView = useCallback((view: HeaderWeekView | null) => {
+    setWeekViewState((cur) => (cur?.mode === view?.mode && cur?.kind === view?.kind ? cur : view));
+  }, []);
 
   useEffect(() => {
     // This intentionally clears header actions on navigation.
@@ -98,8 +107,8 @@ export function HeaderActionsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const value = useMemo<HeaderActionsContextValue>(
-    () => ({ actions, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction }),
-    [actions, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setRedoAction, setSaveAction, setUndoAction],
+    () => ({ actions, weekView, setWeekView, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction }),
+    [actions, weekView, setWeekView, setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setRedoAction, setSaveAction, setUndoAction],
   );
 
   return <HeaderActionsContext.Provider value={value}>{children}</HeaderActionsContext.Provider>;

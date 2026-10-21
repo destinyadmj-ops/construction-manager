@@ -1156,7 +1156,7 @@ const SiteListButton = memo(function SiteListButton({
 });
 
 function WeekHubInner() {
-  const { setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
+  const { setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction, setWeekView } = useHeaderActions();
   const router = useRouter();
   const routerPush = useCallback((href: string) => router.push(href), [router]);
   const searchParams = useSearchParams();
@@ -1377,6 +1377,12 @@ function WeekHubInner() {
     setGridLayout(l === 'comfortable' ? 'comfortable' : 'compact');
   }, [searchParams]);
 
+  useEffect(() => {
+    setWeekView({ mode, kind: scheduleKind });
+  }, [mode, scheduleKind, setWeekView]);
+
+  useEffect(() => () => setWeekView(null), [setWeekView]);
+
   const apiKind = useMemo(() => (scheduleKind === 'daily' ? 'DAILY' : 'NORMAL'), [scheduleKind]);
   const kindQuery = useMemo(() => `kind=${encodeURIComponent(scheduleKind)}`, [scheduleKind]);
   const { hasScheduleEditPermission } = useSchedulePermissions();
@@ -1593,6 +1599,12 @@ function WeekHubInner() {
     () => `${gridPrefsOwnerId ?? 'anon'}:${gridPrefsKey}`,
     [gridPrefsKey, gridPrefsOwnerId],
   );
+  // 現在の state がどのスコープ(タブ)の保存値を表しているか。不一致の間は保存しない(前タブの値で上書きしない)。
+  const gridPrefsStateScopeRef = useRef<string | null>(null);
+  const gridPrefsCurrentScopeRef = useRef(gridPrefsLoadedScopeKey);
+  useEffect(() => {
+    gridPrefsCurrentScopeRef.current = gridPrefsLoadedScopeKey;
+  }, [gridPrefsLoadedScopeKey]);
 
   const readLocalGridPrefs = useCallback((localStorageKey: string | null) => {
     if (typeof window === 'undefined') return null;
@@ -1619,7 +1631,8 @@ function WeekHubInner() {
 
   const loadGridPrefs = useCallback(async (storageUserId: string | null, remoteUserId: string | null, key: string) => {
     const scopeKey = `${storageUserId ?? 'anon'}:${key}`;
-    if (gridPrefsLoadedRef.current[scopeKey]) return;
+    const alreadyLoaded = !!gridPrefsLoadedRef.current[scopeKey];
+    if (alreadyLoaded && gridPrefsStateScopeRef.current === scopeKey) return;
     gridPrefsLoadedRef.current[scopeKey] = true;
     const localStorageKey = buildWeekGridPrefsLocalStorageKey(key, storageUserId);
     const legacyLocalStorageKey = buildWeekGridPrefsLocalStorageKey(legacyGridPrefsKey, storageUserId);
@@ -1642,6 +1655,7 @@ function WeekHubInner() {
 
     if (localRaw) {
       applyGridPrefs(localRaw);
+      gridPrefsStateScopeRef.current = scopeKey;
       if (loadedLocalKey !== localStorageKey) {
         try {
           const normalized = normalizeWeekGridPrefs(localRaw, gridPrefsDefaults);
@@ -1655,9 +1669,10 @@ function WeekHubInner() {
       }
     } else {
       applyGridPrefs(gridPrefsDefaults);
+      gridPrefsStateScopeRef.current = scopeKey;
     }
 
-    if (!remoteUserId) return;
+    if (alreadyLoaded || !remoteUserId) return;
 
     try {
       for (const remoteKey of [key, legacyGridPrefsKey]) {
@@ -1677,6 +1692,21 @@ function WeekHubInner() {
           break;
         }
 
+        if (typeof window !== 'undefined') {
+          try {
+            const normalized = normalizeWeekGridPrefs(o, gridPrefsDefaults);
+            window.localStorage.setItem(
+              localStorageKey,
+              JSON.stringify({ ...o, ...normalized, savedAt: remoteUpdatedAt || Date.now(), v: WEEK_GRID_PREFS_VERSION }),
+            );
+          } catch {
+            // ignore
+          }
+        }
+
+        // 取得中に別タブへ切り替わっていたら state へは適用しない(ローカル保存のみ。戻ったとき再適用される)。
+        if (gridPrefsCurrentScopeRef.current !== scopeKey) break;
+
         applyGridPrefs(o);
 
         const nextAction =
@@ -1689,18 +1719,6 @@ function WeekHubInner() {
             ? (o.cellClickAction as CellClickAction)
             : null;
         if (nextAction) setCellClickAction(nextAction);
-
-        if (typeof window !== 'undefined') {
-          try {
-            const normalized = normalizeWeekGridPrefs(o, gridPrefsDefaults);
-            window.localStorage.setItem(
-              localStorageKey,
-              JSON.stringify({ ...o, ...normalized, savedAt: remoteUpdatedAt || Date.now(), v: WEEK_GRID_PREFS_VERSION }),
-            );
-          } catch {
-            // ignore
-          }
-        }
         break;
       }
     } catch {
@@ -1935,6 +1953,7 @@ function WeekHubInner() {
 
   useEffect(() => {
     if (!gridPrefsLoadedRef.current[gridPrefsLoadedScopeKey]) return;
+    if (gridPrefsStateScopeRef.current !== gridPrefsLoadedScopeKey) return;
     if (typeof window === 'undefined') return;
 
     if (gridPrefsSaveTimerRef.current) {

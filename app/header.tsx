@@ -122,7 +122,7 @@ export default function AppHeader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
-  const { actions } = useHeaderActions();
+  const { actions, weekView } = useHeaderActions();
 
   // 現場リストの開閉状態
   const [isSiteListCollapsed, setIsSiteListCollapsed] = useState(false);
@@ -175,20 +175,25 @@ export default function AppHeader() {
   const isDailyWeek = pathname === '/' && (!mode || mode === 'week') && routeKind === 'daily';
   const isWeek = pathname === '/' && (!mode || mode === 'week') && routeKind !== 'daily';
 
-  const weekModeKey = useMemo(() => {
+  // フォントサイズキーは従来どおり URL 基準(タブ別にしない)。
+  const urlModeKey = useMemo(() => {
     if (pathname !== '/') return null;
     const m = (mode ?? '').trim();
     if (m === 'month' || m === 'year' || m === 'week') return m;
     return 'week';
   }, [mode, pathname]);
 
+  // セル設定は week-hub が伝える現在のタブ(週/月/年)を優先する。
+  const weekModeKey = pathname === '/' ? (weekView?.mode ?? urlModeKey) : null;
+
   const weekGridPrefsTarget = useMemo(() => detectWeekGridPrefsTarget(), []);
 
   const weekScheduleKindKey = useMemo(() => {
     if (pathname !== '/') return null;
+    if (weekView) return weekView.kind;
     const k = (searchParams.get('kind') ?? '').trim().toLowerCase();
     return k === 'daily' ? 'daily' : 'normal';
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, weekView]);
 
   const weekGridPrefsKey = useMemo(() => {
     if (pathname !== '/' || !weekModeKey || !weekScheduleKindKey) return null;
@@ -805,8 +810,8 @@ export default function AppHeader() {
 
   const pageFontKey = useMemo(() => {
     if (pathname !== '/') return `fontSize:${pathname}`;
-    return `fontSize:${pathname}:${weekModeKey ?? 'week'}`;
-  }, [pathname, weekModeKey]);
+    return `fontSize:${pathname}:${urlModeKey ?? 'week'}`;
+  }, [pathname, urlModeKey]);
 
   const legacyPageFontKey = useMemo(() => {
     if (pathname !== '/') return null;
