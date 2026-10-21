@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import {
   personalScheduleSwatchClass,
   type PersonalScheduleSummaryDay,
@@ -274,6 +274,56 @@ function renderScheduleEntryLabel(entry: string, color: LabelColor = 'default') 
     <>
       <span className={labelTextClass(color)}>{described.mainText}</span>
       <span className="text-red-600 dark:text-red-400">{`（追記: ${described.noteText}）`}</span>
+    </>
+  );
+}
+
+// ▼ 用の余白(px)。測定から除外して、▼ の出入りで判定が揺れないようにする。
+const CELL_ARROW_RESERVE_PX = 20;
+
+// 全文が見えない/追加情報ありのセルに黒▼を出す(タップで cellEntryMenu が開くのは親ボタンの挙動)。
+function CellEntryLabel({ measureKey, hasExtraInfo, children }: { measureKey: string; hasExtraInfo: boolean; children: ReactNode }) {
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  const [overflowed, setOverflowed] = useState(false);
+  const showArrow = hasExtraInfo || overflowed;
+
+  useEffect(() => {
+    const textEl = textRef.current;
+    if (!textEl || hasExtraInfo) return;
+    const reserve = showArrow ? CELL_ARROW_RESERVE_PX : 0;
+
+    const update = () => {
+      const next = textEl.scrollWidth > textEl.clientWidth + reserve + 1;
+      setOverflowed((prev) => (prev === next ? prev : next));
+    };
+
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(textEl);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [hasExtraInfo, measureKey, showArrow]);
+
+  return (
+    <>
+      <span
+        ref={textRef}
+        className="block overflow-hidden whitespace-nowrap leading-tight"
+        style={showArrow ? { maxWidth: `calc(100% - ${CELL_ARROW_RESERVE_PX}px)` } : undefined}
+      >
+        {children}
+      </span>
+      {showArrow ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-1 top-1 rounded border border-zinc-200 bg-white/95 px-1 py-0.5 text-[10px] leading-none text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/95 dark:text-zinc-100"
+        >
+          ▼
+        </span>
+      ) : null}
     </>
   );
 }
@@ -1413,9 +1463,7 @@ function MobileWeekHubInner() {
                                       if (!displayEntry) return null;
                                       const entryTargets = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry);
                                       const previewLabel = resolveScheduleEntryPreview([displayEntry], siteLookupByScheduleEntry);
-                                      const hasMultipleEntries = group.items.filter(
-                                        (entry) => normalizeScheduleCellEntryKind(entry.kind) === 'site',
-                                      ).length > 1;
+                                      const hasExtraInfo = group.items.length > 1 || Boolean(group.note);
 
                                       return (
                                         <button
@@ -1439,17 +1487,12 @@ function MobileWeekHubInner() {
                                           aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
                                           data-testid={`mobile-week-cell-menu-${user.id}-${day.key}-${groupIndex}`}
                                         >
-                                          <span
-                                            className="block overflow-hidden whitespace-nowrap leading-tight"
-                                            style={hasMultipleEntries ? { maxWidth: 'calc(100% - 0.8rem)' } : undefined}
+                                          <CellEntryLabel
+                                            measureKey={`${user.id}:${day.key}:${groupIndex}:${displayEntry.entry}`}
+                                            hasExtraInfo={hasExtraInfo}
                                           >
                                             {renderScheduleEntryLabel(previewLabel.entry, previewLabel.color)}
-                                          </span>
-                                          {hasMultipleEntries ? (
-                                            <span className="absolute bottom-1 right-1 text-[10px] font-bold leading-none text-red-600 dark:text-red-400">
-                                              +
-                                            </span>
-                                          ) : null}
+                                          </CellEntryLabel>
                                         </button>
                                       );
                                     })}

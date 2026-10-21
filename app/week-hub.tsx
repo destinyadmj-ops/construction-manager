@@ -375,16 +375,32 @@ function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null 
   return isLabelColor(user?.nameLabelColor) ? user.nameLabelColor : 'default';
 }
 
-function OverflowPlusLabel({ children, measureKey }: { children: ReactNode; measureKey: string }) {
+// ▼ 表示用に right padding が px-1.5 -> pr-5 へ増える分(px)。測定から除外し、▼ の出入りで判定が揺れないようにする。
+const CELL_ARROW_RESERVE_PX = 14;
+
+function CellOverflowSlot({
+  measureKey,
+  hasExtraInfo,
+  content,
+  render,
+}: {
+  measureKey: string;
+  hasExtraInfo: boolean;
+  content: ReactNode;
+  render: (displayValue: ReactNode, showArrow: boolean) => ReactNode;
+}) {
   const textRef = useRef<HTMLSpanElement | null>(null);
   const [overflowed, setOverflowed] = useState(false);
+  const showArrow = hasExtraInfo || overflowed;
 
   useEffect(() => {
     const textEl = textRef.current;
-    if (!textEl) return;
+    if (!textEl || hasExtraInfo) return;
+    const reserve = showArrow ? CELL_ARROW_RESERVE_PX : 0;
 
     const update = () => {
-      const next = textEl.scrollWidth > textEl.clientWidth + 1 || textEl.scrollHeight > textEl.clientHeight + 1;
+      const next =
+        textEl.scrollWidth > textEl.clientWidth + reserve + 1 || textEl.scrollHeight > textEl.clientHeight + 1;
       setOverflowed((prev) => (prev === next ? prev : next));
     };
 
@@ -396,20 +412,14 @@ function OverflowPlusLabel({ children, measureKey }: { children: ReactNode; meas
       ro.disconnect();
       window.removeEventListener('resize', update);
     };
-  }, [measureKey]);
+  }, [hasExtraInfo, measureKey, showArrow]);
 
-  return (
-    <span className="relative block w-full">
-      <span ref={textRef} className="block overflow-hidden whitespace-nowrap">
-        {children}
-      </span>
-      {overflowed ? (
-        <span className="pointer-events-none absolute left-full top-1/2 ml-0.5 -translate-y-1/2 text-xs font-bold leading-none text-red-600 dark:text-red-400">
-          +
-        </span>
-      ) : null}
+  const displayValue = (
+    <span ref={textRef} className="block overflow-hidden whitespace-nowrap">
+      {content}
     </span>
   );
+  return <>{render(displayValue, showArrow)}</>;
 }
 
 function ColumnResizeHandle({
@@ -7533,7 +7543,7 @@ function Row({
           type="button"
           aria-label="全文を表示"
           aria-haspopup="menu"
-          className="absolute right-1 top-1 z-[81] rounded border border-zinc-200 bg-white/95 px-1 py-0.5 text-[10px] leading-none text-zinc-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/95 dark:text-zinc-300"
+          className="absolute right-1 top-1 z-[81] rounded border border-zinc-200 bg-white/95 px-1 py-0.5 text-[10px] leading-none text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/95 dark:text-zinc-100"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -7719,16 +7729,17 @@ function Row({
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const shouldShowSingleSiteFullTextMenu =
           siteItems.length === 1 && noteItems.length === 0 && !groupNote && tooltipValue.length > 18;
-        const hoverMenuItems: CellHoverMenuItem[] =
+        const siteMenuItems: CellHoverMenuItem[] = siteItems.map((item, itemIndex) => ({
+          key: `hover-site:${day}:${groupIndex}:${itemIndex}`,
+          kind: 'site' as const,
+          label: item.fullDisplayName,
+          siteName: item.storedName,
+          className: labelTextClass(item.entry.color ?? 'default', 'primary'),
+        }));
+        const extraHoverMenuItems: CellHoverMenuItem[] =
           siteItems.length > 1 || noteItems.length > 0 || Boolean(groupNote) || shouldShowSingleSiteFullTextMenu
             ? [
-                ...siteItems.map((item, itemIndex) => ({
-                  key: `hover-site:${day}:${groupIndex}:${itemIndex}`,
-                  kind: 'site' as const,
-                  label: item.fullDisplayName,
-                  siteName: item.storedName,
-                  className: labelTextClass(item.entry.color ?? 'default', 'primary'),
-                })),
+                ...siteMenuItems,
                 ...noteItems.map((item, itemIndex) => ({
                   key: `hover-note:${day}:${groupIndex}:${itemIndex}`,
                   kind: 'note' as const,
@@ -7745,8 +7756,8 @@ function Row({
                   : []),
               ]
             : [];
-        const displayValue = (
-          <OverflowPlusLabel measureKey={`${day}:${groupIndex}:${displayText}`}>
+        const labelContent = (
+          <>
             {renderedItems.map((item, itemIndex) => {
               const isSiteItem = isSiteCellEntry(item.entry);
               return (
@@ -7775,29 +7786,37 @@ function Row({
                 {renderedItems.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
               </>
             ) : null}
-          </OverflowPlusLabel>
+          </>
         );
         const dragState = isEditable && anchorEntry && isSiteCellEntry(anchorEntry)
           ? { userId: user.id, day, cell: groupsToApiCell([group]) }
           : null;
         return (
           <div key={`group:${day}:${groupIndex}`} className={`relative ${groupIndex > 0 ? 'mt-1' : ''}`}>
-            {renderSiteLabel({
-              displayValue,
-              displayText,
-              tooltipValue,
-              siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
-              entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
-              className: `block whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
-                isNoteGroup
-                  ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
-                  : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
-              }`,
-              fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
-              hoverMenuItems,
-              dragState,
-              contextInput: { userId: user.id, day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
-            })}
+            <CellOverflowSlot
+              measureKey={`${day}:${groupIndex}:${displayText}`}
+              hasExtraInfo={extraHoverMenuItems.length > 0}
+              content={labelContent}
+              render={(displayValue, showArrow) =>
+                renderSiteLabel({
+                  displayValue,
+                  displayText,
+                  tooltipValue,
+                  siteName: anchorEntry && isSiteCellEntry(anchorEntry) ? anchorEntry.label : null,
+                  entryKind: anchorEntry ? normalizeScheduleCellEntryKind(anchorEntry.kind) : 'site',
+                  className: `block whitespace-nowrap rounded-md border px-1.5 py-1 text-zinc-800 dark:text-zinc-200 ${gridLayout === 'comfortable' ? 'leading-snug' : 'leading-tight'} ${
+                    isNoteGroup
+                      ? 'border-amber-200/80 bg-amber-50/70 italic dark:border-amber-900/60 dark:bg-amber-950/20'
+                      : 'border-zinc-200/80 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/40'
+                  }`,
+                  fontSize: groupIndex === 0 ? 'var(--weekhub-cell-font-size, 12px)' : 'calc(var(--weekhub-cell-font-size, 12px) * 0.95)',
+                  // 追加情報がないセルがはみ出しだけで▼を出すときは、単独現場の全文を1項目として出す。
+                  hoverMenuItems: extraHoverMenuItems.length > 0 ? extraHoverMenuItems : showArrow ? siteMenuItems : [],
+                  dragState,
+                  contextInput: { userId: user.id, day, beforeCell, color: anchorEntry?.color ?? 'default', groupIndex, groupNote },
+                })
+              }
+            />
           </div>
         );
       });
