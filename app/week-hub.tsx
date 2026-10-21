@@ -2699,9 +2699,14 @@ function WeekHubInner() {
     () => Array.from(new Set(days.map((day) => toYmd(day).slice(0, 7)))),
     [days],
   );
-  const weekPersonalScheduleUserIds = useMemo(
-    () => Array.from(new Set((data?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))),
+  const weekPersonalScheduleUserIdsKey = useMemo(
+    () => Array.from(new Set((data?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))).join('\n'),
     [data?.users],
+  );
+  // 週データ再取得のたびに配列の参照だけが変わり、個人予定サマリを二重取得していたため、内容が同じなら同じ参照を返す
+  const weekPersonalScheduleUserIds = useMemo(
+    () => (weekPersonalScheduleUserIdsKey ? weekPersonalScheduleUserIdsKey.split('\n') : []),
+    [weekPersonalScheduleUserIdsKey],
   );
   const hasLoggedWeekFetchRef = useRef(false);
   const hasLoadedWeekOnceRef = useRef(false);
@@ -2758,7 +2763,9 @@ function WeekHubInner() {
           }
         }
 
-        setPersonalScheduleSummaryByUser(merged);
+        setPersonalScheduleSummaryByUser((current) =>
+          JSON.stringify(current) === JSON.stringify(merged) ? current : merged,
+        );
       } catch {
         if (controller.signal.aborted) return;
         setPersonalScheduleSummaryByUser({});
@@ -2784,8 +2791,10 @@ function WeekHubInner() {
         // ignore broken cache
       }
     }
-    const initialDelayMs = hasLoadedWeekOnceRef.current ? 250 : 0;
+    // 表示済み(キャッシュあり)の週は従来どおり250msの連打抑制、未取得の週は待たせないよう短くする
+    const initialDelayMs = hasLoadedWeekOnceRef.current ? (shownFromCache ? 250 : 60) : 0;
     hasLoadedWeekOnceRef.current = true;
+    let prefetchTimer: number | null = null;
     const timer = window.setTimeout(() => {
       const fetchStartedAt = performance.now();
       if (!hasLoggedWeekFetchRef.current) {
@@ -2811,6 +2820,23 @@ function WeekHubInner() {
               if (controller.signal.aborted) return;
               applyWeekPayloadText(text);
               writeWeekPayloadCache(cacheKey, text);
+              // 前後1週を空き時間に先読みして週タブ切替を速くする(表示時は従来どおり再取得して最新化する)
+              prefetchTimer = window.setTimeout(() => {
+                for (const delta of [7, -7]) {
+                  const prefetchYmd = toYmd(addDays(weekStart, delta));
+                  const prefetchKey = `week:${prefetchYmd}:${kindQuery}`;
+                  if (readWeekPayloadCache(prefetchKey)) continue;
+                  void fetch(`/api/schedule/week?weekStart=${encodeURIComponent(prefetchYmd)}&${kindQuery}`, {
+                    signal: controller.signal,
+                    cache: 'no-store',
+                  })
+                    .then((prefetchRes) => (prefetchRes.ok ? prefetchRes.text() : null))
+                    .then((prefetchText) => {
+                      if (prefetchText) writeWeekPayloadCache(prefetchKey, prefetchText);
+                    })
+                    .catch(() => {});
+                }
+              }, 600);
               if (!hasLoggedWeekFetchRef.current) {
                 const elapsed = Math.max(0, Math.round(performance.now() - fetchStartedAt));
                 const total = Math.max(0, Math.round(performance.now() - effectStartedAt));
@@ -2850,6 +2876,7 @@ function WeekHubInner() {
     return () => {
       controller.abort();
       window.clearTimeout(timer);
+      if (prefetchTimer !== null) window.clearTimeout(prefetchTimer);
     };
   }, [applyWeekPayloadText, kindQuery, mode, weekStart]);
 

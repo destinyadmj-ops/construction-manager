@@ -780,6 +780,7 @@ function MobileWeekHubInner() {
     };
   }, [authUser?.id, readLocalUserOrder, userOrderKey, writeLocalUserOrder]);
 
+  // 週予定の取得。現場一覧(約1000件)の取得を待たずに予定を先に表示する
   useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => {
@@ -788,29 +789,19 @@ function MobileWeekHubInner() {
       setError(null);
     });
 
-    Promise.all([
-      fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&kind=${encodeURIComponent(scheduleKind)}`, {
-        signal: controller.signal,
-        cache: 'no-store',
-      }),
-      fetch(`/api/sites?month=${encodeURIComponent(viewMonth)}&kind=${encodeURIComponent(scheduleKind)}`, {
-        signal: controller.signal,
-        cache: 'no-store',
-      }),
-    ])
-      .then(async ([scheduleRes, sitesRes]) => {
+    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&kind=${encodeURIComponent(scheduleKind)}`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+      .then(async (scheduleRes) => {
         if (!scheduleRes.ok) throw new Error(`Failed to load schedule (${scheduleRes.status})`);
         const scheduleJson = (await scheduleRes.json()) as ApiResponse;
-        const sitesJson = sitesRes.ok
-          ? ((await sitesRes.json()) as { ok?: boolean; sites?: SiteItem[] })
-          : null;
+        if (controller.signal.aborted) return;
         setSchedule(scheduleJson);
-        setSites(sitesJson?.ok === true && Array.isArray(sitesJson.sites) ? sitesJson.sites : []);
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;
         setSchedule(null);
-        setSites([]);
         setError(cause instanceof Error ? cause.message : '予定の取得に失敗しました');
       })
       .finally(() => {
@@ -818,11 +809,39 @@ function MobileWeekHubInner() {
       });
 
     return () => controller.abort();
-  }, [refreshRevision, scheduleKind, viewMonth, weekStart]);
+  }, [refreshRevision, scheduleKind, weekStart]);
 
-  const weekPersonalScheduleUserIds = useMemo(
-    () => Array.from(new Set((schedule?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))),
+  // 現場一覧は月(viewMonth)・種別・手動更新が変わったときだけ取得する(同じ月内の週切替では再取得しない)
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`/api/sites?month=${encodeURIComponent(viewMonth)}&kind=${encodeURIComponent(scheduleKind)}`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+      .then(async (sitesRes) => {
+        const sitesJson = sitesRes.ok
+          ? ((await sitesRes.json()) as { ok?: boolean; sites?: SiteItem[] })
+          : null;
+        if (controller.signal.aborted) return;
+        setSites(sitesJson?.ok === true && Array.isArray(sitesJson.sites) ? sitesJson.sites : []);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSites([]);
+      });
+
+    return () => controller.abort();
+  }, [refreshRevision, scheduleKind, viewMonth]);
+
+  const weekPersonalScheduleUserIdsKey = useMemo(
+    () => Array.from(new Set((schedule?.users ?? []).map((user) => user.id).filter((userId) => userId.length > 0))).join('\n'),
     [schedule?.users],
+  );
+  // 週データ再取得のたびに配列の参照だけが変わり、個人予定サマリを二重取得していたため、内容が同じなら同じ参照を返す
+  const weekPersonalScheduleUserIds = useMemo(
+    () => (weekPersonalScheduleUserIdsKey ? weekPersonalScheduleUserIdsKey.split('\n') : []),
+    [weekPersonalScheduleUserIdsKey],
   );
 
   useEffect(() => {
@@ -868,7 +887,9 @@ function MobileWeekHubInner() {
           }
         }
 
-        setPersonalScheduleSummaryByUser(merged);
+        setPersonalScheduleSummaryByUser((current) =>
+          JSON.stringify(current) === JSON.stringify(merged) ? current : merged,
+        );
       } catch {
         if (controller.signal.aborted) return;
         setPersonalScheduleSummaryByUser({});

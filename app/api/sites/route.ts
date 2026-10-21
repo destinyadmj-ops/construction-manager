@@ -114,40 +114,42 @@ export async function GET(request: Request) {
     const siteIds = sites.map((s) => s.id);
     const { start, end, key } = monthRange;
 
-    const workCounts = await prisma.workEntry.groupBy({
-      by: ['siteId'],
-      where: { siteId: { in: siteIds }, startAt: { gte: start, lt: end } },
-      _count: { _all: true },
-    });
+    // 互いに独立した3クエリを並列実行(結果・出力は従来と同一)
+    const [workCounts, docs, sentLogs] = await Promise.all([
+      prisma.workEntry.groupBy({
+        by: ['siteId'],
+        where: { siteId: { in: siteIds }, startAt: { gte: start, lt: end } },
+        _count: { _all: true },
+      }),
+      prisma.storedDocument.findMany({
+        where: {
+          siteId: { in: siteIds },
+          createdAt: { gte: start, lt: end },
+          kind: { in: ['INVOICE', 'REPORT'] },
+        },
+        select: { siteId: true, kind: true },
+        distinct: ['siteId', 'kind'],
+      }),
+      prisma.outlookSendLog.findMany({
+        where: {
+          siteId: { in: siteIds },
+          createdAt: { gte: start, lt: end },
+          status: 'SENT',
+          kind: { in: ['INVOICE', 'REPORT'] },
+        },
+        select: { siteId: true, kind: true },
+        distinct: ['siteId', 'kind'],
+      }),
+    ]);
     const workCountMap = new Map<string, number>();
     for (const row of workCounts) {
       if (row.siteId) workCountMap.set(row.siteId, row._count._all);
     }
 
-    const docs = await prisma.storedDocument.findMany({
-      where: {
-        siteId: { in: siteIds },
-        createdAt: { gte: start, lt: end },
-        kind: { in: ['INVOICE', 'REPORT'] },
-      },
-      select: { siteId: true, kind: true },
-      distinct: ['siteId', 'kind'],
-    });
     const issuedSet = new Set<string>();
     for (const d of docs) {
       if (d.siteId) issuedSet.add(`${d.siteId}:${d.kind}`);
     }
-
-    const sentLogs = await prisma.outlookSendLog.findMany({
-      where: {
-        siteId: { in: siteIds },
-        createdAt: { gte: start, lt: end },
-        status: 'SENT',
-        kind: { in: ['INVOICE', 'REPORT'] },
-      },
-      select: { siteId: true, kind: true },
-      distinct: ['siteId', 'kind'],
-    });
     for (const l of sentLogs) {
       issuedSet.add(`${l.siteId}:${l.kind}`);
     }
