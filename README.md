@@ -238,6 +238,7 @@ npm run db:migrate:raw
 - 大きなパッチ（大きめの置換/移動/構造変更）を入れる前に、必ず WIP チェックポイントをコミットしてから作業する。
 	- 例: `git add -A` → `git commit -m "WIP checkpoint: week-hub scroll"`
 	- ロールバック: `git reset --hard <commit>`
+- 表示高速化のキャッシュ/先読み仕様: 週予定(PC/モバイル)は `app/week-payload-cache.ts`(sessionStorage+メモリ)の前回データを即時表示し、必ず裏で再取得して置換する(PCは前後1週を先読み)。写真ダウンロードは `private, max-age=60` + ETag。無効化は週予定の `readWeekPayloadCache` 呼出と先読み(`prefetchTimer`)の除去、`app/api/documents/[id]/download/route.ts` の `DOWNLOAD_CACHE_CONTROL` 削除で元に戻る。
 	- 補足: `git commit -am` は「追跡済みファイル」しか含まれないため、新規ファイルがある場合は `git add -A` を使う。
 
 ※ 親フォルダ（`Master Hub/`）には中継用の `package.json` を置いてあるため、親フォルダから `npm run dev` / `npm run dev:keep` なども実行できます（内部的に `master-hub/` へ転送）。
