@@ -198,10 +198,9 @@ function parseRichRunParts(
   if (!rawRich) return [];
   const runRegex = /<r>([\s\S]*?)<\/r>/g;
   const result: Array<{ text: string; color: 'default' | 'red' }> = [];
-  // run に <color> が無い場合はセルのフォント色を継承する(セル赤なら赤、無色なら黒)。
+  // リッチ文字列の run は自前の書式で描画され、<color> が無い run はセルのフォント色を継承せず自動色(黒)で表示される(9/7週 E13 で実測)。
   const cellFont = getCellFont(cell);
   const palette = cellFont?.palette ?? DEFAULT_COLOR_PALETTE;
-  const inheritedColor: 'default' | 'red' = isRedRgb(cellFont?.rgb) ? 'red' : 'default';
 
   let runMatch: RegExpExecArray | null = null;
   while ((runMatch = runRegex.exec(rawRich)) !== null) {
@@ -211,7 +210,7 @@ function parseRichRunParts(
     if (!text) continue;
     const colorAttrs = /<color\b([^>]*)>/i.exec(runBlock)?.[1];
     const rgb = colorAttrs != null ? resolveColorAttrs(colorAttrs, palette) : null;
-    result.push({ text, color: colorAttrs == null ? inheritedColor : isRedRgb(rgb) ? 'red' : 'default' });
+    result.push({ text, color: isRedRgb(rgb) ? 'red' : 'default' });
   }
 
   // <r> run が無いセルはフォールバックで raw <t> を素朴に全走査しない。
