@@ -198,10 +198,10 @@ function parseRichRunParts(
   if (!rawRich) return [];
   const runRegex = /<r>([\s\S]*?)<\/r>/g;
   const result: Array<{ text: string; color: 'default' | 'red' }> = [];
-  // run に <color> が無い場合は自動色(黒)。リッチ文字列の run はセルのフォント色を継承しない
-  // (Excel は run ごとに sz/rFont 等を全て書き出し、色が無い run は自動色として表示する)
+  // run に <color> が無い場合はセルのフォント色を継承する(セル赤なら赤、無色なら黒)。
   const cellFont = getCellFont(cell);
   const palette = cellFont?.palette ?? DEFAULT_COLOR_PALETTE;
+  const inheritedColor: 'default' | 'red' = isRedRgb(cellFont?.rgb) ? 'red' : 'default';
 
   let runMatch: RegExpExecArray | null = null;
   while ((runMatch = runRegex.exec(rawRich)) !== null) {
@@ -211,7 +211,7 @@ function parseRichRunParts(
     if (!text) continue;
     const colorAttrs = /<color\b([^>]*)>/i.exec(runBlock)?.[1];
     const rgb = colorAttrs != null ? resolveColorAttrs(colorAttrs, palette) : null;
-    result.push({ text, color: isRedRgb(rgb) ? 'red' : 'default' });
+    result.push({ text, color: colorAttrs == null ? inheritedColor : isRedRgb(rgb) ? 'red' : 'default' });
   }
 
   // <r> run が無いセルはフォールバックで raw <t> を素朴に全走査しない。
@@ -223,7 +223,7 @@ function parseRichRunParts(
 }
 
 
-function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
+export function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
   const c = cell as { r?: unknown } | null;
   const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null, cell);
   const partList = parts.length > 0 ? parts : [{ text: fallbackText, color: detectCellEntryColor(cell) }];
@@ -247,6 +247,11 @@ function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ 
       if (!token) continue;
       if (delimiter.test(token)) {
         flush();
+        continue;
+      }
+      // 空白のみの断片は色境界にしない(別色の空白で同色の文字列が分断されるのを防ぐ)
+      if (!token.trim()) {
+        if (buf) buf += token;
         continue;
       }
 
@@ -524,15 +529,48 @@ function splitAssigneeTokens(input: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-function splitAssigneesFromCells(
+// 担当者名ごとの色。名前の途中で色が変わる場合は1文字でも赤があれば赤とし、run の連結文字列が cell 値と一致しない時はセル単位の色にする。
+function colorAssigneeTokens(
+  text: string | null | undefined,
+  cell: unknown,
+): Array<{ token: string; color: 'default' | 'red' }> {
+  const tokens = splitAssigneeTokens(text);
+  const cellColor = detectCellEntryColor(cell);
+  const whole = tokens.map((token) => ({ token, color: cellColor }));
+  const c = cell as { r?: unknown } | null;
+  const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null, cell);
+  if (parts.length === 0) return whole;
+
+  const full = parts.map((p) => p.text).join('');
+  const charRed = parts.flatMap((p) => Array.from({ length: p.text.length }, () => p.color === 'red'));
+  const segments: Array<{ token: string; color: 'default' | 'red' }> = [];
+  const delimiter = /[、,，\/／・]+/g;
+  let start = 0;
+  const push = (end: number) => {
+    const token = normalizeRegistryText(full.slice(start, end));
+    if (!token) return;
+    const red = charRed.slice(start, end).some((isRed, i) => isRed && full[start + i]!.trim() !== '');
+    segments.push({ token, color: red ? 'red' : 'default' });
+  };
+  let match: RegExpExecArray | null = null;
+  while ((match = delimiter.exec(full)) !== null) {
+    push(match.index);
+    start = match.index + match[0].length;
+  }
+  push(full.length);
+
+  const same = segments.length === tokens.length && segments.every((s, i) => s.token === tokens[i]);
+  return same ? segments : whole;
+}
+
+export function splitAssigneesFromCells(
   ...inputs: Array<{ text: string | null | undefined; cell?: unknown }>
 ): Array<{ name: string; color: 'default' | 'red' }> {
   const result: Array<{ name: string; color: 'default' | 'red' }> = [];
   const indexByKey = new Map<string, number>();
 
   for (const input of inputs) {
-    const color = detectCellEntryColor(input.cell);
-    for (const token of splitAssigneeTokens(input.text)) {
+    for (const { token, color } of colorAssigneeTokens(input.text, input.cell)) {
       const key = normalizeUserKey(token);
       if (!key) continue;
       const existingIndex = indexByKey.get(key);
