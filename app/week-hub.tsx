@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Fragment,
   Suspense,
+  memo,
   useCallback,
   useEffect,
   type CSSProperties,
@@ -1037,9 +1038,127 @@ export default function WeekHub() {
   );
 }
 
+// 左パネルの現場ボタン。約1000件を毎回再描画しないよう memo 化（見た目・操作は従来と同一）。
+// variant: 'week' = 週表示 / 'month' = 月表示(「!」を右端に表示) / 'year' = 年表示(「!」なし)
+type SiteListButtonProps = {
+  site: SiteItem;
+  active: boolean;
+  badge: { count: number; threshold: number; alert: boolean } | undefined;
+  searchHighlighted: boolean;
+  editActive: boolean;
+  scheduleKind: ScheduleKind;
+  selectedUserId: string | null;
+  deprMonth: string;
+  variant: 'week' | 'month' | 'year';
+  routerPush: (href: string) => void;
+  setDraggedSite: (site: SiteItem | null) => void;
+  setSelectedSite: (site: SiteItem | null) => void;
+  setSiteDetailOpen: (open: boolean) => void;
+};
+
+const SiteListButton = memo(function SiteListButton({
+  site: s,
+  active,
+  badge,
+  searchHighlighted,
+  editActive,
+  scheduleKind,
+  selectedUserId,
+  deprMonth,
+  variant,
+  routerPush,
+  setDraggedSite,
+  setSelectedSite,
+  setSiteDetailOpen,
+}: SiteListButtonProps) {
+  const siteColor = resolveSiteLabelColor(s, 'default');
+  const isWeek = variant === 'week';
+  const bang = s.label.includes('!') ? <span className="ml-2 text-red-600 dark:text-red-400">!</span> : null;
+  return (
+    <button
+      type="button"
+      data-site-id={s.id ?? undefined}
+      draggable={editActive}
+      onDragStart={(e) => {
+        if (!editActive) return;
+        setDraggedSite(s);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+      onDragEnd={() => setDraggedSite(null)}
+      onClick={() => {
+        if (active && s.id) {
+          const sp = new URLSearchParams({ kind: scheduleKind });
+          if (selectedUserId) sp.set('userId', selectedUserId);
+          routerPush(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
+          return;
+        }
+        setSelectedSite(s);
+      }}
+      className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
+        searchHighlighted
+          ? siteSearchHighlightClass(siteColor)
+          : active
+          ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
+          : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
+      } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
+      style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex flex-1 items-center gap-1">
+          <span className="truncate">{s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}</span>
+          {isWeek ? bang : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {s.invoiceIssuedThisMonth === false ? (
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                isWeek ? 'bg-green-500 dark:bg-green-600' : 'bg-red-500 dark:bg-red-600'
+              }`}
+              title="請求未発行"
+            />
+          ) : null}
+          {s.reportIssuedThisMonth === false ? (
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                isWeek ? 'bg-orange-400 dark:bg-orange-500' : 'bg-yellow-500 dark:bg-yellow-600'
+              }`}
+              title="報告未発行"
+            />
+          ) : null}
+          {s.unassignedThisMonth ? (
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                isWeek ? 'bg-red-500 dark:bg-red-600' : 'bg-green-500 dark:bg-green-600'
+              }`}
+              title="未配置"
+            />
+          ) : null}
+          {badge ? (
+            <span
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!s.id) return;
+                setSelectedSite(s);
+                setSiteDetailOpen(true);
+              }}
+              className={depreciationBadgeClass(badge.alert)}
+              title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
+            >
+              {badge.count}
+            </span>
+          ) : null}
+          {variant === 'month' ? bang : null}
+        </div>
+      </div>
+    </button>
+  );
+});
+
 function WeekHubInner() {
   const { setAddAction, setHistoryAction, setHistoryMenu, setHistoryPanel, setSaveAction, setUndoAction, setRedoAction } = useHeaderActions();
   const router = useRouter();
+  const routerPush = useCallback((href: string) => router.push(href), [router]);
   const searchParams = useSearchParams();
   const qsUserId = searchParams.get('userId');
   const qsMode = searchParams.get('mode');
@@ -4031,89 +4150,24 @@ function WeekHubInner() {
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {visibleSites.map((s) => {
-                          const active = selectedSite?.label === s.label;
-                          const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
-                          const siteColor = resolveSiteLabelColor(s, 'default');
-                          return (
-                            <button
-                              key={s.id ?? s.label}
-                              type="button"
-                              data-site-id={s.id ?? undefined}
-                              draggable={editActive}
-                              onDragStart={(e) => {
-                                if (!editActive) return;
-                                setDraggedSite(s);
-                                e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              onDragEnd={() => setDraggedSite(null)}
-                              onClick={() => {
-                                if (active && s.id) {
-                                  const sp = new URLSearchParams({ kind: scheduleKind });
-                                  if (selectedUserId) sp.set('userId', selectedUserId);
-                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
-                                  return;
-                                }
-                                setSelectedSite(s);
-                              }}
-                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                searchHighlighted
-                                  ? siteSearchHighlightClass(siteColor)
-                                  : active
-                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
-                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
-                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  <span className="truncate">
-                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
-                                  </span>
-                                  {s.label.includes('!') ? (
-                                    <span className="ml-2 text-red-600 dark:text-red-400">!</span>
-                                  ) : null}
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  {s.invoiceIssuedThisMonth === false ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600"
-                                      title="請求未発行"
-                                    />
-                                  ) : null}
-                                  {s.reportIssuedThisMonth === false ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-orange-400 dark:bg-orange-500"
-                                      title="報告未発行"
-                                    />
-                                  ) : null}
-                                  {s.unassignedThisMonth ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600"
-                                      title="未配置"
-                                    />
-                                  ) : null}
-                                  {badge ? (
-                                    <span
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (!s.id) return;
-                                        setSelectedSite(s);
-                                        setSiteDetailOpen(true);
-                                      }}
-                                      className={depreciationBadgeClass(badge.alert)}
-                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                    >
-                                      {badge.count}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
+                        {visibleSites.map((s) => (
+                          <SiteListButton
+                            key={s.id ?? s.label}
+                            site={s}
+                            active={selectedSite?.label === s.label}
+                            badge={s.id ? siteDeprMap[s.id] : undefined}
+                            searchHighlighted={matchedSiteLabelSet.has(s.label)}
+                            editActive={editActive}
+                            scheduleKind={scheduleKind}
+                            selectedUserId={selectedUserId}
+                            deprMonth={deprMonth}
+                            variant="week"
+                            routerPush={routerPush}
+                            setDraggedSite={setDraggedSite}
+                            setSelectedSite={setSelectedSite}
+                            setSiteDetailOpen={setSiteDetailOpen}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
@@ -4710,89 +4764,24 @@ function WeekHubInner() {
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {visibleSites.map((s) => {
-                          const active = selectedSite?.label === s.label;
-                          const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
-                          const siteColor = resolveSiteLabelColor(s, 'default');
-                          return (
-                            <button
-                              key={s.id ?? s.label}
-                              type="button"
-                              data-site-id={s.id ?? undefined}
-                              draggable={editActive}
-                              onDragStart={(e) => {
-                                if (!editActive) return;
-                                setDraggedSite(s);
-                                e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              onDragEnd={() => setDraggedSite(null)}
-                              onClick={() => {
-                                if (active && s.id) {
-                                  const sp = new URLSearchParams({ kind: scheduleKind });
-                                  if (selectedUserId) sp.set('userId', selectedUserId);
-                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
-                                  return;
-                                }
-                                setSelectedSite(s);
-                              }}
-                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                searchHighlighted
-                                  ? siteSearchHighlightClass(siteColor)
-                                  : active
-                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
-                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
-                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  <span className="truncate">
-                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
-                                  </span>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  {s.invoiceIssuedThisMonth === false ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600"
-                                      title="請求未発行"
-                                    />
-                                  ) : null}
-                                  {s.reportIssuedThisMonth === false ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500 dark:bg-yellow-600"
-                                      title="報告未発行"
-                                    />
-                                  ) : null}
-                                  {s.unassignedThisMonth ? (
-                                    <span
-                                      className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600"
-                                      title="未配置"
-                                    />
-                                  ) : null}
-                                  {badge ? (
-                                    <span
-                                      className={depreciationBadgeClass(badge.alert)}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (!s.id) return;
-                                        setSelectedSite(s);
-                                        setSiteDetailOpen(true);
-                                      }}
-                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                    >
-                                      {badge.count}
-                                    </span>
-                                  ) : null}
-                                  {s.label.includes('!') ? (
-                                    <span className="ml-2 text-red-600 dark:text-red-400">!</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
+                        {visibleSites.map((s) => (
+                          <SiteListButton
+                            key={s.id ?? s.label}
+                            site={s}
+                            active={selectedSite?.label === s.label}
+                            badge={s.id ? siteDeprMap[s.id] : undefined}
+                            searchHighlighted={matchedSiteLabelSet.has(s.label)}
+                            editActive={editActive}
+                            scheduleKind={scheduleKind}
+                            selectedUserId={selectedUserId}
+                            deprMonth={deprMonth}
+                            variant="month"
+                            routerPush={routerPush}
+                            setDraggedSite={setDraggedSite}
+                            setSelectedSite={setSelectedSite}
+                            setSiteDetailOpen={setSiteDetailOpen}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
@@ -4978,77 +4967,24 @@ function WeekHubInner() {
                       <div className="px-2 py-3 text-xs text-zinc-500 dark:text-zinc-400">表示対象の現場がありません。</div>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {visibleSites.map((s) => {
-                          const active = selectedSite?.label === s.label;
-                          const badge = s.id ? siteDeprMap[s.id] : undefined;
-                          const searchHighlighted = matchedSiteLabelSet.has(s.label);
-                          const siteColor = resolveSiteLabelColor(s, 'default');
-                          return (
-                            <button
-                              key={s.id ?? s.label}
-                              type="button"
-                              data-site-id={s.id ?? undefined}
-                              draggable={editActive}
-                              onDragStart={(e) => {
-                                if (!editActive) return;
-                                setDraggedSite(s);
-                                e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              onDragEnd={() => setDraggedSite(null)}
-                              onClick={() => {
-                                if (active && s.id) {
-                                  const sp = new URLSearchParams({ kind: scheduleKind });
-                                  if (selectedUserId) sp.set('userId', selectedUserId);
-                                  router.push(`/site-ledger/${encodeURIComponent(s.id)}?${sp.toString()}`);
-                                  return;
-                                }
-                                setSelectedSite(s);
-                              }}
-                              className={`w-full rounded-md border px-2 py-2 text-left text-xs ${
-                                searchHighlighted
-                                  ? siteSearchHighlightClass(siteColor)
-                                  : active
-                                  ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950'
-                                  : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900'
-                              } ${active ? 'font-medium outline outline-1 outline-zinc-300 dark:outline-zinc-600' : ''} ${editActive ? 'cursor-move' : ''}`}
-                              style={searchHighlighted ? siteSearchHighlightStyle(siteColor) : undefined}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex flex-1 items-center gap-1">
-                                  <span className="truncate">
-                                    {s.label.includes(' / ') ? s.label.split(' / ').slice(1).join(' / ') : s.label}
-                                  </span>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  {s.invoiceIssuedThisMonth === false ? (
-                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 dark:bg-red-600" title="請求未発行" />
-                                  ) : null}
-                                  {s.reportIssuedThisMonth === false ? (
-                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500 dark:bg-yellow-600" title="報告未発行" />
-                                  ) : null}
-                                  {s.unassignedThisMonth ? (
-                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500 dark:bg-green-600" title="未配置" />
-                                  ) : null}
-                                  {badge ? (
-                                    <span
-                                      className={depreciationBadgeClass(badge.alert)}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (!s.id) return;
-                                        setSelectedSite(s);
-                                        setSiteDetailOpen(true);
-                                      }}
-                                      title={`今月(${deprMonth}): ${badge.count}件 / 月回数 ${badge.threshold}`}
-                                    >
-                                      {badge.count}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
+                        {visibleSites.map((s) => (
+                          <SiteListButton
+                            key={s.id ?? s.label}
+                            site={s}
+                            active={selectedSite?.label === s.label}
+                            badge={s.id ? siteDeprMap[s.id] : undefined}
+                            searchHighlighted={matchedSiteLabelSet.has(s.label)}
+                            editActive={editActive}
+                            scheduleKind={scheduleKind}
+                            selectedUserId={selectedUserId}
+                            deprMonth={deprMonth}
+                            variant="year"
+                            routerPush={routerPush}
+                            setDraggedSite={setDraggedSite}
+                            setSelectedSite={setSelectedSite}
+                            setSiteDetailOpen={setSiteDetailOpen}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
