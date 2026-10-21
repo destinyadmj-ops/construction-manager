@@ -193,14 +193,54 @@ function findCandidateElements(slot: EditSlot): HTMLElement[] {
   }
 }
 
-function findElementByOverrideKey(slot: EditSlot, targetKey: string): HTMLElement | null {
-  for (const candidate of findCandidateElements(slot)) {
-    const resolved = resolveElementForSlot(candidate, slot);
-    if (!resolved) continue;
-    if (buildElementThemeKey(resolved, slot) === targetKey) return resolved;
-    if (buildLegacyElementThemeKey(resolved, slot) === targetKey) return resolved;
-  }
-  return null;
+// 上書きキーに対応する要素を探す。1回の適用中は候補要素とキーを slot ごとに1度だけ計算して使い回す
+// (従来は上書き1件ごとに全ボタンの階層キーを再計算しており、現場ボタンが多い画面で数秒かかっていた)。
+// 結果は従来と同じ: 文書順で最初に「通常キーまたは旧形式キー」が一致した要素。
+function createOverrideElementResolver(): (slot: EditSlot, targetKey: string) => HTMLElement | null {
+  const bySlot = new Map<EditSlot, { resolved: HTMLElement[]; primary: Map<string, number> }>();
+
+  const load = (slot: EditSlot) => {
+    let entry = bySlot.get(slot);
+    if (entry) return entry;
+    const resolved: HTMLElement[] = [];
+    const primary = new Map<string, number>();
+    for (const candidate of findCandidateElements(slot)) {
+      const el = resolveElementForSlot(candidate, slot);
+      if (!el) continue;
+      const index = resolved.length;
+      resolved.push(el);
+      const key = buildElementThemeKey(el, slot);
+      if (!primary.has(key)) primary.set(key, index);
+    }
+    entry = { resolved, primary };
+    bySlot.set(slot, entry);
+    return entry;
+  };
+
+  return (slot, targetKey) => {
+    const { resolved, primary } = load(slot);
+    const primaryIndex = primary.get(targetKey);
+    let bestIndex = primaryIndex ?? resolved.length;
+
+    // 旧形式キー(body>...)は階層を辿って作るため、末尾のタグ名・slot が合わない要素は先に除外してから比較する
+    if (targetKey.startsWith('body>') && targetKey.endsWith(`>${slot}`)) {
+      const segments = targetKey.split('>');
+      const ownSegment = segments[segments.length - 2] ?? '';
+      for (let i = 0; i < bestIndex; i += 1) {
+        const el = resolved[i];
+        const tag = el.tagName.toLowerCase();
+        if (!ownSegment.startsWith(tag)) continue;
+        const next = ownSegment.charAt(tag.length);
+        if (next !== '' && next !== '[' && next !== ':' && next !== '#') continue;
+        if (buildLegacyElementThemeKey(el, slot) === targetKey) {
+          bestIndex = i;
+          break;
+        }
+      }
+    }
+
+    return bestIndex < resolved.length ? resolved[bestIndex] : null;
+  };
 }
 
 function slotLabel(slot: EditSlot): string {
@@ -311,6 +351,7 @@ export default function ColorEditController() {
     }
 
     const mergedElementOverrides = { ...nextPageOverride.elements, ...nextGlobalOverride.elements };
+    const findElementByOverrideKey = createOverrideElementResolver();
 
     for (const [targetKey, elementOverride] of Object.entries(mergedElementOverrides)) {
       const target = findElementByOverrideKey(elementOverride.slot, targetKey);
@@ -552,6 +593,7 @@ export default function ColorEditController() {
     const nextGlobalElements = { ...currentGlobalOverride.elements };
     let pageChanged = false;
     let globalChanged = false;
+    const findElementByOverrideKey = createOverrideElementResolver();
 
     for (const [targetKey, elementOverride] of Object.entries(currentPageOverride.elements)) {
       if (elementOverride.slot !== 'button') continue;

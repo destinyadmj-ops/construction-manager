@@ -648,10 +648,15 @@ export function writeLocalUiTheme(userId: string | null, next: UiTheme): void {
 }
 
 function setOneOf(root: HTMLElement, prefix: string, value: string) {
+  // 変更が無ければ class を書き換えない(毎回 remove→add すると全体のスタイル再計算が走るため)
+  const next = `${prefix}${value}`;
+  let hasNext = false;
   for (const c of Array.from(root.classList)) {
-    if (c.startsWith(prefix)) root.classList.remove(c);
+    if (!c.startsWith(prefix)) continue;
+    if (c === next) hasNext = true;
+    else root.classList.remove(c);
   }
-  root.classList.add(`${prefix}${value}`);
+  if (!hasNext) root.classList.add(next);
 }
 
 function setCssVar(root: HTMLElement, name: string, value: string | null): void {
@@ -738,7 +743,7 @@ export function applyUiTheme(theme: UiTheme): void {
   // Cleanup legacy per-element border classes (old behavior) to avoid mixed modes.
   const borders = document.querySelectorAll<HTMLElement>("[data-color-edit-slot='border']");
   for (const el of Array.from(borders)) {
-    el.classList.remove('mh-border-strong');
+    if (el.classList.contains('mh-border-strong')) el.classList.remove('mh-border-strong');
     for (const c of Array.from(el.classList)) {
       if (c.startsWith('mh-border-color-')) el.classList.remove(c);
     }
