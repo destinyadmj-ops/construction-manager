@@ -19,6 +19,7 @@ import {
 } from '@/shared/week-grid-prefs';
 import { readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
 import { normalizeSiteLookupKey } from '@/shared/site-lookup';
+import { readWeekPayloadCache, writeWeekPayloadCache } from '../../week-payload-cache';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -783,21 +784,40 @@ function MobileWeekHubInner() {
   // 週予定の取得。現場一覧(約1000件)の取得を待たずに予定を先に表示する
   useEffect(() => {
     const controller = new AbortController();
+    const weekYmd = toYmd(weekStart);
+    // 訪問済みの週は前回のデータを先に表示し、裏で必ず最新を取得して置き換える(stale-while-revalidate)
+    const cacheKey = `mobile-week:${weekYmd}:${scheduleKind}`;
+    const cachedText = readWeekPayloadCache(cacheKey);
+    let cachedSchedule: ApiResponse | null = null;
+    if (cachedText) {
+      try {
+        cachedSchedule = JSON.parse(cachedText) as ApiResponse;
+      } catch {
+        cachedSchedule = null;
+      }
+    }
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
-      setIsLoading(true);
+      if (cachedSchedule) {
+        setSchedule(cachedSchedule);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
       setError(null);
     });
 
-    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&kind=${encodeURIComponent(scheduleKind)}`, {
+    fetch(`/api/schedule/week?weekStart=${encodeURIComponent(weekYmd)}&kind=${encodeURIComponent(scheduleKind)}`, {
       signal: controller.signal,
       cache: 'no-store',
     })
       .then(async (scheduleRes) => {
         if (!scheduleRes.ok) throw new Error(`Failed to load schedule (${scheduleRes.status})`);
-        const scheduleJson = (await scheduleRes.json()) as ApiResponse;
+        const text = await scheduleRes.text();
+        const scheduleJson = JSON.parse(text) as ApiResponse;
         if (controller.signal.aborted) return;
         setSchedule(scheduleJson);
+        writeWeekPayloadCache(cacheKey, text);
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;

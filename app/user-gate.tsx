@@ -538,7 +538,14 @@ export default function UserGate({ children }: { children: React.ReactNode }) {
     return userId ? users.find((user) => user.id === userId) ?? null : null;
   })();
 
-  if (loading) return <AuthMeContext.Provider value={authMeContextValue}>{children}</AuthMeContext.Provider>;
+  // 読込中と完了後で children の親構造を揃える(違うと完了時にページ全体が再マウントされ、API取得と描画が二重に走る)。
+  if (loading) {
+    return (
+      <AuthMeContext.Provider value={authMeContextValue}>
+        <div className="min-h-screen">{children}</div>
+      </AuthMeContext.Provider>
+    );
+  }
 
   const closeIfPossible = () => {
     if (!me) return;

@@ -47,9 +47,8 @@ self.addEventListener('fetch', (event) => {
   const isSameOrigin = url.origin === self.location.origin;
   const isApiRequest = isSameOrigin && url.pathname.startsWith('/api/');
 
-  // Never cache API requests. Always forward them to the network.
+  // Never cache API requests. Let the browser handle them directly (no service worker hop).
   if (isApiRequest) {
-    event.respondWith(fetch(request));
     return;
   }
 
