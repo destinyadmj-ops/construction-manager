@@ -204,3 +204,4 @@
 - 【交錯防止ルール】複数チャット同時運用中は安全 push 前に「ファイルロック表」とステータスボードを確認。他チャットの WIP があるなら push を保留するか、`git add <自分の担当ファイル>` で部分 staging に切替える（`git add -A` を避ける）。
 - desktop wrapper 実体は 0.1.3 を基準に運用。Web-only deploy の即時追従は live-build-sync 前提で確認し、wrapper 更新が必要なのは main.cjs / desktop-release / installer を触る変更のみ。
 - 【PC間引き継ぎ】正本=`.github/coordination-hub.md`（Git追跡・全PC同期）。ローカルミラー=`/memories/repo/coordination-hub.md`（PC固有・非同期）。食い違ったら正本を優先し、ミラーを上書きする。
+- (H) 2026-10-22 スマホ 10/20「MS荒川～」が黒のまま: 同種データ(MS荒川1丁目店, meta.labelColor=red / マスタ default)でAPIは赤を返すことをDB読取で確認。リロードしても直らない原因は修正コミットが未push(ahead 10)で本番が旧コードだったため。10コミットを push 済み(7778f90)、Deploy to Production 成功。強制リロード/PWA再起動で確認待ち。
