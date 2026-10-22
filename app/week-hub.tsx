@@ -375,8 +375,10 @@ function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null 
   return isLabelColor(user?.nameLabelColor) ? user.nameLabelColor : 'default';
 }
 
-// ▼ 表示用に right padding が px-1.5 -> pr-5 へ増える分(px)。測定から除外し、▼ の出入りで判定が揺れないようにする。
-const CELL_ARROW_RESERVE_PX = 14;
+// ▼ 表示時に right padding が px-1.5(6px) -> pr-6(24px) へ増える分(px)。測定から除外し、▼ の出入りで判定が揺れないようにする。
+const CELL_ARROW_RESERVE_PX = 18;
+// 単一現場名がこの文字数を超えたら見切れなくても常に▼を出す(従来は18)。null=実測で見切れたときのみ。
+const CELL_LONG_NAME_ALWAYS_ARROW_CHARS: number | null = null;
 
 function CellOverflowSlot({
   measureKey,
@@ -7610,7 +7612,7 @@ function Row({
           <div className="group/slot relative">
             <div
               data-color-edit-ignore-contextmenu
-              className={`${input.className} ${hasHoverMenu ? 'pr-5' : ''}`}
+              className={`${input.className} ${hasHoverMenu ? 'pr-6' : ''}`}
               style={{ fontSize: input.fontSize }}
               draggable={Boolean(dragState)}
               onDragStart={handleDragStart}
@@ -7670,7 +7672,7 @@ function Row({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDoubleClick={handleInlineEdit}
-            className={`${input.className} ${hasHoverMenu ? 'pr-5' : ''} w-full cursor-pointer text-left hover:underline`}
+            className={`${input.className} ${hasHoverMenu ? 'pr-6' : ''} w-full cursor-pointer text-left hover:underline`}
             style={{ fontSize: input.fontSize }}
             title={input.tooltipValue}
             aria-label={`${siteName} の詳細を開く`}
@@ -7728,7 +7730,11 @@ function Row({
         const noteItems = renderedItems.filter((item) => !isSiteCellEntry(item.entry));
         const isNoteGroup = renderedItems.every((item) => !isSiteCellEntry(item.entry));
         const shouldShowSingleSiteFullTextMenu =
-          siteItems.length === 1 && noteItems.length === 0 && !groupNote && tooltipValue.length > 18;
+          CELL_LONG_NAME_ALWAYS_ARROW_CHARS !== null &&
+          siteItems.length === 1 &&
+          noteItems.length === 0 &&
+          !groupNote &&
+          tooltipValue.length > CELL_LONG_NAME_ALWAYS_ARROW_CHARS;
         const siteMenuItems: CellHoverMenuItem[] = siteItems.map((item, itemIndex) => ({
           key: `hover-site:${day}:${groupIndex}:${itemIndex}`,
           kind: 'site' as const,

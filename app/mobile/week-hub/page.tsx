@@ -279,7 +279,7 @@ function renderScheduleEntryLabel(entry: string, color: LabelColor = 'default') 
 }
 
 // ▼ 用の余白(px)。測定から除外して、▼ の出入りで判定が揺れないようにする。
-const CELL_ARROW_RESERVE_PX = 20;
+const CELL_ARROW_RESERVE_PX = 24;
 
 // 全文が見えない/追加情報ありのセルに黒▼を出す(タップで cellEntryMenu が開くのは親ボタンの挙動)。
 function CellEntryLabel({ measureKey, hasExtraInfo, children }: { measureKey: string; hasExtraInfo: boolean; children: ReactNode }) {
