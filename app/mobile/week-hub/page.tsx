@@ -252,39 +252,14 @@ function renderScheduleTargetLabel(target: ScheduleEntryTarget) {
 }
 
 
-// ▼ 用の余白(px)。測定から除外して、▼ の出入りで判定が揺れないようにする。
+// ▼ 用の余白(px)。▼ が出るセルだけ文字幅を狭める。
 const CELL_ARROW_RESERVE_PX = 24;
 
-// 全文が見えない/追加情報ありのセルに黒▼を出す(タップで cellEntryMenu が開くのは親ボタンの挙動)。
-function CellEntryLabel({ measureKey, hasExtraInfo, children }: { measureKey: string; hasExtraInfo: boolean; children: ReactNode }) {
-  const textRef = useRef<HTMLSpanElement | null>(null);
-  const [overflowed, setOverflowed] = useState(false);
-  const showArrow = hasExtraInfo || overflowed;
-
-  useEffect(() => {
-    const textEl = textRef.current;
-    if (!textEl || hasExtraInfo) return;
-    const reserve = showArrow ? CELL_ARROW_RESERVE_PX : 0;
-
-    const update = () => {
-      const next = textEl.scrollWidth > textEl.clientWidth + reserve + 1;
-      setOverflowed((prev) => (prev === next ? prev : next));
-    };
-
-    update();
-    const ro = new ResizeObserver(() => update());
-    ro.observe(textEl);
-    window.addEventListener('resize', update);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [hasExtraInfo, measureKey, showArrow]);
-
+// ▼ は複数現場セルのみ(実測なし)。タップで cellEntryMenu が開くのは親ボタンの挙動。
+function CellEntryLabel({ showArrow, children }: { showArrow: boolean; children: ReactNode }) {
   return (
     <>
       <span
-        ref={textRef}
         className="block overflow-hidden whitespace-nowrap leading-tight"
         style={showArrow ? { maxWidth: `calc(100% - ${CELL_ARROW_RESERVE_PX}px)` } : undefined}
       >
@@ -348,10 +323,7 @@ function resolveScheduleGroupTargets(
       : null;
 
     return {
-      entry:
-        normalizeScheduleCellEntryKind(entry.kind) === 'site'
-          ? entry.label
-          : `追記: ${entry.label}`,
+      entry: entry.label,
       color: entry.color,
       siteId: matchedSite?.siteId ?? null,
       noteOnly: normalizeScheduleCellEntryKind(entry.kind) !== 'site',
@@ -363,7 +335,7 @@ function resolveScheduleGroupTargets(
   return [
     ...itemTargets,
     {
-      entry: `追記: ${group.note}`,
+      entry: group.note,
       color: 'default',
       siteId: null,
       noteOnly: true,
@@ -954,7 +926,10 @@ function MobileWeekHubInner() {
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const width = Math.min(Math.max(rect.width, 220), Math.max(220, viewportWidth - 16));
-      const estimatedHeight = Math.min(items.length * 48 + 56, 320);
+      // 項目は折り返すため、文字数から行数を概算して高さを見積もる(本体の max-height は min(50vh, 22rem))。
+      const charsPerLine = Math.max(8, Math.floor((width - 96) / 14));
+      const bodyHeight = items.reduce((sum, item) => sum + 16 + Math.max(1, Math.ceil((item.entry.length + (item.noteOnly ? 4 : 0)) / charsPerLine)) * 20, 8);
+      const estimatedHeight = Math.min(bodyHeight, viewportHeight * 0.5, 352) + 56;
       const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
       const preferredTop = rect.bottom + 8;
       const top = preferredTop + estimatedHeight <= viewportHeight - 8
@@ -1381,7 +1356,7 @@ function MobileWeekHubInner() {
                                     {groups.map((group, groupIndex) => {
                                       if (!groupHasContent(group)) return null;
                                       const entryTargets = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry);
-                                      const hasExtraInfo = group.items.length > 1 || Boolean(group.note);
+                                      const showArrow = group.items.filter((entry) => normalizeScheduleCellEntryKind(entry.kind) === 'site').length >= 2;
                                       const groupText = formatScheduleCellGroupDisplayValue(group.items.map((entry) => entry.label), group.note) ?? '';
 
                                       return (
@@ -1406,10 +1381,7 @@ function MobileWeekHubInner() {
                                           aria-expanded={cellEntryMenu?.title === `${userLabel(user)} / ${day.key}` ? 'true' : undefined}
                                           data-testid={`mobile-week-cell-menu-${user.id}-${day.key}-${groupIndex}`}
                                         >
-                                          <CellEntryLabel
-                                            measureKey={`${user.id}:${day.key}:${groupIndex}:${groupText}`}
-                                            hasExtraInfo={hasExtraInfo}
-                                          >
+                                          <CellEntryLabel showArrow={showArrow}>
                                             {renderCellGroupLabel(group)}
                                           </CellEntryLabel>
                                         </button>
@@ -1562,11 +1534,11 @@ function MobileWeekHubInner() {
                     handleSiteClick(item.siteId);
                   }}
                   disabled={!item.siteId}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:cursor-default disabled:text-zinc-500 dark:hover:bg-zinc-900 dark:disabled:text-zinc-400"
+                  className="flex w-full items-start justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:cursor-default disabled:text-zinc-500 dark:hover:bg-zinc-900 dark:disabled:text-zinc-400"
                   data-testid={`mobile-cell-entry-option-${item.siteId ?? 'unmapped'}`}
                 >
-                  <span className="truncate">{renderScheduleTargetLabel(item)}</span>
-                  <span className="ml-3 shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
+                  <span className="min-w-0 whitespace-normal break-words">{renderScheduleTargetLabel(item)}</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] text-zinc-500 dark:text-zinc-400">
                     {item.noteOnly ? '追記' : item.siteId ? '詳細へ' : '未紐付け'}
                   </span>
                 </button>
