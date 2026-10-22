@@ -53,7 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
-| in-progress | I(スマホ▼を複数現場のみ・全文表示) | app/mobile/week-hub/page.tsx, e2e/smoke.spec.ts(参照があれば), .github/coordination-hub.md | スマホ週/日常グリッドの▼を「現場2件以上」のみへ。1現場が切れている場合は▼なしで枠タップの全文表示(メニュー項目は折り返し)。実測/ResizeObserverは撤去。色まわりは不変。PC版は不変 | 2026-10-22 JST |
+| done | I(スマホ▼を複数現場のみ・全文表示) | app/mobile/week-hub/page.tsx, e2e/smoke.spec.ts(参照があれば), .github/coordination-hub.md | スマホ週/日常グリッドの▼を「現場2件以上」のみへ。1現場が切れている場合は▼なしで枠タップの全文表示(メニュー項目は折り返し)。実測/ResizeObserverは撤去。色まわりは不変。PC版は不変 | 2026-10-22 JST |
 | done | H(▼ルール一本化・スマホ色PC一致) | .github/coordination-hub.md, app/week-hub.tsx, app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts(+新規 src/shared/ の純関数), app/api/schedule/week/route.ts(確認のみ), public/sw.js(確認のみ) | (A)赤+残存の原因切り分け(キャッシュ等)と▼を「実測で全文が見えない or 追加情報あり」へ一本化 (B)スマホの色解決をPCと同じ規則(セル色>サイトマスタ色)へ。DB schema不変 | 2026-10-22 JST |
 | done | G(全表示▼統一・セル設定タブ別記憶) | .github/coordination-hub.md, app/week-hub.tsx, app/header.tsx, app/header-actions.tsx, app/mobile/week-hub/page.tsx, README.md, e2e/smoke.spec.ts(+参照があれば) | (A)全表示アイコンを黒▼に統一し赤+を撤廃 (B)セル設定(名前幅/日付幅/高さ/表示密度)を週/月/年タブ別に記憶。DB schema・保存キーは不変 | 2026-10-21 JST |
 | done | F(赤文字同期・再修正) | .github/coordination-hub.md, src/server/shared-excel-sync.ts, src/server/excel-font-color.ts, README.md | 作業表☆→DB同期でセル全体が赤文字のセルが黒になる問題の修正(フォント色をstyles.xmlから解決)。一方通行・作業伝票同期・UI・DB schemaは不変。syncの書込実行はユーザー承認後のみ | 2026-10-21 JST |
@@ -137,6 +137,7 @@
 - (G) 2026-10-21 全表示アイコン統一・セル設定タブ別記憶: (A) 赤「+」を撤廃し黒▼に統一(PC/スマホ)。▼表示条件=複数現場/追記/グループ追記/長い単一名(従来の▼条件)または文字が見切れる場合(旧「+」)。見切れのみのセルのメニューは単一現場の全文。PCはホバーで全文メニュー・現場名クリック可、スマホはタップで cellEntryMenu(動作不変)。▼分の余白(14〜20px)を測定に加味しチラつき回避。(B) 名前幅/日付幅/高さ/密度を週・月・年タブ別に記憶: 現在のタブを `HeaderActionsProvider.weekView`(pathname変更でクリアされない別state)で header へ渡す。保存キー `week-hub:{kind}:{mode}:gridPrefs:{target}`・DB schema は不変、既存データの削除/移行なし。フォントサイズのキーは従来どおりURLのmode基準(挙動不変)。スマホ画面の設定は対象外。
 
 - (H) 2026-10-22 ▼ルール一本化・スマホ色のPC一致: ▼=「実測で全文が見えない or 追加情報(複数現場/追記/グループ追記)あり」へ一本化。18文字超ルールは廃止(`CELL_LONG_NAME_ALWAYS_ARROW_CHARS` を 18 にすると復活)。▼余白は pr-6(24px)/測定予約 18px に統一(PC)、スマホは 24px。色=「セルの色(entry.color)」のみ。サイトマスタ色は /api/schedule/* の `colorForEntry`(meta.labelColor > 作業表同期の群index > サイト色 > '!')で解決済みなので、クライアントでは再適用しない(PCと同じ)。表示モデル/色調は `src/shared/schedule-cell-display.ts` を PC/スマホ共通で使用。スマホのセル表示は結合文字列を介さず構造から描画(全項目を PC と同じ色調で " / " 連結)。
+- (I) 2026-10-22 スマホ▼は「現場(kind=site)2件以上」のみ。1現場が切れている場合は▼なしで枠タップの全文表示(cellEntryMenu、項目は折り返し・右ラベル固定)。実測(ResizeObserver)は撤去、▼ありセルのみ幅を24px狭める。追記だけの項目は▼対象外。メニューの追記は「追記:」重複を解消。色まわり・PC版は不変。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
