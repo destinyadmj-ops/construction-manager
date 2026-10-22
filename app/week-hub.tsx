@@ -31,6 +31,7 @@ import {
   normalizeScheduleCellEntryKind,
   type ScheduleCellEntryKind,
 } from '@/shared/schedule-cell-entry';
+import { scheduleLabelTextClass } from '@/shared/schedule-cell-display';
 import { findSiteFamily, siteFamilyDisplayName, stripSiteFamilyLabel } from '@/shared/site-family';
 import {
   DEFAULT_WEEK_GRID_PREFS,
@@ -358,17 +359,7 @@ function isSiteCellEntry(entry: ApiCellEntry | null | undefined) {
 }
 
 function labelTextClass(color: LabelColor, tone: 'primary' | 'secondary'): string {
-  if (color === 'default') {
-    return tone === 'primary' ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-500 dark:text-zinc-400';
-  }
-
-  if (color === 'red') return tone === 'primary' ? 'text-red-600 dark:text-red-400' : 'text-red-500 dark:text-red-300';
-  if (color === 'orange') return tone === 'primary' ? 'text-orange-600 dark:text-orange-400' : 'text-orange-500 dark:text-orange-300';
-  if (color === 'yellow') return tone === 'primary' ? 'text-amber-600 dark:text-amber-300' : 'text-amber-500 dark:text-amber-200';
-  if (color === 'green') return tone === 'primary' ? 'text-green-600 dark:text-green-400' : 'text-green-500 dark:text-green-300';
-  if (color === 'blue') return tone === 'primary' ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500 dark:text-blue-300';
-  if (color === 'purple') return tone === 'primary' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-500 dark:text-violet-300';
-  return tone === 'primary' ? 'text-pink-600 dark:text-pink-400' : 'text-pink-500 dark:text-pink-300';
+  return scheduleLabelTextClass(color, tone);
 }
 
 function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null | undefined): LabelColor {

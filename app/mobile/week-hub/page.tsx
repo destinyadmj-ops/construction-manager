@@ -7,6 +7,7 @@ import {
   type PersonalScheduleSummaryDay,
 } from '@/shared/personal-schedule';
 import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
+import { buildScheduleCellGroupDisplay, scheduleLabelTextClass, type ScheduleLabelTone } from '@/shared/schedule-cell-display';
 import {
   buildDayColumnTrack,
   buildLegacyWeekGridPrefsSettingsKey,
@@ -66,11 +67,6 @@ type SiteItem = {
   scheduleLabelColor?: LabelColor | null;
 };
 
-type ScheduleEntryDisplay = {
-  entry: string;
-  color: LabelColor;
-};
-
 type NormalizedCellGroup = {
   items: Array<{ label: string; color: LabelColor; kind: string | null }>;
   note: string | null;
@@ -118,7 +114,6 @@ type JsonObject = Record<string, unknown>;
 
 type SiteLookupValue = {
   siteId: string;
-  color: LabelColor;
 };
 
 type MobileWeekHubHistoryState = {
@@ -202,81 +197,60 @@ function resolveSiteLabelColor(site: SiteItem | null | undefined, fallback: Labe
   return isLabelColor(site?.scheduleLabelColor) ? site.scheduleLabelColor : fallback;
 }
 
-function labelTextClass(color: LabelColor): string {
-  if (color === 'default') return 'text-zinc-800 dark:text-zinc-200';
-  if (color === 'red') return 'text-red-600 dark:text-red-400';
-  if (color === 'orange') return 'text-orange-600 dark:text-orange-400';
-  if (color === 'yellow') return 'text-amber-600 dark:text-amber-300';
-  if (color === 'green') return 'text-green-600 dark:text-green-400';
-  if (color === 'blue') return 'text-blue-600 dark:text-blue-400';
-  if (color === 'purple') return 'text-violet-600 dark:text-violet-400';
-  return 'text-pink-600 dark:text-pink-400';
+function labelTextClass(color: LabelColor, tone: ScheduleLabelTone = 'primary'): string {
+  return scheduleLabelTextClass(color, tone);
 }
 
 function resolveUserNameLabelColor(user: Pick<ApiUser, 'nameLabelColor'> | null | undefined): LabelColor {
   return isLabelColor(user?.nameLabelColor) ? user.nameLabelColor : 'default';
 }
 
-function groupDisplayEntry(group: NormalizedCellGroup): ScheduleEntryDisplay | null {
-  const labels = group.items.map((entry) => entry.label.trim()).filter((entry) => entry.length > 0);
-  const entry = formatScheduleCellGroupDisplayValue(labels, group.note) ?? '';
-  if (!entry) return null;
-  return {
-    entry,
-    color: group.items[0]?.color ?? 'default',
-  };
+function groupHasContent(group: NormalizedCellGroup) {
+  return group.items.some((entry) => entry.label.trim().length > 0) || Boolean(group.note);
 }
 
-function cellEntries(cell: ApiCell | null | undefined): ScheduleEntryDisplay[] {
-  return cellGroups(cell)
-    .map((group) => groupDisplayEntry(group))
-    .filter((entry): entry is ScheduleEntryDisplay => Boolean(entry?.entry));
-}
-
-function describeScheduleEntry(entry: string) {
-  const trimmed = entry.trim();
-  const noteOnlyMatch = trimmed.match(/^追記[:：]\s*(.+)$/u);
-  if (noteOnlyMatch) {
-    return {
-      mainText: '',
-      noteText: noteOnlyMatch[1]?.trim() ?? '',
-      noteOnly: true,
-    };
-  }
-
-  const appendedNoteMatch = trimmed.match(/^(.*?)[（(]追記[:：]\s*(.*?)[）)]$/u);
-  if (appendedNoteMatch) {
-    const mainText = appendedNoteMatch[1]?.trim() ?? '';
-    const noteText = appendedNoteMatch[2]?.trim() ?? '';
-    if (mainText && noteText) {
-      return {
-        mainText,
-        noteText,
-        noteOnly: false,
-      };
-    }
-  }
-
-  return {
-    mainText: trimmed,
-    noteText: null,
-    noteOnly: false,
-  };
-}
-
-function renderScheduleEntryLabel(entry: string, color: LabelColor = 'default') {
-  const described = describeScheduleEntry(entry);
-  if (!described.noteText) return <span className={labelTextClass(color)}>{entry}</span>;
-  if (described.noteOnly || !described.mainText) {
-    return <span className="text-red-600 dark:text-red-400">{`追記: ${described.noteText}`}</span>;
-  }
+// PC(week-hub の labelContent)と同じ見え方: 項目ごとにセルの色、2件目以降は薄い色調、追記は赤の「追記:」。
+function renderCellGroupLabel(group: NormalizedCellGroup) {
+  const { items, groupNote } = buildScheduleCellGroupDisplay(group);
   return (
     <>
-      <span className={labelTextClass(color)}>{described.mainText}</span>
-      <span className="text-red-600 dark:text-red-400">{`（追記: ${described.noteText}）`}</span>
+      {items.map((item, index) => (
+        <Fragment key={`${index}:${item.label}`}>
+          {index > 0 ? <span className="text-zinc-400 dark:text-zinc-500"> / </span> : null}
+          {item.isNote ? (
+            <>
+              <span className="text-red-600 dark:text-red-400">追記:</span>{' '}
+              <span className="text-zinc-700 dark:text-zinc-200">{item.label}</span>
+            </>
+          ) : (
+            <span className={labelTextClass(item.color, item.tone)}>{item.label}</span>
+          )}
+        </Fragment>
+      ))}
+      {groupNote ? (
+        <>
+          {items.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">（</span> : null}
+          <span className="text-red-600 dark:text-red-400">追記:</span>{' '}
+          <span className="text-zinc-700 dark:text-zinc-200">{groupNote}</span>
+          {items.length > 0 ? <span className="text-zinc-400 dark:text-zinc-500">）</span> : null}
+        </>
+      ) : null}
     </>
   );
 }
+
+function renderScheduleTargetLabel(target: ScheduleEntryTarget) {
+  if (target.noteOnly) {
+    return (
+      <>
+        <span className="text-red-600 dark:text-red-400">追記:</span>{' '}
+        <span className="text-zinc-700 dark:text-zinc-200">{target.entry}</span>
+      </>
+    );
+  }
+  return <span className={labelTextClass(target.color)}>{target.entry}</span>;
+}
+
 
 // ▼ 用の余白(px)。測定から除外して、▼ の出入りで判定が揺れないようにする。
 const CELL_ARROW_RESERVE_PX = 24;
@@ -378,7 +352,7 @@ function resolveScheduleGroupTargets(
         normalizeScheduleCellEntryKind(entry.kind) === 'site'
           ? entry.label
           : `追記: ${entry.label}`,
-      color: matchedSite?.color ?? entry.color,
+      color: entry.color,
       siteId: matchedSite?.siteId ?? null,
       noteOnly: normalizeScheduleCellEntryKind(entry.kind) !== 'site',
     };
@@ -426,60 +400,8 @@ function readMobileWeekHubHistoryState(): MobileWeekHubHistoryState | null {
   return normalizeMobileWeekHubHistoryState((rawState as Record<string, unknown>)[MOBILE_WEEK_HUB_HISTORY_STATE_KEY]);
 }
 
-function resolveScheduleEntryTargets(entries: ScheduleEntryDisplay[], siteLookupByScheduleEntry: Map<string, SiteLookupValue>): ScheduleEntryTarget[] {
-  return entries.flatMap<ScheduleEntryTarget>((entry) => {
-    const tokenMatches = entry.entry
-      .split('/')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0)
-      .map((part) => {
-        const matchedSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(part));
-        return {
-          entry: part,
-          color: matchedSite?.color ?? entry.color,
-          siteId: matchedSite?.siteId ?? null,
-          noteOnly: describeScheduleEntry(part).noteOnly,
-        };
-      })
-      .filter(isLinkedScheduleEntryTarget);
-
-    if (tokenMatches.length > 1) {
-      return tokenMatches;
-    }
-
-    const exactSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(entry.entry)) ?? null;
-    if (exactSite) {
-      return [{ entry: entry.entry, color: exactSite.color, siteId: exactSite.siteId, noteOnly: false }];
-    }
-
-    if (tokenMatches.length === 1) {
-      return [{ entry: entry.entry, color: tokenMatches[0].color, siteId: tokenMatches[0].siteId, noteOnly: false }];
-    }
-
-    return [{ entry: entry.entry, color: entry.color, siteId: null, noteOnly: describeScheduleEntry(entry.entry).noteOnly }];
-  });
-}
-
 function isLinkedScheduleEntryTarget(target: ScheduleEntryTarget): target is LinkedScheduleEntryTarget {
   return typeof target.siteId === 'string' && target.siteId.length > 0;
-}
-
-function resolveScheduleEntryPreview(entries: ScheduleEntryDisplay[], siteLookupByScheduleEntry: Map<string, SiteLookupValue>): ScheduleEntryDisplay {
-  for (const entry of entries) {
-    const parts = entry.entry
-      .split('/')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
-
-    for (const part of parts) {
-      const matchedSite = siteLookupByScheduleEntry.get(normalizeSiteLookupKey(part));
-      if (matchedSite) return { entry: part, color: matchedSite.color };
-    }
-
-    if (parts.length > 0) return { entry: parts[0], color: entry.color };
-  }
-
-  return { entry: '', color: 'default' };
 }
 
 const DOW = ['月', '火', '水', '木', '金', '土', '日'] as const;
@@ -1011,7 +933,7 @@ function MobileWeekHubInner() {
     for (const site of sites) {
       const key = normalizeSiteLookupKey(site.name.trim());
       if (!key || map.has(key)) continue;
-      map.set(key, { siteId: site.id, color: resolveSiteLabelColor(site) });
+      map.set(key, { siteId: site.id });
     }
     return map;
   }, [sites]);
@@ -1181,10 +1103,8 @@ function MobileWeekHubInner() {
     router.push(`/site-ledger/${encodeURIComponent(siteId)}?kind=${encodeURIComponent(scheduleKind)}#punch`);
   }, [router, scheduleKind, writeMobileWeekHubHistorySnapshot]);
 
-  const handleScheduleEntryClick = useCallback((entry: string) => {
-    const siteId =
-      resolveScheduleEntryTargets([{ entry, color: 'default' }], siteLookupByScheduleEntry).find(isLinkedScheduleEntryTarget)?.siteId ??
-      null;
+  const handleScheduleGroupClick = useCallback((group: NormalizedCellGroup) => {
+    const siteId = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry).find(isLinkedScheduleEntryTarget)?.siteId ?? null;
     if (!siteId) return;
     handleSiteClick(siteId);
   }, [handleSiteClick, siteLookupByScheduleEntry]);
@@ -1459,15 +1379,14 @@ function MobileWeekHubInner() {
                                 {groups.length > 0 ? (
                                   <div className={`space-y-1 ${personalScheduleDay?.count ? 'pb-4' : ''}`}>
                                     {groups.map((group, groupIndex) => {
-                                      const displayEntry = groupDisplayEntry(group);
-                                      if (!displayEntry) return null;
+                                      if (!groupHasContent(group)) return null;
                                       const entryTargets = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry);
-                                      const previewLabel = resolveScheduleEntryPreview([displayEntry], siteLookupByScheduleEntry);
                                       const hasExtraInfo = group.items.length > 1 || Boolean(group.note);
+                                      const groupText = formatScheduleCellGroupDisplayValue(group.items.map((entry) => entry.label), group.note) ?? '';
 
                                       return (
                                         <button
-                                          key={`${user.id}:${day.key}:${groupIndex}:${displayEntry.entry}`}
+                                          key={`${user.id}:${day.key}:${groupIndex}:${groupText}`}
                                           type="button"
                                           onClick={(event) =>
                                             openCellEntryMenu(
@@ -1488,10 +1407,10 @@ function MobileWeekHubInner() {
                                           data-testid={`mobile-week-cell-menu-${user.id}-${day.key}-${groupIndex}`}
                                         >
                                           <CellEntryLabel
-                                            measureKey={`${user.id}:${day.key}:${groupIndex}:${displayEntry.entry}`}
+                                            measureKey={`${user.id}:${day.key}:${groupIndex}:${groupText}`}
                                             hasExtraInfo={hasExtraInfo}
                                           >
-                                            {renderScheduleEntryLabel(previewLabel.entry, previewLabel.color)}
+                                            {renderCellGroupLabel(group)}
                                           </CellEntryLabel>
                                         </button>
                                       );
@@ -1540,7 +1459,7 @@ function MobileWeekHubInner() {
             ) : (
               <div className="space-y-3">
                 {dayLabels.map((day) => {
-                  const entries = cellEntries(currentUserGrid[day.key]);
+                  const groups = cellGroups(currentUserGrid[day.key]).filter(groupHasContent);
                   return (
                     <div
                       key={day.key}
@@ -1554,22 +1473,22 @@ function MobileWeekHubInner() {
                           </div>
                         </div>
                         <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {entries.length > 0 ? `${entries.length}件` : '予定なし'}
+                          {groups.length > 0 ? `${groups.length}件` : '予定なし'}
                         </div>
                       </div>
 
-                      {entries.length > 0 ? (
+                      {groups.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {entries.map((entry) => (
+                          {groups.map((group, groupIndex) => (
                             <button
-                              key={`${day.key}:${entry.entry}`}
+                              key={`${day.key}:${groupIndex}`}
                               type="button"
-                              onClick={() => handleScheduleEntryClick(entry.entry)}
+                              onClick={() => handleScheduleGroupClick(group)}
                               className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                               style={{ fontSize: scheduleCellFontSize }}
                               title="現場詳細を開く"
                             >
-                              {renderScheduleEntryLabel(entry.entry, entry.color)}
+                              {renderCellGroupLabel(group)}
                             </button>
                           ))}
                         </div>
@@ -1646,7 +1565,7 @@ function MobileWeekHubInner() {
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:cursor-default disabled:text-zinc-500 dark:hover:bg-zinc-900 dark:disabled:text-zinc-400"
                   data-testid={`mobile-cell-entry-option-${item.siteId ?? 'unmapped'}`}
                 >
-                  <span className="truncate">{renderScheduleEntryLabel(item.entry, item.color)}</span>
+                  <span className="truncate">{renderScheduleTargetLabel(item)}</span>
                   <span className="ml-3 shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
                     {item.noteOnly ? '追記' : item.siteId ? '詳細へ' : '未紐付け'}
                   </span>
