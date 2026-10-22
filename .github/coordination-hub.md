@@ -53,6 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
+| done | H(▼ルール一本化・スマホ色PC一致) | .github/coordination-hub.md, app/week-hub.tsx, app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts(+新規 src/shared/ の純関数), app/api/schedule/week/route.ts(確認のみ), public/sw.js(確認のみ) | (A)赤+残存の原因切り分け(キャッシュ等)と▼を「実測で全文が見えない or 追加情報あり」へ一本化 (B)スマホの色解決をPCと同じ規則(セル色>サイトマスタ色)へ。DB schema不変 | 2026-10-22 JST |
 | done | G(全表示▼統一・セル設定タブ別記憶) | .github/coordination-hub.md, app/week-hub.tsx, app/header.tsx, app/header-actions.tsx, app/mobile/week-hub/page.tsx, README.md, e2e/smoke.spec.ts(+参照があれば) | (A)全表示アイコンを黒▼に統一し赤+を撤廃 (B)セル設定(名前幅/日付幅/高さ/表示密度)を週/月/年タブ別に記憶。DB schema・保存キーは不変 | 2026-10-21 JST |
 | done | F(赤文字同期・再修正) | .github/coordination-hub.md, src/server/shared-excel-sync.ts, src/server/excel-font-color.ts, README.md | 作業表☆→DB同期でセル全体が赤文字のセルが黒になる問題の修正(フォント色をstyles.xmlから解決)。一方通行・作業伝票同期・UI・DB schemaは不変。syncの書込実行はユーザー承認後のみ | 2026-10-21 JST |
 | done | E(高速化⑤) | .github/coordination-hub.md, app/user-gate.tsx, app/color-edit-controller.tsx, app/ui-theme.ts, src/shared/site-family.ts, app/week-hub.tsx, app/mobile/week-hub/page.tsx, app/week-payload-cache.ts, app/fetch-inflight.ts, app/api/sites/route.ts, app/api/schedule/*(出力不変の最適化のみ), app/api/documents/[id]/download/route.ts(Phase2承認後のみ), public/sw.js・next.config.ts(Phase2承認後のみ), README.md | リロード/タブ切替/画像の高速化。[S]のみ先行実装、運用影響([A])はユーザー確認後。DB schema・一方通行同期(shared-excel-sync)は触らない。④(D)は done のため header/layout の重複取得整理も必要なら本チャットで扱う | 2026-10-21 JST |
@@ -134,6 +135,8 @@
 - (F) 2026-10-21 作業表☆の文字色(赤)同期修正: セル全体の文字色を `.xlsx` の styles.xml/theme/indexed(+tint)から解決する `src/server/excel-font-color.ts` を新設し、`shared-excel-sync.ts` の `detectCellEntryColor`/`parseRichRunParts` が利用(赤=色相±10°/彩度70%以上/明度20〜65%、値は赤/通常の2値のまま)。リッチ文字列の色指定無し run は自動(黒)扱い(ユーザー確認済み)→【2026-10-21 撤回】色指定無し run はセルのフォント色を継承(セル赤なら赤、無ければ黒)→【同日再撤回・確定】継承は誤り。原本(9月7日シート E13)で、セルフォント赤でも <color> 無し run は黒表示と判明(ユーザースクショで確認)。確定規則=run に <color> があればその色、無ければ黒、run の無いセルはセルフォント色。赤黒混在は色ごとに別エントリ(個人×日付の予定セル内で黒=group0/赤=group1 の別枠。実DBで混在143セルが全て別枠保存を確認)。`.xls` ではセル全体色を読めず警告のみ。ユーザー承認([A])で、実DBへ手動1回だけ sync を実行し既存の同期済み行を作り直し(手動で変えた色は上書き=作業表☆が正)。一方通行・作業伝票同期・UI・DB schema・handoff③(`User.nameLabelColor`/userOrder)は不変。
 - (G) 2026-10-21 全表示アイコン統一・セル設定タブ別記憶: (A) 赤「+」を撤廃し黒▼に統一(PC/スマホ)。▼表示条件=複数現場/追記/グループ追記/長い単一名(従来の▼条件)または文字が見切れる場合(旧「+」)。見切れのみのセルのメニューは単一現場の全文。PCはホバーで全文メニュー・現場名クリック可、スマホはタップで cellEntryMenu(動作不変)。▼分の余白(14〜20px)を測定に加味しチラつき回避。(B) 名前幅/日付幅/高さ/密度を週・月・年タブ別に記憶: 現在のタブを `HeaderActionsProvider.weekView`(pathname変更でクリアされない別state)で header へ渡す。保存キー `week-hub:{kind}:{mode}:gridPrefs:{target}`・DB schema は不変、既存データの削除/移行なし。フォントサイズのキーは従来どおりURLのmode基準(挙動不変)。スマホ画面の設定は対象外。
 
+- (H) 2026-10-22 ▼ルール一本化・スマホ色のPC一致: ▼=「実測で全文が見えない or 追加情報(複数現場/追記/グループ追記)あり」へ一本化。18文字超ルールは廃止(`CELL_LONG_NAME_ALWAYS_ARROW_CHARS` を 18 にすると復活)。▼余白は pr-6(24px)/測定予約 18px に統一(PC)、スマホは 24px。色=「セルの色(entry.color)」のみ。サイトマスタ色は /api/schedule/* の `colorForEntry`(meta.labelColor > 作業表同期の群index > サイト色 > '!')で解決済みなので、クライアントでは再適用しない(PCと同じ)。表示モデル/色調は `src/shared/schedule-cell-display.ts` を PC/スマホ共通で使用。スマホのセル表示は結合文字列を介さず構造から描画(全項目を PC と同じ色調で " / " 連結)。
+
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
   - 原因1: scripts/tmp-validate-shared-sync.ts の検証用一時スクリプトが暗黙 any 型でtypecheckに失敗（デバッグ用にpushされたまま）。
@@ -183,6 +186,8 @@
 - (F) 2026-10-21 赤文字が黒になる原因(実ファイル測定): (1) SheetJS CE は `cell.s` にフォント色を持たず(`cell.s.font` は値セル2976件中0件)、セル全体が赤文字(styles.xml の fontId 赤)のセル657件のうち従来検出は197件(リッチ run が赤のものだけ)＝594件取りこぼし。2026-09-29 記録の「style単体red=0件」は `cell.s` を見ていたための誤認で、これを訂正。(2) `gridFromSheet`(blankrows:false)の行添字をそのままセル番地に使っていたため、空行を含む14/28シートで色/リッチ run の取得元がずれていた(`createGridCellResolver` で実番地へ対応付け)。(3) 色指定の無い run をセル色継承と誤判定しないこと(Excel は run ごとに書き出し、無色は自動=黒)。結果: 赤エントリ 351→1090件、赤の見落とし/過検出は 0(日付見出しの赤(日/祝日名)は現場名では無いため対象外)。担当者名(A列)に赤は原本0件。注意: 診断用 tmp-*.ts が auto-sync(git add -A)で一時 push された→削除コミットで対処(教訓: 一時スクリプトは `.gitignore` 済みの場所(`.storage` 等ではなく %TEMP% かロック中のみ)に置き、作成したら即 auto-sync 停止か直後に削除する)。
 
 - (G) 2026-10-21 セル設定がタブ別に記憶されなかった原因: (1) タブ(週/月/年)は week-hub の `useState` でURLに出ないため、header が `?mode=` から導出するキーが常に「週」だった。(2) `loadGridPrefs` が読込済みスコープでは早期 return し、タブ切替後も前タブの state が残り、保存 effect がそれを新タブのキーへ書いていた。対策: weekView を Provider 経由で header へ、読込済みスコープでもローカル保存値を再適用、スコープ不一致時は保存をスキップ。既知の制限: タブ切替の350ms以内の編集はデバウンス破棄で失われ得る。
+- (H) 2026-10-22 赤「+」が残って見えた原因: ワークツリーの G コミット(dabca03)が origin/main へ未 push(ahead 7)で、この PC にはサーバが起動しておらず(3000/3001 とも非 Listen)、.next の BUILD_ID も 10/21 15:33(コミット前)。スクショは push 前のコードを動かす環境(本番 deploy は push to main で起動)の可能性が高い。sw.js はナビゲーション network-first/ハッシュ付き静的資産のため古さの原因にはなりにくい。スマホで赤が黒になっていた原因: `resolveScheduleGroupTargets` 等が `matchedSite?.color ?? entry.color` を使い、`resolveSiteLabelColor` が常に文字列('default' 含む)を返すため `??` が効かず、現場マスタ一致時は常にマスタ色がセル色(作業表☆同期の赤)を上書きしていた。さらにグループ結合文字列を '/' で再分割していたため、色は 1 件目のみ・現場名に '/' を含むと誤分割。対策は上記(H)決定を参照。
+
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。
