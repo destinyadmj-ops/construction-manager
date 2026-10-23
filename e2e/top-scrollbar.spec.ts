@@ -70,7 +70,7 @@ async function checkInvariant(page: Page, kind: Kind) {
 }
 
 test.describe('top horizontal scrollbar', () => {
-  test.use({ viewport: { width: 1000, height: 900 } });
+  test.use({ viewport: { width: 1470, height: 900 } });
 
   test('month: root is not stretched and bar follows overflow', async ({ page }) => {
     await mockAuth(page);
@@ -80,7 +80,7 @@ test.describe('top horizontal scrollbar', () => {
     await expect(body).toBeVisible({ timeout: 30_000 });
     // 右列が表の幅で押し広げられず、本体自身がスクロール領域になっていること
     const right = await body.evaluate((el) => el.getBoundingClientRect().right);
-    expect(right).toBeLessThanOrEqual(1000 + 1);
+    expect(right).toBeLessThanOrEqual(1470 + 1);
     await checkInvariant(page, 'month');
     // 既存testidが維持されていること（はみ出す幅では必ず出る）
     await expect(page.getByTestId('month-grid-top-scrollbar')).toBeVisible();

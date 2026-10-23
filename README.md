@@ -244,6 +244,7 @@ npm run db:migrate:raw
 	- 制限: `.xls` 形式の作業表☆ではセル全体の文字色を読めない(リッチ文字列の run 色のみ反映。同期結果の警告に表示)。`.xlsx` で保存すること。空行を含むシートでも色取得セルがずれないよう、`gridFromSheet` の行添字を実セル番地へ対応付けている(`createGridCellResolver`)。
 
 - 週予定のセル設定(名前幅/日付幅/高さ(狭)/高さ(広)/表示密度)はタブ別(週/月/年 × 通常/日常 × PC/スマホ)に保存される(キー `week-hub:{kind}:{mode}:gridPrefs:{target}`)。ヘッダーは `HeaderActionsProvider.weekView` で現在のタブを知る。全文が見えない/複数現場・追記ありのセルは黒の ▼ を表示する(PC=ホバー、スマホ=タップで全文メニュー)。
+- 月/週/年予定の表が画面幅に入り切らないときは、ツールバー(月=「今月」/週=「今週」の右、年=月見出し上の細い行)に横スクロールバーが出る(入り切る場合は非表示)。バーのドラッグ、本体/ヘッダーのスクロール、タッチパッド/Shift+ホイールは相互に同期する。実装は `app/top-horizontal-scrollbar.tsx`。
 
 ※ 親フォルダ（`Master Hub/`）には中継用の `package.json` を置いてあるため、親フォルダから `npm run dev` / `npm run dev:keep` なども実行できます（内部的に `master-hub/` へ転送）。
 
