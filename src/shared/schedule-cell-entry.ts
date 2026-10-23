@@ -1,3 +1,5 @@
+import { normalizeSiteLookupKey } from './site-lookup';
+
 export const SCHEDULE_CELL_ENTRY_KINDS = ['site', 'note'] as const;
 
 export type ScheduleCellEntryKind = (typeof SCHEDULE_CELL_ENTRY_KINDS)[number];
@@ -27,4 +29,16 @@ export function formatScheduleCellGroupDisplayValue(
   const base = normalizedLabels.join(' / ');
   if (!base) return normalizedNote ? `追記: ${normalizedNote}` : null;
   return normalizedNote ? `${base}（追記: ${normalizedNote}）` : base;
+}
+
+// kind 未設定は site 扱い(normalizeScheduleCellEntryKind)。正規化名で重複排除し、見た目の別現場だけを数える。
+export function hasMultipleScheduleSites(items: ReadonlyArray<{ label: string; kind?: unknown }>): boolean {
+  const names = new Set<string>();
+  for (const item of items) {
+    if (normalizeScheduleCellEntryKind(item.kind) !== 'site') continue;
+    const key = normalizeSiteLookupKey(item.label);
+    if (key) names.add(key);
+    if (names.size >= 2) return true;
+  }
+  return false;
 }

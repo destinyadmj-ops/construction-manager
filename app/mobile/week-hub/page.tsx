@@ -6,7 +6,7 @@ import {
   personalScheduleSwatchClass,
   type PersonalScheduleSummaryDay,
 } from '@/shared/personal-schedule';
-import { formatScheduleCellGroupDisplayValue, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
+import { formatScheduleCellGroupDisplayValue, hasMultipleScheduleSites, normalizeScheduleCellEntryKind } from '@/shared/schedule-cell-entry';
 import { buildScheduleCellGroupDisplay, scheduleLabelTextClass, type ScheduleLabelTone } from '@/shared/schedule-cell-display';
 import {
   buildDayColumnTrack,
@@ -1356,7 +1356,7 @@ function MobileWeekHubInner() {
                                     {groups.map((group, groupIndex) => {
                                       if (!groupHasContent(group)) return null;
                                       const entryTargets = resolveScheduleGroupTargets(group, siteLookupByScheduleEntry);
-                                      const showArrow = group.items.filter((entry) => normalizeScheduleCellEntryKind(entry.kind) === 'site').length >= 2;
+                                      const showArrow = hasMultipleScheduleSites(group.items);
                                       const groupText = formatScheduleCellGroupDisplayValue(group.items.map((entry) => entry.label), group.note) ?? '';
 
                                       return (
