@@ -15,6 +15,13 @@ async function closeGate(page: Page) {
   }
 }
 
+// ログイン済み状態だけ差し替える（他APIは実データの読み取りのみ。書き込みは行わない）
+async function mockAuth(page: Page) {
+  await page.route('**/api/auth/me**', (route) =>
+    route.fulfill({ json: { ok: true, user: { id: 'e2e-user', name: 'E2E', email: null, kind: 'NORMAL' } } }),
+  );
+}
+
 async function openMode(page: Page, label: '月予定' | '週予定' | '年予定') {
   await closeGate(page);
   await page.getByRole('button', { name: label }).click();
@@ -30,6 +37,7 @@ async function checkInvariant(page: Page, kind: Kind) {
 
   const m = await body.evaluate((el) => ({ cw: el.clientWidth, sw: el.scrollWidth }));
   const overflow = m.sw - m.cw > 1;
+  test.info().annotations.push({ type: 'overflow', description: `${kind}: cw=${m.cw} sw=${m.sw}` });
   const bar = page.getByTestId(`${kind}-grid-top-scrollbar`);
 
   if (!overflow) {
@@ -65,6 +73,7 @@ test.describe('top horizontal scrollbar', () => {
   test.use({ viewport: { width: 1000, height: 900 } });
 
   test('month: root is not stretched and bar follows overflow', async ({ page }) => {
+    await mockAuth(page);
     await page.goto('/');
     await openMode(page, '月予定');
     const body = page.getByTestId('month-grid-body-scroll');
@@ -78,12 +87,14 @@ test.describe('top horizontal scrollbar', () => {
   });
 
   test('week: bar follows overflow', async ({ page }) => {
+    await mockAuth(page);
     await page.goto('/');
     await openMode(page, '週予定');
     await checkInvariant(page, 'week');
   });
 
   test('year: bar follows overflow', async ({ page }) => {
+    await mockAuth(page);
     await page.goto('/');
     await openMode(page, '年予定');
     await checkInvariant(page, 'year');
