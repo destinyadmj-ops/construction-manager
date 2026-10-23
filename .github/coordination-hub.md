@@ -53,7 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
-| in-progress | J(スマホ▼が1現場に出る件の原因特定・修正) | app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts, e2e/mobile-week-arrow.spec.ts(新規), .github/coordination-hub.md。app/week-hub.tsx・app/home-mobile-redirect.tsx・app/page.tsx は確認のみ(変更はユーザー確認後) | ⑨の▼ルールが本番/実機で効いていない原因の切り分け(未push・PC版表示・データ)と、複数現場判定の共通純関数化・e2e追加 | 2026-10-23 JST |
+| done | J(スマホ▼が1現場に出る件の原因特定・修正) | app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts, e2e/mobile-week-arrow.spec.ts(新規), .github/coordination-hub.md。app/week-hub.tsx・app/home-mobile-redirect.tsx・app/page.tsx は確認のみ(変更はユーザー確認後) | ⑨の▼ルールが本番/実機で効いていない原因の切り分け(未push・PC版表示・データ)と、複数現場判定の共通純関数化・e2e追加 | 2026-10-23 JST |
 | done | I(スマホ▼を複数現場のみ・全文表示) | app/mobile/week-hub/page.tsx, e2e/smoke.spec.ts(参照があれば), .github/coordination-hub.md | スマホ週/日常グリッドの▼を「現場2件以上」のみへ。1現場が切れている場合は▼なしで枠タップの全文表示(メニュー項目は折り返し)。実測/ResizeObserverは撤去。色まわりは不変。PC版は不変 | 2026-10-22 JST |
 | done | H(▼ルール一本化・スマホ色PC一致) | .github/coordination-hub.md, app/week-hub.tsx, app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts(+新規 src/shared/ の純関数), app/api/schedule/week/route.ts(確認のみ), public/sw.js(確認のみ) | (A)赤+残存の原因切り分け(キャッシュ等)と▼を「実測で全文が見えない or 追加情報あり」へ一本化 (B)スマホの色解決をPCと同じ規則(セル色>サイトマスタ色)へ。DB schema不変 | 2026-10-22 JST |
 | done | G(全表示▼統一・セル設定タブ別記憶) | .github/coordination-hub.md, app/week-hub.tsx, app/header.tsx, app/header-actions.tsx, app/mobile/week-hub/page.tsx, README.md, e2e/smoke.spec.ts(+参照があれば) | (A)全表示アイコンを黒▼に統一し赤+を撤廃 (B)セル設定(名前幅/日付幅/高さ/表示密度)を週/月/年タブ別に記憶。DB schema・保存キーは不変 | 2026-10-21 JST |
@@ -139,6 +139,7 @@
 
 - (H) 2026-10-22 ▼ルール一本化・スマホ色のPC一致: ▼=「実測で全文が見えない or 追加情報(複数現場/追記/グループ追記)あり」へ一本化。18文字超ルールは廃止(`CELL_LONG_NAME_ALWAYS_ARROW_CHARS` を 18 にすると復活)。▼余白は pr-6(24px)/測定予約 18px に統一(PC)、スマホは 24px。色=「セルの色(entry.color)」のみ。サイトマスタ色は /api/schedule/* の `colorForEntry`(meta.labelColor > 作業表同期の群index > サイト色 > '!')で解決済みなので、クライアントでは再適用しない(PCと同じ)。表示モデル/色調は `src/shared/schedule-cell-display.ts` を PC/スマホ共通で使用。スマホのセル表示は結合文字列を介さず構造から描画(全項目を PC と同じ色調で " / " 連結)。
 - (I) 2026-10-22 スマホ▼は「現場(kind=site)2件以上」のみ。1現場が切れている場合は▼なしで枠タップの全文表示(cellEntryMenu、項目は折り返し・右ラベル固定)。実測(ResizeObserver)は撤去、▼ありセルのみ幅を24px狭める。追記だけの項目は▼対象外。メニューの追記は「追記:」重複を解消。色まわり・PC版は不変。
+- (J) 2026-10-23 ▼判定は共通純関数 `hasMultipleScheduleSites`(src/shared/schedule-cell-entry.ts: kind=site を正規化名で重複排除して2件以上)に一本化しスマホ版が使用。e2e/mobile-week-arrow.spec.ts(API全モック)で 1現場/長名/追記/同名重複=▼なし・2現場=▼あり・タップでメニューを確認。PC版(app/week-hub.tsx)のルールは不変。手動 commit したら必ず push まで行う。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
@@ -208,3 +209,4 @@
 - desktop wrapper 実体は 0.1.3 を基準に運用。Web-only deploy の即時追従は live-build-sync 前提で確認し、wrapper 更新が必要なのは main.cjs / desktop-release / installer を触る変更のみ。
 - 【PC間引き継ぎ】正本=`.github/coordination-hub.md`（Git追跡・全PC同期）。ローカルミラー=`/memories/repo/coordination-hub.md`（PC固有・非同期）。食い違ったら正本を優先し、ミラーを上書きする。
 - (H) 2026-10-22 スマホ 10/20「MS荒川～」が黒のまま: 同種データ(MS荒川1丁目店, meta.labelColor=red / マスタ default)でAPIは赤を返すことをDB読取で確認。リロードしても直らない原因は修正コミットが未push(ahead 10)で本番が旧コードだったため。10コミットを push 済み(7778f90)、Deploy to Production 成功。強制リロード/PWA再起動で確認待ち。
+- (J) 2026-10-23 スマホで1現場セルに▼が出た原因: ⑨の▼ルール(commit 7337d65, 10/22 13:17)を手動 commit したが push されず本番が旧ルール(追記あり/見切れで▼)のままだった。git-save-sync は作業ツリーが dirty のときだけ commit/push するため、手動 commit 済みで clean な状態では自動 push されない(⑧の「+」「赤が黒」と同型)。10/23 14:55 の Auto-save sync で push され deploy 実行。データ側は実DB(読取)で複数現場28グループ・同名重複1グループ・kind欠落3行のみで主因ではない。PC版画面がスマホに出る経路(PC版サイト表示)は未対処・要ユーザー確認。

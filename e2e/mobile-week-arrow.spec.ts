@@ -67,6 +67,9 @@ test('mobile week grid shows arrow only for multi-site cells', async ({ page }) 
   await expect(arrowOf(4)).toHaveCount(0);
 
   // 1現場でもタップでメニューが開き、追記を含む全文が見える
+  // スクロール完了前に開くと window の scroll リスナーでメニューが閉じるため、先に見える位置へ移してから押す
+  await cells.nth(2).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
   await cells.nth(2).click();
   const menu = page.getByTestId('mobile-cell-entry-menu');
   await expect(menu).toBeVisible();
