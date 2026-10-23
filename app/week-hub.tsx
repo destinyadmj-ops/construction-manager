@@ -65,6 +65,7 @@ import { useHeaderActions } from './header-actions';
 import { useAuthMeContext, useSchedulePermissions } from './user-gate';
 import { writeCachedUserCandidates } from './user-candidate-cache';
 import { fetchSharedInflight } from './fetch-inflight';
+import { TopHorizontalScrollbar, useTopHorizontalScrollbar } from './top-horizontal-scrollbar';
 import { readWeekPayloadCache, writeWeekPayloadCache } from './week-payload-cache';
 
 type ViewMode = 'week' | 'month' | 'year';
@@ -4124,7 +4125,7 @@ function WeekHubInner() {
           </div>
         ) : null}
         {/* Main content */}
-        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[360px_1fr]">
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
           {mode === 'week' ? (
             <>
               <div className="hidden lg:block rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black lg:sticky lg:top-[calc(var(--app-header-h)+var(--mode-tabs-h,0px))] lg:max-h-[calc(100vh-var(--app-header-h)-var(--mode-tabs-h,0px))] lg:self-start lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
@@ -5454,9 +5455,8 @@ function WeekGrid({
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
   const activeWeekKey = toYmd(weekStart);
-  const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const headerScrollRef = useRef<HTMLDivElement | null>(null);
-  const syncingRef = useRef<0 | 1>(0);
+  const topScrollbar = useTopHorizontalScrollbar(`${activeWeekKey}:${users.length}`);
+  const { bodyRef: scrollRootRef, headerRef: headerScrollRef, onHeaderScroll, onBodyScroll } = topScrollbar;
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
@@ -5472,31 +5472,7 @@ function WeekGrid({
     const hit = candidates.find((el) => el.dataset.userRow === selectedUserId);
     if (!hit) return;
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
-  }, [selectedUserId, users.length]);
-
-  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
-    if (!from || !to) return;
-    const left = from.scrollLeft;
-    if (to.scrollLeft !== left) to.scrollLeft = left;
-  }, []);
-
-  const onHeaderScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft]);
-
-  const onBodyScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft]);
+  }, [scrollRootRef, selectedUserId, users.length]);
 
   return (
     <div
@@ -5572,6 +5548,7 @@ function WeekGrid({
               >
                 今週
               </button>
+              <TopHorizontalScrollbar state={topScrollbar} testId="week-grid-top-scrollbar" />
             </div>
           </div>
         </div>
@@ -5789,64 +5766,13 @@ function MonthGrid({
 }) {
   const users = useMemo(() => orderUsers(data?.users ?? [], userOrder), [data?.users, userOrder]);
   const grid = data?.grid ?? {};
-  const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const headerScrollRef = useRef<HTMLDivElement | null>(null);
-  const topScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const topScrollbarVisualRef = useRef<HTMLDivElement | null>(null);
-  const syncingRef = useRef<0 | 1>(0);
-  const [topScrollbarMetrics, setTopScrollbarMetrics] = useState({ contentWidth: 0, viewportWidth: 0 });
+  const topScrollbar = useTopHorizontalScrollbar(`${monthKey}:${users.length}`);
+  const { bodyRef: scrollRootRef, headerRef: headerScrollRef, onHeaderScroll, onBodyScroll } = topScrollbar;
 
   const cellMinH = useMemo(() => {
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
-
-  const updateTopScrollbarVisual = useCallback(() => {
-    const scrollbar = topScrollbarRef.current;
-    const visual = topScrollbarVisualRef.current;
-    if (!scrollbar || !visual) return;
-
-    const trackWidth = visual.clientWidth;
-    const viewportWidth = scrollbar.clientWidth;
-    const contentWidth = scrollbar.scrollWidth;
-    const maxScroll = Math.max(0, contentWidth - viewportWidth);
-    if (trackWidth <= 0 || viewportWidth <= 0 || contentWidth <= 0) return;
-
-    const thumbWidth =
-      maxScroll > 0 ? Math.max(48, Math.min(trackWidth, (viewportWidth / contentWidth) * trackWidth)) : trackWidth;
-    const maxThumbOffset = Math.max(0, trackWidth - thumbWidth);
-    const thumbOffset = maxScroll > 0 ? (scrollbar.scrollLeft / maxScroll) * maxThumbOffset : 0;
-
-    visual.style.setProperty('--mh-month-scroll-thumb-w', `${thumbWidth}px`);
-    visual.style.setProperty('--mh-month-scroll-thumb-x', `${thumbOffset}px`);
-  }, []);
-
-  useEffect(() => {
-    const body = scrollRootRef.current;
-    const content = body?.firstElementChild;
-    if (!body || !(content instanceof HTMLElement)) return;
-
-    const apply = () => {
-      const next = {
-        contentWidth: body.scrollWidth,
-        viewportWidth: body.clientWidth,
-      };
-      setTopScrollbarMetrics((prev) =>
-        prev.contentWidth === next.contentWidth && prev.viewportWidth === next.viewportWidth ? prev : next,
-      );
-      window.requestAnimationFrame(updateTopScrollbarVisual);
-    };
-
-    apply();
-    const ro = new ResizeObserver(() => apply());
-    ro.observe(body);
-    ro.observe(content);
-    window.addEventListener('resize', apply);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', apply);
-    };
-  }, [monthKey, updateTopScrollbarVisual, users.length]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -5857,50 +5783,7 @@ function MonthGrid({
     const hit = candidates.find((el) => el.dataset.userRow === selectedUserId);
     if (!hit) return;
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
-  }, [selectedUserId, users.length]);
-
-  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
-    if (!from || !to) return;
-    const left = from.scrollLeft;
-    if (to.scrollLeft !== left) to.scrollLeft = left;
-  }, []);
-
-  const onHeaderScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
-    syncScrollLeft(headerScrollRef.current, topScrollbarRef.current);
-    updateTopScrollbarVisual();
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft, updateTopScrollbarVisual]);
-
-  const onBodyScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
-    syncScrollLeft(scrollRootRef.current, topScrollbarRef.current);
-    updateTopScrollbarVisual();
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft, updateTopScrollbarVisual]);
-
-  const onTopScrollbarScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(topScrollbarRef.current, headerScrollRef.current);
-    syncScrollLeft(topScrollbarRef.current, scrollRootRef.current);
-    updateTopScrollbarVisual();
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft, updateTopScrollbarVisual]);
-
-  useEffect(() => {
-    updateTopScrollbarVisual();
-  }, [topScrollbarMetrics.contentWidth, topScrollbarMetrics.viewportWidth, updateTopScrollbarVisual]);
+  }, [scrollRootRef, selectedUserId, users.length]);
 
   return (
     <div
@@ -5938,29 +5821,7 @@ function MonthGrid({
               </button>
             </div>
 
-            {topScrollbarMetrics.contentWidth > topScrollbarMetrics.viewportWidth ? (
-              <div className="relative ml-auto flex shrink-0 justify-end" style={{ width: 'min(48vw, 36rem)' }}>
-                <div
-                  ref={topScrollbarVisualRef}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-1/2 z-10 h-2 -translate-y-1/2 rounded-full bg-zinc-300/95 shadow-inner dark:bg-zinc-700/90"
-                  data-testid="month-grid-top-scrollbar-visual"
-                >
-                  <div
-                    className="absolute left-0 top-0 h-full rounded-full bg-zinc-600/90 shadow-sm dark:bg-zinc-100/90"
-                    style={{ width: 'var(--mh-month-scroll-thumb-w, 48px)', transform: 'translateX(var(--mh-month-scroll-thumb-x, 0px))' }}
-                  />
-                </div>
-                <div
-                  ref={topScrollbarRef}
-                  className="mh-scrollbar-visible relative z-20 h-5 w-full overflow-x-auto overflow-y-hidden rounded-full bg-transparent"
-                  onScroll={onTopScrollbarScroll}
-                  data-testid="month-grid-top-scrollbar"
-                >
-                  <div style={{ width: `${topScrollbarMetrics.contentWidth}px`, height: '1px' }} />
-                </div>
-              </div>
-            ) : null}
+            <TopHorizontalScrollbar state={topScrollbar} testId="month-grid-top-scrollbar" />
           </div>
         </div>
 
@@ -6201,9 +6062,8 @@ function YearGrid({
     return gridLayout === 'comfortable' ? cellMinHComfortable : cellMinHCompact;
   }, [cellMinHCompact, cellMinHComfortable, gridLayout]);
   const nameColumnTrack = useMemo(() => buildNameColumnTrack(nameColW), [nameColW]);
-  const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const headerScrollRef = useRef<HTMLDivElement | null>(null);
-  const syncingRef = useRef<0 | 1>(0);
+  const topScrollbar = useTopHorizontalScrollbar(`${data?.year ?? ''}:${months.length}:${users.length}`);
+  const { bodyRef: scrollRootRef, headerRef: headerScrollRef, onHeaderScroll, onBodyScroll } = topScrollbar;
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -6214,31 +6074,7 @@ function YearGrid({
     const hit = candidates.find((el) => el.dataset.userRow === selectedUserId);
     if (!hit) return;
     hit.scrollIntoView({ block: 'center', inline: 'nearest' });
-  }, [selectedUserId, users.length]);
-
-  const syncScrollLeft = useCallback((from: HTMLDivElement | null, to: HTMLDivElement | null) => {
-    if (!from || !to) return;
-    const left = from.scrollLeft;
-    if (to.scrollLeft !== left) to.scrollLeft = left;
-  }, []);
-
-  const onHeaderScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(headerScrollRef.current, scrollRootRef.current);
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft]);
-
-  const onBodyScroll = useCallback(() => {
-    if (syncingRef.current) return;
-    syncingRef.current = 1;
-    syncScrollLeft(scrollRootRef.current, headerScrollRef.current);
-    window.requestAnimationFrame(() => {
-      syncingRef.current = 0;
-    });
-  }, [syncScrollLeft]);
+  }, [scrollRootRef, selectedUserId, users.length]);
 
   return (
     <div
@@ -6246,6 +6082,11 @@ function YearGrid({
       data-testid="year-grid"
     >
       <div className="sticky z-40" style={{ top: 'calc(var(--app-header-h) + var(--mode-tabs-h, 0px))' }}>
+        {topScrollbar.visible ? (
+          <div className="flex border-b border-zinc-200 bg-white/90 px-2 py-2 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
+            <TopHorizontalScrollbar state={topScrollbar} testId="year-grid-top-scrollbar" />
+          </div>
+        ) : null}
         {/* Month header row: sticky + horizontal-scroll synced */}
         <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
           <div
