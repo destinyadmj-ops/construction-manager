@@ -134,7 +134,9 @@ jobs:
             git checkout -B main origin/main
             git reset --hard "$GITHUB_SHA"
             desktop_env_lines=""
+            shared_sync_env_lines=""
             if [ -f .env.production ]; then
+              shared_sync_env_lines="$(grep -E '^(SHARED_SOURCE_HOST_PATH|MASTER_HUB_SHARED_SOURCE_DIR|SHARED_SYNC_)' .env.production || true)"
               desktop_env_lines="$(grep '^DESKTOP_APP_' .env.production || true)"
               if [ -n "${DESKTOP_APP_VERSION:-}" ]; then
                 desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_VERSION=' || true)"
@@ -170,6 +172,9 @@ jobs:
             EOF
             if [ -n "$desktop_env_lines" ]; then
               printf '\n%s\n' "$desktop_env_lines" >> .env.production
+            fi
+            if [ -n "$shared_sync_env_lines" ]; then
+              printf '\n%s\n' "$shared_sync_env_lines" >> .env.production
             fi
             append_env_if_set DESKTOP_APP_VERSION "${DESKTOP_APP_VERSION:-}"
             append_env_if_set DESKTOP_APP_DOWNLOAD_URL "${DESKTOP_APP_DOWNLOAD_URL:-}"

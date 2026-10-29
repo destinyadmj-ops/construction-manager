@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import { createRedisConnectionOrNull, RedisUnavailableError } from './connection';
 import { QUEUE_NAMES, getSharedSyncQueue } from './queues';
-import { getSharedSyncSourceVersion, runSharedSync } from '@/server/shared-excel-sync';
+import { SharedSyncError, getSharedSyncSourceVersion, runSharedSync } from '@/server/shared-excel-sync';
 
 export function startRemindersWorker() {
   const connection = createRedisConnectionOrNull();
@@ -23,10 +23,21 @@ type SharedSyncJobData = {
   sourceKey: string;
 };
 
+const DEFAULT_SHARED_SYNC_INTERVAL_MS = 30 * 60_000;
+const MIN_SHARED_SYNC_INTERVAL_MS = 60_000;
+
 function readSharedSyncPollIntervalMs() {
-  const raw = Number(process.env.SHARED_SYNC_POLL_INTERVAL_MS ?? 5 * 60_000);
-  if (!Number.isFinite(raw) || raw < 60_000) return 5 * 60_000;
+  const raw = Number(process.env.SHARED_SYNC_POLL_INTERVAL_MS ?? DEFAULT_SHARED_SYNC_INTERVAL_MS);
+  if (!Number.isFinite(raw) || raw < MIN_SHARED_SYNC_INTERVAL_MS) return DEFAULT_SHARED_SYNC_INTERVAL_MS;
   return Math.floor(raw);
+}
+
+// 未設定時は本番(NODE_ENV=production)のみ有効。開発PCの worker が実DBへ書き込まないようにする。
+export function isSharedSyncPollEnabled() {
+  const raw = (process.env.SHARED_SYNC_POLL_ENABLED ?? '').trim().toLowerCase();
+  if (raw === '1' || raw === 'true') return true;
+  if (raw === '0' || raw === 'false') return false;
+  return process.env.NODE_ENV === 'production';
 }
 
 function parseTargetTermByKind(kind: 'NORMAL' | 'DAILY'): number | null {
@@ -45,13 +56,23 @@ export function startSharedSyncWorker() {
       const data = (job.data ?? {}) as Partial<SharedSyncJobData>;
       const kind = data.kind === 'DAILY' ? 'DAILY' : 'NORMAL';
       const targetTerm = Number.isFinite(data.targetTerm) ? Number(data.targetTerm) : null;
-      const result = await runSharedSync({ kind, targetTerm });
-      return {
-        ok: true,
-        kind,
-        sourceKey: typeof data.sourceKey === 'string' ? data.sourceKey : null,
-        counts: result.counts,
-      };
+      const sourceKey = typeof data.sourceKey === 'string' ? data.sourceKey : null;
+      const startedAt = Date.now();
+      try {
+        const result = await runSharedSync({ kind, targetTerm });
+        console.log(
+          `[worker][shared-sync] success: kind=${kind} durationMs=${Date.now() - startedAt} counts=${JSON.stringify(result.counts)}`
+        );
+        return { ok: true, kind, sourceKey, counts: result.counts };
+      } catch (error) {
+        if (error instanceof SharedSyncError && error.code === 'BUSY') {
+          console.log(`[worker][shared-sync] skipped (busy): kind=${kind}`);
+          return { ok: true, skipped: true, kind, sourceKey };
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[worker][shared-sync] failed: kind=${kind} durationMs=${Date.now() - startedAt} error=${message}`);
+        throw error;
+      }
     },
     { connection }
   );
@@ -59,56 +80,57 @@ export function startSharedSyncWorker() {
 
 export function startSharedSyncPoller() {
   const kinds: Array<'NORMAL' | 'DAILY'> = ['NORMAL', 'DAILY'];
-  const lastSeenByKind = new Map<'NORMAL' | 'DAILY', string | null>();
   const intervalMs = readSharedSyncPollIntervalMs();
-  const syncOnStart = process.env.SHARED_SYNC_POLL_SYNC_ON_START === '1';
   const queue = getSharedSyncQueue();
   let polling = false;
 
-  console.log(`[worker][shared-sync] poller started: intervalMs=${intervalMs} syncOnStart=${syncOnStart ? '1' : '0'}`);
+  console.log(`[worker][shared-sync] poller started: intervalMs=${intervalMs} (sync on start + every interval, regardless of file mtime)`);
 
-  const tick = async () => {
+  // mtime に関わらず毎回同期する(再実行は冪等)。起動前の更新や過去の失敗後でも必ず追従させるため。
+  const tick = async (reason: 'start' | 'interval') => {
     if (polling) return;
     polling = true;
     try {
       for (const kind of kinds) {
-        const version = await getSharedSyncSourceVersion({
-          kind,
-          targetTerm: parseTargetTermByKind(kind),
-        }).catch(() => null);
-        if (!version?.hasSources || !version.key) continue;
-
-        const previous = lastSeenByKind.get(kind) ?? null;
-        lastSeenByKind.set(kind, version.key);
-
-        if (!syncOnStart && previous == null) {
-          continue;
-        }
-        if (previous === version.key) {
-          continue;
-        }
-
         const targetTerm = parseTargetTermByKind(kind);
-        const jobId = `shared-sync:${version.key}`;
-        await queue.add(
-          'shared-sync',
-          { kind, targetTerm, sourceKey: version.key } satisfies SharedSyncJobData,
-          {
-            jobId,
-            removeOnComplete: 20,
-            removeOnFail: 50,
+        try {
+          const version = await getSharedSyncSourceVersion({ kind, targetTerm });
+          if (!version.hasSources || !version.key) {
+            console.warn(
+              `[worker][shared-sync] skip: kind=${kind} sources not found dir=${version.sharedDir} workTable=${version.workTableFileName ?? '-'} workSlip=${version.workSlipFileName ?? '-'}`
+            );
+            continue;
           }
-        );
-        console.log(`[worker][shared-sync] enqueued: kind=${kind} key=${version.key}`);
+
+          const pending = await queue.getJobs(['waiting', 'active', 'delayed'], 0, 50);
+          if (pending.some((job) => (job.data as Partial<SharedSyncJobData> | undefined)?.kind === kind)) {
+            console.log(`[worker][shared-sync] skip enqueue: kind=${kind} previous job still pending`);
+            continue;
+          }
+
+          await queue.add(
+            'shared-sync',
+            { kind, targetTerm, sourceKey: version.key } satisfies SharedSyncJobData,
+            {
+              jobId: `shared-sync-${kind}-${Date.now()}`,
+              removeOnComplete: 20,
+              removeOnFail: 50,
+            }
+          );
+          console.log(`[worker][shared-sync] enqueued: kind=${kind} reason=${reason} key=${version.key}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[worker][shared-sync] tick failed: kind=${kind} reason=${reason} error=${message}`);
+        }
       }
     } finally {
       polling = false;
     }
   };
 
-  void tick();
+  void tick('start');
   const timer = setInterval(() => {
-    void tick();
+    void tick('interval');
   }, intervalMs);
 
   return () => {

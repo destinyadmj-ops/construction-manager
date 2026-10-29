@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     return Response.json(result, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     if (error instanceof SharedSyncError) {
-      const status = error.code === 'MISSING_SOURCE' ? 400 : error.code === 'PASSWORD_PROTECTED' ? 422 : 500;
+      const status = error.code === 'MISSING_SOURCE' ? 400 : error.code === 'PASSWORD_PROTECTED' ? 422 : error.code === 'BUSY' ? 409 : 500;
       return Response.json({ ok: false, error: error.message, code: error.code }, { status });
     }
     const message = error instanceof Error ? error.message : '共有フォルダ同期に失敗しました';

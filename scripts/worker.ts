@@ -1,6 +1,6 @@
 import "dotenv/config";
 import type { Worker } from "bullmq";
-import { startRemindersWorker, startSharedSyncPoller, startSharedSyncWorker } from "../src/server/queue/worker";
+import { isSharedSyncPollEnabled, startRemindersWorker, startSharedSyncPoller, startSharedSyncWorker } from "../src/server/queue/worker";
 import { RedisUnavailableError } from "../src/server/queue/connection";
 
 const workers: Worker[] = [];
@@ -8,7 +8,11 @@ let stopSharedSyncPoller: (() => void) | null = null;
 try {
   workers.push(startRemindersWorker());
   workers.push(startSharedSyncWorker());
-  stopSharedSyncPoller = startSharedSyncPoller();
+  if (isSharedSyncPollEnabled()) {
+    stopSharedSyncPoller = startSharedSyncPoller();
+  } else {
+    console.log('[worker][shared-sync] poller disabled (set SHARED_SYNC_POLL_ENABLED=1 to enable; enabled by default only when NODE_ENV=production)');
+  }
 } catch (e) {
   if (e instanceof RedisUnavailableError) {
     console.warn('[worker] Redis is unavailable; workers are not started.');

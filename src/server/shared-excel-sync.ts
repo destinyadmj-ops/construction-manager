@@ -11,6 +11,7 @@ import {
   resolveColorAttrs,
 } from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
+import { tryAcquireSharedSyncLock } from '@/server/shared-sync-lock';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -104,7 +105,7 @@ export type SharedSyncSourceVersion = {
 };
 
 export class SharedSyncError extends Error {
-  code: 'MISSING_SOURCE' | 'PASSWORD_PROTECTED' | 'SYNC_FAILED';
+  code: 'MISSING_SOURCE' | 'PASSWORD_PROTECTED' | 'SYNC_FAILED' | 'BUSY';
 
   constructor(code: SharedSyncError['code'], message: string) {
     super(message);
@@ -1180,6 +1181,16 @@ export async function getSharedSyncSourceVersion(input: {
 }
 
 export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncRunResult> {
+  const release = await tryAcquireSharedSyncLock();
+  if (!release) throw new SharedSyncError('BUSY', '別の共有フォルダ同期が実行中です。完了後にやり直してください。');
+  try {
+    return await runSharedSyncUnlocked(input);
+  } finally {
+    await release();
+  }
+}
+
+async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncRunResult> {
   const files = await discoverSharedFiles(input.targetTerm ?? null);
 
   if (!files.workTable || !files.workSlip) {

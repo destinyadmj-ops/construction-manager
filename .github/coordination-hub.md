@@ -53,7 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
-| in-progress | L(作業表☆同期30分おき化・未反映原因特定) | src/server/queue/worker.ts, scripts/worker.ts, src/server/queue/queues.ts, src/server/shared-excel-sync.ts(必要範囲のみ), docker-compose.prod.yml, .env.production.example, DEPLOYMENT.md, README.md(設定説明のみ) | 共有フォルダ Excel→週予定DB の同期を30分おき(強制同期+起動直後1回+重複実行防止)に変更し、Desktop表示がExcelと食い違う原因を特定。実DBへの sync 書込はユーザー承認後のみ | 2026-10-29 JST |
+| in-progress | L(作業表☆同期30分おき化・未反映原因特定) | src/server/queue/worker.ts, scripts/worker.ts, src/server/queue/queues.ts, src/server/shared-excel-sync.ts(必要範囲のみ), src/server/shared-sync-lock.ts(新規), app/api/sites/shared-sync/route.ts(BUSYの409のみ), .github/workflows/deploy.yml(共有フォルダ設定の保持のみ・ユーザー承認済み), docker-compose.prod.yml, .env.production.example, DEPLOYMENT.md, README.md(設定説明のみ) | 共有フォルダ Excel→週予定DB の同期を30分おき(強制同期+起動直後1回+重複実行防止)に変更し、Desktop表示がExcelと食い違う原因を特定。実DBへの sync 書込はユーザー承認後のみ | 2026-10-29 JST |
 | done | K(月/年/週の上部横スクロールバー共通化・右列はみ出し修正) | app/week-hub.tsx, app/top-horizontal-scrollbar.tsx(新規), e2e/top-scrollbar.spec.ts(新規), README.md | 右列 1fr による幅の押し広げで月予定の上部バーが出ない件の修正と、月/週/年での上部バー共通部品化 | 2026-10-23 JST |
 | done | J(スマホ▼が1現場に出る件の原因特定・修正) | app/mobile/week-hub/page.tsx, src/shared/schedule-cell-entry.ts, e2e/mobile-week-arrow.spec.ts(新規), .github/coordination-hub.md。app/week-hub.tsx・app/home-mobile-redirect.tsx・app/page.tsx は確認のみ(変更はユーザー確認後) | ⑨の▼ルールが本番/実機で効いていない原因の切り分け(未push・PC版表示・データ)と、複数現場判定の共通純関数化・e2e追加 | 2026-10-23 JST |
 | done | I(スマホ▼を複数現場のみ・全文表示) | app/mobile/week-hub/page.tsx, e2e/smoke.spec.ts(参照があれば), .github/coordination-hub.md | スマホ週/日常グリッドの▼を「現場2件以上」のみへ。1現場が切れている場合は▼なしで枠タップの全文表示(メニュー項目は折り返し)。実測/ResizeObserverは撤去。色まわりは不変。PC版は不変 | 2026-10-22 JST |
