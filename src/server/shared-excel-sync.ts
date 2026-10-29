@@ -12,6 +12,7 @@ import {
 } from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { tryAcquireSharedSyncLock } from '@/server/shared-sync-lock';
+import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -49,7 +50,7 @@ type WorkTableRow = {
   assignees: Array<{ name: string; color: 'default' | 'red' }>;
 };
 
-type WorkSlipLedgerRow = {
+export type WorkSlipLedgerRow = {
   companyName: string | null;
   siteName: string;
   amount: number | null;
@@ -85,6 +86,8 @@ export type SharedSyncPreview = {
     workTable: { fileName: string; mtimeIso: string } | null;
     workSlip: { fileName: string; mtimeIso: string; term: number | null; period: string | null } | null;
   };
+  /** 台帳・関係会社の引用に使う作業伝票のタブ */
+  ledgerTabs: { targetYm: string; monthSheet: string | null; originalSheet: string | null } | null;
   warnings: string[];
 };
 
@@ -750,10 +753,17 @@ export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
   return deduped;
 }
 
-function extractWorkSlipLedgerRows(workbook: XLSX.WorkBook): WorkSlipLedgerRow[] {
+// 台帳・関係会社の引用元は「当該月」と「作業伝票オリジナル」のタブのみ(見つからない時は全シートへフォールバックしない)。
+// 重複(会社+現場)は当該月のタブを優先し、金額だけ空の場合にオリジナルで補う。
+export function extractWorkSlipLedgerRows(
+  workbook: XLSX.WorkBook,
+  asOfYmd: string = todayYmdTokyo(),
+): { rows: WorkSlipLedgerRow[]; sheets: WorkSlipLedgerSheets } {
   const rows: WorkSlipLedgerRow[] = [];
+  const sheets = resolveWorkSlipLedgerSheets(workbook.SheetNames ?? [], asOfYmd);
+  const targetSheetNames = [sheets.monthSheet, sheets.originalSheet].filter((name): name is string => !!name);
 
-  for (const sheetName of workbook.SheetNames ?? []) {
+  for (const sheetName of targetSheetNames) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
     const grid = gridFromSheet(sheet);
@@ -801,7 +811,7 @@ function extractWorkSlipLedgerRows(workbook: XLSX.WorkBook): WorkSlipLedgerRow[]
     }
   }
 
-  return Array.from(dedupedByName.values());
+  return { rows: Array.from(dedupedByName.values()), sheets };
 }
 
 function startOfDayUtc(ymd: string): Date {
@@ -1120,7 +1130,12 @@ function workSlipMimeByExtension(ext: string): string {
     : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
 
-function buildPreview(input: { files: DiscoveredSharedFiles; kind: SiteKind; warnings?: string[] }): SharedSyncPreview {
+function buildPreview(input: {
+  files: DiscoveredSharedFiles;
+  kind: SiteKind;
+  warnings?: string[];
+  ledgerSheets?: WorkSlipLedgerSheets | null;
+}): SharedSyncPreview {
   return {
     ok: true,
     sharedDir: input.files.sharedDir,
@@ -1141,6 +1156,13 @@ function buildPreview(input: { files: DiscoveredSharedFiles; kind: SiteKind; war
           }
         : null,
     },
+    ledgerTabs: input.ledgerSheets
+      ? {
+          targetYm: input.ledgerSheets.targetYm,
+          monthSheet: input.ledgerSheets.monthSheet,
+          originalSheet: input.ledgerSheets.originalSheet,
+        }
+      : null,
     warnings: input.warnings ?? [],
   };
 }
@@ -1153,7 +1175,19 @@ export async function getSharedSyncPreview(input: { kind: SiteKind; targetTerm?:
   if (!files.workSlip) warnings.push('共有フォルダ直下に 作業伝票 系(.xls/.xlsx) が見つかりません。');
   if (files.workSlipCandidates > 1) warnings.push(`作業伝票候補が ${files.workSlipCandidates} 件あります。対象期一致 > 更新日時の優先順で選択します。`);
 
-  return buildPreview({ files, kind: input.kind, warnings });
+  let ledgerSheets: WorkSlipLedgerSheets | null = null;
+  if (files.workSlip) {
+    try {
+      // シート名だけを読む(本文は読まない)
+      const names = XLSX.readFile(files.workSlip.filePath, { bookSheets: true }).SheetNames ?? [];
+      ledgerSheets = resolveWorkSlipLedgerSheets(names, todayYmdTokyo());
+      warnings.push(...ledgerSheets.warnings);
+    } catch (error) {
+      warnings.push(`作業伝票のタブ確認に失敗: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return buildPreview({ files, kind: input.kind, warnings, ledgerSheets });
 }
 
 export async function getSharedSyncSourceVersion(input: {
@@ -1208,8 +1242,8 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   const workSlipBook = readWorkbook(files.workSlip.filePath);
 
   const scheduleRows = extractWorkTableRows(workTableBook);
-  const ledgerRows = extractWorkSlipLedgerRows(workSlipBook);
-  const warnings: string[] = [];
+  const { rows: ledgerRows, sheets: ledgerSheets } = extractWorkSlipLedgerRows(workSlipBook);
+  const warnings: string[] = [...ledgerSheets.warnings];
   if (files.workTable.extension === '.xls') {
     warnings.push('作業表☆が .xls のため、セル全体の赤文字は読み取れません(一部の文字だけ赤い場合のみ反映)。.xlsx で保存してください。');
   }
@@ -1454,7 +1488,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
     userId: string;
     dayYmd: string;
     summary: string;
-    siteId: string;
+    siteId: string | null;
     labelColor: 'default' | 'red';
     groupIndex: number;
     itemIndex: number;
@@ -1462,11 +1496,8 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   }> = [];
 
   for (const row of scheduleRows) {
-    if (row.companyName) {
-      await ensurePartnerByName(row.companyName);
-    }
-
-    const siteIdByEntryKey = new Map<string, string>();
+    // 現場台帳・関係会社は作業伝票の2タブからのみ作る。作業表☆で台帳に無い現場は siteId なしの予定とする。
+    const siteIdByEntryKey = new Map<string, string | null>();
     for (const entry of row.entries) {
       const entryKey = `${normalizeKey(entry.siteName)}|${entry.color}`;
       if (siteIdByEntryKey.has(entryKey)) continue;
@@ -1479,19 +1510,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
         siteHit.site.companyName &&
         normalizeKey(row.companyName) !== normalizeKey(siteHit.site.companyName);
 
-      let siteId = siteHit.site && !conflictByNameOnly ? siteHit.site.id : null;
-      if (!siteId) {
-        const created = await prisma.site.create({
-          data: {
-            kind,
-            companyName: row.companyName,
-            name: entry.siteName,
-          },
-          select: { id: true },
-        });
-        siteId = created.id;
-      }
-      siteIdByEntryKey.set(entryKey, siteId);
+      siteIdByEntryKey.set(entryKey, siteHit.site && !conflictByNameOnly ? siteHit.site.id : null);
     }
 
     for (const assignee of row.assignees) {
@@ -1503,8 +1522,9 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
 
       for (const entry of row.entries) {
         const summary = entry.siteName;
-        const siteId = siteIdByEntryKey.get(`${normalizeKey(entry.siteName)}|${entry.color}`);
-        if (!siteId) continue;
+        const entryKey = `${normalizeKey(entry.siteName)}|${entry.color}`;
+        if (!siteIdByEntryKey.has(entryKey)) continue;
+        const siteId = siteIdByEntryKey.get(entryKey) ?? null;
 
         const groupIndex = entry.color === 'red' ? 1 : 0;
         const itemIndexInGroup = row.entries
@@ -1533,7 +1553,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   const finalRows = Array.from(uniqueRows.values());
   const finalRowsByCellSiteKey = new Map<string, (typeof finalRows)[number]>();
   for (const row of finalRows) {
-    finalRowsByCellSiteKey.set(`${row.userId}|${row.dayYmd}|${row.siteId}`, row);
+    if (row.siteId) finalRowsByCellSiteKey.set(`${row.userId}|${row.dayYmd}|${row.siteId}`, row);
   }
   if (finalRows.length > 0) {
     const dayList = scheduleRows.map((row) => row.dayYmd).sort();
@@ -1623,7 +1643,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
           startAt: Date;
           summary: string;
           note: string | null;
-          siteId: string;
+          siteId: string | null;
           accountingMeta: Prisma.InputJsonValue;
         }> = [];
 
@@ -1631,7 +1651,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
 
         for (const row of finalRows) {
           const cellKey = `${row.userId}|${row.dayYmd}`;
-          const siteDedupeKey = `${cellKey}|${row.siteId}`;
+          const siteDedupeKey = row.siteId ? `${cellKey}|${row.siteId}` : `${cellKey}|name:${normalizeKey(row.summary)}`;
           if (existingSiteKeySet.has(siteDedupeKey)) {
             counts.scheduleSkipped += 1;
             continue;
@@ -1749,7 +1769,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   }
 
   return {
-    ...buildPreview({ files, kind, warnings }),
+    ...buildPreview({ files, kind, warnings, ledgerSheets }),
     mode: 'sync',
     counts,
   };

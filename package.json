@@ -62,6 +62,7 @@
     "lint": "eslint",
     "pretypecheck": "npm run db:generate",
     "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test \"src/**/*.test.ts\"",
     "typecheck:diag": "tsc --noEmit --pretty false --diagnostics",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
