@@ -110,6 +110,11 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 - `masterhub_outbox` ボリュームに印刷/FAX 出力ファイルを載せる
 - まずは 1 台構成で十分で、Redis を外出しするのは負荷や可用性要件が出てからでよい
 - 共有フォルダ(作業表☆/作業伝票)自動同期を使う場合、本番ホスト上で共有フォルダが置かれているローカルパスを `SHARED_SOURCE_HOST_PATH` に設定する（未設定時はダミーの空フォルダがマウントされ同期は「ファイル無し」扱いになるだけで起動は失敗しない）。共有フォルダがこの本番PC自体でホストされている前提のため、別PC/NAS宛のネットワーク越しマウント設定は不要。
+- 共有フォルダ同期(worker): 起動直後に1回、その後 `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごとに、ファイル更新時刻に関わらず 作業表☆(+作業伝票) を同期する。再実行は冪等で、失敗しても次回に再試行する。画面の「共有フォルダ同期」(`/api/sites/shared-sync`)との同時実行は排他され、実行中なら 409 を返す。
+- `SHARED_SYNC_POLL_ENABLED`: `1` で強制有効 / `0` で無効。未設定時は `NODE_ENV=production`（本番の worker コンテナ）のみ有効で、開発PCの `npm run worker` は実DBへ同期しない。
+- 同期を実行する worker は本番ホスト上の1台のみにする（本番とローカルPCの両方で動かすと、別々の Redis の下で二重に同期が走る）。
+- いつ同期されたかは worker のログで確認する: `docker compose -f docker-compose.prod.yml --env-file .env.production logs --tail=200 worker | findstr shared-sync`（`poller started` / `enqueued` / `success`(counts と所要時間) / `failed` / `skip`(共有フォルダにファイルが無い) の各行）。
+- `.env.production` は GitHub Actions のデプロイで再生成されるが、`DESKTOP_APP_*` と同様に `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` / `SHARED_SYNC_*` の行はホスト側の既存値が引き継がれる。
 
 #### 4. 動作確認
 

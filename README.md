@@ -449,6 +449,8 @@ Worker（リマインド等のジョブ実行）:
 npm run worker
 ```
 
+共有フォルダ同期(作業表☆/作業伝票 → 週予定DB)の定期実行は、worker が起動直後に1回、その後 `SHARED_SYNC_POLL_INTERVAL_MS`（既定 30分）ごとに行います（ファイル更新時刻に関わらず実行・冪等）。開発PCの `npm run worker` では既定で無効（実DBへ書き込まないため）で、`SHARED_SYNC_POLL_ENABLED=1` で有効化、本番(`NODE_ENV=production`)の worker は既定で有効です。実行するのは本番ホスト上の worker 1台のみにしてください。手動同期（`/api/sites/shared-sync`）とは排他され、実行中は 409 を返します。ログは `[worker][shared-sync] success: kind=… durationMs=… counts=…` の行で確認できます（詳細は DEPLOYMENT.md）。
+
 ## 本番相当（production）確認
 
 VS Code タスクの `run: prod (build + start)` を使うか、手動で以下。
