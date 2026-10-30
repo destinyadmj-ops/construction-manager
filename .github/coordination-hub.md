@@ -145,6 +145,8 @@
 - (J) 2026-10-23 ▼判定は共通純関数 `hasMultipleScheduleSites`(src/shared/schedule-cell-entry.ts: kind=site を正規化名で重複排除して2件以上)に一本化しスマホ版が使用。e2e/mobile-week-arrow.spec.ts(API全モック)で 1現場/長名/追記/同名重複=▼なし・2現場=▼あり・タップでメニューを確認。PC版(app/week-hub.tsx)のルールは不変。手動 commit したら必ず push まで行う。
 - (K) 2026-10-23 上部横スクロールバーを共通化(app/top-horizontal-scrollbar.tsx: `useTopHorizontalScrollbar` + `TopHorizontalScrollbar`、ResizeObserver で名前列幅/日幅/列リサイズに追従、長さ min(48vw,36rem)、はみ出す時だけ表示)。配置: 月=今月の右、週=今週の右(右グループ末尾)、年=月見出し行の上に新設した細い右寄せ行(不要時は非表示)。testid: month/week/year-grid-top-scrollbar(+`-visual`)。モバイル /mobile/week-hub は対象外。
 - (L) 2026-10-29 同期間隔を5分→30分(ユーザー指示 2026-10-29。2026-10-13 の『5分維持』を更新)、30分ごとの強制同期(mtime不問)、起動直後1回、同期実行は本番ホストの1台のみ。`SHARED_SYNC_POLL_ENABLED` で制御(未設定時は NODE_ENV=production のみ有効=開発PCが実DBへ自動書込しない)。手動 `/api/sites/shared-sync` とは排他(実行中は 409 BUSY、Redisロック `masterhub:shared-sync:lock`)。deploy.yml は `.env.production` 再生成時に `SHARED_SOURCE_HOST_PATH`/`MASTER_HUB_SHARED_SOURCE_DIR`/`SHARED_SYNC_*` を保持。
+- (M) 2026-10-30 台帳/関係会社の取込元を『第32期作業伝票』の2タブ(当該月 作業伝票YYYY年M月[東京日付で解決・NFKC+空白正規化で照合]と 作業伝票オリジナル)のみに限定(src/shared/work-slip-tabs.ts + extractWorkSlipLedgerRows)。重複は当該月が優先、オリジナルは金額が空のときだけ補う。タブ欠落は警告のみで他シートへフォールバックしない。作業表☆(週予定)は現場/関係会社を自動作成しない(一致しない行は siteId=null、ユーザー回答『重複を避け新たに指示した2つのタブからのみ引用』を案1と解釈=要ユーザー確認)。クリーンアップは scripts/ledger-requote.ts(既定dry-run/--apply+承認済みID+--confirm-host+JSONバックアップ/リポジトリ外出力)。B(作業伝票ブック)は共有フォルダ=一方向の取込元・アプリ内ブック=正本、保存ごと自動反映、保存先は既存 .storage + UiSetting のメタ。依存追加は比較提示後の承認制。
+pm run test:unit を追加(node:test、合成ブックのみ・実データ非使用)。
 
 ## 失敗・不具合・原因ログ（最重要・二重調査防止）
 - (自宅PC/一般セッション) 症状: 2026-09-18朝の最終push（96e3908）以降、本番デプロイが失敗し続け、本番は1つ前のb6fdf99止まりだった（スマホ/PCとも今朝の最新修正が未反映）。
@@ -196,7 +198,7 @@
 
 - (G) 2026-10-21 セル設定がタブ別に記憶されなかった原因: (1) タブ(週/月/年)は week-hub の `useState` でURLに出ないため、header が `?mode=` から導出するキーが常に「週」だった。(2) `loadGridPrefs` が読込済みスコープでは早期 return し、タブ切替後も前タブの state が残り、保存 effect がそれを新タブのキーへ書いていた。対策: weekView を Provider 経由で header へ、読込済みスコープでもローカル保存値を再適用、スコープ不一致時は保存をスキップ。既知の制限: タブ切替の350ms以内の編集はデバウンス破棄で失われ得る。
 - (H) 2026-10-22 赤「+」が残って見えた原因: ワークツリーの G コミット(dabca03)が origin/main へ未 push(ahead 7)で、この PC にはサーバが起動しておらず(3000/3001 とも非 Listen)、.next の BUILD_ID も 10/21 15:33(コミット前)。スクショは push 前のコードを動かす環境(本番 deploy は push to main で起動)の可能性が高い。sw.js はナビゲーション network-first/ハッシュ付き静的資産のため古さの原因にはなりにくい。スマホで赤が黒になっていた原因: `resolveScheduleGroupTargets` 等が `matchedSite?.color ?? entry.color` を使い、`resolveSiteLabelColor` が常に文字列('default' 含む)を返すため `??` が効かず、現場マスタ一致時は常にマスタ色がセル色(作業表☆同期の赤)を上書きしていた。さらにグループ結合文字列を '/' で再分割していたため、色は 1 件目のみ・現場名に '/' を含むと誤分割。対策は上記(H)決定を参照。
-
+- (M) 2026-10-30 台帳/関係会社に不要データが混在した原因: extractWorkSlipLedgerRows が全シートを走査し、会社/現場/金額見出しを持つシートをすべて取り込んでいた(『（旧）台帳』『解約』『台帳（工藤用）』『オリジナル番号』等まで混入)。加えて作業表☆の予定行が現場・関係会社を自動作成していた。dry-run(実DB・読み取りのみ)結果: 現場 2106件中 2タブに存在 408/削除候補 1638(NORMALのみ、うち参照ゼロ 605)/要確認 60(名称ゆらぎで統合候補 45)、関係会社 99件中 2タブに存在 50/削除候補 47/要確認 2。2タブ内訳: 当該月164行・オリジナル327行・重複151行(うち金額相違12)・統合340行。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。

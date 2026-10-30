@@ -123,8 +123,16 @@ async function main() {
     if (!r) refs.set(id, (r = { syncEntries: 0, manualEntries: 0, syncDocs: 0, otherDocs: 0 }));
     return r;
   };
-  for (const e of entries) if (e.siteId) hasSyncMeta(e.accountingMeta) ? (ref(e.siteId).syncEntries += 1) : (ref(e.siteId).manualEntries += 1);
-  for (const d of docs) if (d.siteId) isSyncDoc(d.tags) ? (ref(d.siteId).syncDocs += 1) : (ref(d.siteId).otherDocs += 1);
+  for (const e of entries) {
+    if (!e.siteId) continue;
+    if (hasSyncMeta(e.accountingMeta)) ref(e.siteId).syncEntries += 1;
+    else ref(e.siteId).manualEntries += 1;
+  }
+  for (const d of docs) {
+    if (!d.siteId) continue;
+    if (isSyncDoc(d.tags)) ref(d.siteId).syncDocs += 1;
+    else ref(d.siteId).otherDocs += 1;
+  }
 
   type SiteRow = (typeof sites)[number];
   const siteDeleteCandidates: Array<SiteRow & { refs: ReturnType<typeof ref> }> = [];
