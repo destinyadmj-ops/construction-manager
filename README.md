@@ -451,6 +451,8 @@ npm run worker
 
 共有フォルダ同期(作業表☆/作業伝票 → 週予定DB)の定期実行は、worker が起動直後に1回、その後 `SHARED_SYNC_POLL_INTERVAL_MS`（既定 30分）ごとに行います（ファイル更新時刻に関わらず実行・冪等）。開発PCの `npm run worker` では既定で無効（実DBへ書き込まないため）で、`SHARED_SYNC_POLL_ENABLED=1` で有効化、本番(`NODE_ENV=production`)の worker は既定で有効です。実行するのは本番ホスト上の worker 1台のみにしてください。手動同期（`/api/sites/shared-sync`）とは排他され、実行中は 409 を返します。ログは `[worker][shared-sync] success: kind=… durationMs=… counts=…` の行で確認できます（詳細は DEPLOYMENT.md）。
 
+現場台帳・関係会社の取込元は『第32期作業伝票』の2タブ（当該月 `作業伝票YYYY年M月` と `作業伝票オリジナル`）のみです。同じ会社/現場は当該月タブが優先され、オリジナルは金額が空のときだけ補います。タブが無い場合は警告のみで他シートへは広げません。作業表☆（週予定）は現場・関係会社を自動作成しません。既存データの整理は `npx tsx scripts/ledger-requote.ts --file <作業伝票>`（既定 dry-run。`--apply --ids-file --confirm-host` で承認済みIDのみ削除、バックアップはリポジトリ外へ出力）。単体テストは `npm run test:unit`。
+
 ## 本番相当（production）確認
 
 VS Code タスクの `run: prod (build + start)` を使うか、手動で以下。
