@@ -29,6 +29,7 @@ export default function WorkSlipBookPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [sharedMissing, setSharedMissing] = useState(false);
   const [versions, setVersions] = useState<number[]>([]);
   const [restoreVersion, setRestoreVersion] = useState('');
   const handleRef = useRef<WorkSlipBookEditorHandle | null>(null);
@@ -116,10 +117,12 @@ export default function WorkSlipBookPage() {
     async (url: string, init: RequestInit, done: string) => {
       setBusy(true);
       setMsg(null);
+      setSharedMissing(false);
       try {
         const r = await fetch(url, init);
         const j = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
         if (!r.ok || !j?.ok) {
+          setSharedMissing(r.status === 404 && url.endsWith('/import') && !init.body);
           setMsg(`失敗しました: ${j?.error ?? r.status}`);
           return;
         }
@@ -208,6 +211,14 @@ export default function WorkSlipBookPage() {
         </div>
       </div>
       {msg ? <div className="text-xs text-zinc-600 dark:text-zinc-300" role="status">{msg}</div> : null}
+      {sharedMissing ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100" data-testid="work-slip-book-shared-missing">
+          <span>このPCから共有フォルダ（\\192.168.0.210\guest\共有フォルダ）の「第32期作業伝票」を直接選んで作成できます。</span>
+          <button type="button" className={btn} disabled={busy} onClick={() => fileRef.current?.click()}>
+            このPCのExcelを選んで作成
+          </button>
+        </div>
+      ) : null}
       <div className="text-[11px] text-zinc-500">
         共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（色・罫線・フォント）は取り込み時に引き継がれません。
       </div>

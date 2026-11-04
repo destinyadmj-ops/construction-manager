@@ -48,3 +48,12 @@ test('作業伝票ブック: 編集権限が無い人は入室できない', asy
   await expect(page.getByTestId('work-slip-book-denied')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('work-slip-book-editor')).toHaveCount(0);
 });
+
+test('作業伝票ブック: 共有フォルダが見えない時はこのPCのExcelを選ぶ導線が出る', async ({ page }) => {
+  await mock(page, true);
+  await page.route('**/api/work-slip-book', (route) => route.fulfill({ json: { ok: true, meta: null, snapshot: null } }));
+  await page.route('**/api/work-slip-book/import', (route) => route.fulfill({ status: 404, json: { ok: false, error: '共有フォルダが見えません' } }));
+  await page.goto('/site-ledger/work-slip-book');
+  await page.getByRole('button', { name: '共有フォルダの作業伝票から作成' }).click({ timeout: 30_000 });
+  await expect(page.getByTestId('work-slip-book-shared-missing')).toBeVisible();
+});
