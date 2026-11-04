@@ -167,7 +167,8 @@ export default function WorkSlipBookPage() {
             onChange={(e) => {
               const f = e.currentTarget.files?.[0];
               e.currentTarget.value = '';
-              if (!f || !confirmDiscard() || !window.confirm('現在のブックをこのExcelで置き換えます（履歴に残ります）。よろしいですか？')) return;
+              if (!f || !confirmDiscard()) return;
+              if (meta && !window.confirm('現在のブックをこのExcelで置き換えます（履歴に残ります）。よろしいですか？')) return;
               const fd = new FormData();
               fd.append('file', f);
               void post('/api/work-slip-book/import', { method: 'POST', body: fd }, 'Excelで置き換えました。');
@@ -228,6 +229,9 @@ export default function WorkSlipBookPage() {
             まだブックがありません。
             <button type="button" className={`${btn} ml-2`} disabled={busy} onClick={() => void post('/api/work-slip-book/import', { method: 'POST' }, '共有フォルダの作業伝票を取り込みました。')}>
               共有フォルダの作業伝票から作成
+            </button>
+            <button type="button" className={`${btn} ml-2`} disabled={busy} onClick={() => fileRef.current?.click()}>
+              Excelファイルを選んで作成
             </button>
           </div>
         )}

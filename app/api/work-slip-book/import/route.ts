@@ -28,8 +28,13 @@ export async function POST(request: Request) {
       source = 'upload';
       sourceFileName = file.name;
     } else {
-      const shared = await getSharedWorkSlipFile();
-      if (!shared) return Response.json({ ok: false, error: '共有フォルダに作業伝票が見つかりません' }, { status: 404 });
+      const shared = await getSharedWorkSlipFile().catch(() => null);
+      if (!shared) {
+        return Response.json(
+          { ok: false, error: 'このサーバーから共有フォルダの作業伝票が見つかりません（本番ホストに共有フォルダがマウントされていない可能性）。「Excelで置き換え」でファイルを選んでください。' },
+          { status: 404 },
+        );
+      }
       snapshot = snapshotFromExcelFile(shared.filePath);
       source = 'import';
       sourceFileName = shared.fileName;
