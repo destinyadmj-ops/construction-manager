@@ -13,6 +13,8 @@ import {
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { tryAcquireSharedSyncLock } from '@/server/shared-sync-lock';
 import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
+import { snapshotToSheetJs } from '@/shared/work-slip-book-convert';
+import { getCurrentMeta, readVersion as readBookVersion } from '@/server/work-slip-book';
 import { writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -1190,6 +1192,12 @@ export async function getSharedSyncPreview(input: { kind: SiteKind; targetTerm?:
   return buildPreview({ files, kind: input.kind, warnings, ledgerSheets });
 }
 
+// 作業伝票ブックの初期取込用(共有フォルダの対象期ファイル)
+export async function getSharedWorkSlipFile(): Promise<{ filePath: string; fileName: string; mtimeMs: number } | null> {
+  const files = await discoverSharedFiles(null);
+  return files.workSlip ? { filePath: files.workSlip.filePath, fileName: files.workSlip.fileName, mtimeMs: files.workSlip.mtimeMs } : null;
+}
+
 export async function getSharedSyncSourceVersion(input: {
   kind: SiteKind;
   targetTerm?: number | null;
@@ -1239,7 +1247,10 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   const workTableFileName = files.workTable.fileName;
 
   const workTableBook = readWorkbook(files.workTable.filePath, { fontColors: true });
-  const workSlipBook = readWorkbook(files.workSlip.filePath);
+  // アプリ内の作業伝票ブックが正本。無い間だけ共有フォルダの作業伝票から読む。
+  const bookMeta = await getCurrentMeta();
+  const bookSnapshot = bookMeta ? await readBookVersion(bookMeta.version) : null;
+  const workSlipBook = bookSnapshot ? snapshotToSheetJs(bookSnapshot) : readWorkbook(files.workSlip.filePath);
 
   const scheduleRows = extractWorkTableRows(workTableBook);
   const { rows: ledgerRows, sheets: ledgerSheets } = extractWorkSlipLedgerRows(workSlipBook);

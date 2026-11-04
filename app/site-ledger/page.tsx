@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useHeaderActions } from '../header-actions';
 import { useSchedulePermissions } from '../user-gate';
 
@@ -934,7 +935,7 @@ export default function SiteLedgerPage() {
             <div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">作業伝票</div>
               <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                共有フォルダの 作業表☆ / 作業伝票 を読み取り専用で取り込み、週予定DB・現場台帳・作業伝票へ一方向同期します。
+                現場台帳・関係会社は「作業伝票」ブック（当該月タブ＋作業伝票オリジナル）から反映されます。共有フォルダの 作業表☆ は読み取り専用で週予定へ一方向同期します。
               </div>
               <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">
                 作業表: {sharedSyncPreview?.selected.workTable?.fileName ?? '未検出'} / 作業伝票: {sharedSyncPreview?.selected.workSlip?.fileName ?? '未検出'}
@@ -949,15 +950,26 @@ export default function SiteLedgerPage() {
               ) : null}
               {sharedSyncMsg ? <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{sharedSyncMsg}</div> : null}
             </div>
-            <button
-              type="button"
-              disabled={!canEditSite || isSharedSyncing}
-              onClick={() => void runSharedSync()}
-              className="rounded-2xl border border-sky-500 bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(14,165,233,0.24)] transition hover:bg-sky-600 dark:border-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
-              title="共有フォルダ同期（Excel は読み取り専用。MASTERHUB にのみ反映）"
-            >
-              {isSharedSyncing ? '同期中…' : '作業伝票ボタン同期'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {canEditSite ? (
+                <Link
+                  href="/site-ledger/work-slip-book"
+                  className="rounded-2xl border border-sky-500 bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(14,165,233,0.24)] transition hover:bg-sky-600 dark:border-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300"
+                  title="作業伝票ブック（編集権限者のみ。第32期の作業伝票と同じ内容をアプリ内で編集・保存）"
+                >
+                  作業伝票
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                disabled={!canEditSite || isSharedSyncing}
+                onClick={() => void runSharedSync()}
+                className="rounded-md border border-zinc-300 bg-white/70 px-3 py-2 text-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-black/60 dark:hover:bg-black"
+                title="共有フォルダ同期（Excel は読み取り専用。MASTERHUB にのみ反映）"
+              >
+                {isSharedSyncing ? '同期中…' : '共有フォルダ同期'}
+              </button>
+            </div>
           </div>
         </div>
 
