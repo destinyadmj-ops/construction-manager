@@ -1,3 +1,4 @@
+import { gunzipLimited } from '@/server/gzip-body';
 import { getSharedWorkSlipFile } from '@/server/shared-excel-sync';
 import { saveVersion, snapshotFromExcelBuffer, snapshotFromExcelFile } from '@/server/work-slip-book';
 import { guardWorkSlipBook } from '@/server/work-slip-book-auth';
@@ -20,11 +21,13 @@ export async function POST(request: Request) {
 
     const type = request.headers.get('content-type') ?? '';
     if (type.includes('multipart/form-data')) {
-      const file = (await request.formData()).get('file');
+      const form = await request.formData();
+      const file = form.get('file');
       if (!(file instanceof File) || file.size === 0) return Response.json({ ok: false, error: 'file is required' }, { status: 400 });
       if (file.size > MAX_UPLOAD_BYTES) return Response.json({ ok: false, error: 'File too large' }, { status: 413 });
       if (!/\.(xlsx|xls)$/i.test(file.name)) return Response.json({ ok: false, error: 'Only .xlsx/.xls' }, { status: 400 });
-      snapshot = snapshotFromExcelBuffer(Buffer.from(await file.arrayBuffer()));
+      const bytes = Buffer.from(await file.arrayBuffer());
+      snapshot = snapshotFromExcelBuffer(form.get('encoding') === 'gzip' ? gunzipLimited(bytes) : bytes);
       source = 'upload';
       sourceFileName = file.name;
     } else {

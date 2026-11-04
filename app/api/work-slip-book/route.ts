@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { gunzipLimited } from '@/server/gzip-body';
 import { getCurrentMeta, readVersion, saveVersion, WorkSlipBookConflictError } from '@/server/work-slip-book';
 import { guardWorkSlipBook } from '@/server/work-slip-book-auth';
 import { reflectBookToLedgerInBackground } from '@/server/work-slip-book-reflect';
@@ -22,7 +23,12 @@ export async function PUT(request: Request) {
   const guard = await guardWorkSlipBook(request);
   if (guard.response) return guard.response;
 
-  const parsed = PutSchema.safeParse(await request.json().catch(() => null));
+  const body = await (async () => {
+    const bytes = Buffer.from(await request.arrayBuffer());
+    const text = request.headers.get('x-body-encoding') === 'gzip' ? gunzipLimited(bytes) : bytes;
+    return JSON.parse(text.toString('utf8')) as unknown;
+  })().catch(() => null);
+  const parsed = PutSchema.safeParse(body);
   if (!parsed.success) return Response.json({ ok: false, error: 'Invalid body' }, { status: 400 });
 
   try {

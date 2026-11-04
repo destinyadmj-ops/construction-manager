@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSchedulePermissions } from '../../user-gate';
+import { gzipIfSupported } from '@/shared/gzip-client';
 import type { WorkSlipBookSnapshot } from '@/shared/work-slip-book-convert';
 import type { WorkSlipBookEditorHandle } from './work-slip-book-editor';
 
@@ -78,10 +79,12 @@ export default function WorkSlipBookPage() {
     setBusy(true);
     setMsg(null);
     try {
+      const json = new Blob([JSON.stringify({ baseVersion: meta.version, snapshot: data })], { type: 'application/json' });
+      const { blob, gzipped } = await gzipIfSupported(json);
       const r = await fetch('/api/work-slip-book', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseVersion: meta.version, snapshot: data }),
+        headers: { 'Content-Type': 'application/json', ...(gzipped ? { 'X-Body-Encoding': 'gzip' } : {}) },
+        body: blob,
       });
       const j = (await r.json().catch(() => null)) as { ok?: boolean; meta?: Meta; error?: string } | null;
       if (r.status === 409) {
@@ -90,7 +93,7 @@ export default function WorkSlipBookPage() {
         return;
       }
       if (!r.ok || !j?.ok || !j.meta) {
-        setMsg(`保存に失敗しました: ${j?.error ?? r.status}`);
+        setMsg(`保存に失敗しました: ${j?.error ?? (r.status === 413 ? '413 送信サイズが大きすぎます（サーバー前段の上限）' : r.status)}`);
         return;
       }
       setMeta(j.meta);
@@ -123,7 +126,7 @@ export default function WorkSlipBookPage() {
         const j = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
         if (!r.ok || !j?.ok) {
           setSharedMissing(r.status === 404 && url.endsWith('/import') && !init.body);
-          setMsg(`失敗しました: ${j?.error ?? r.status}`);
+          setMsg(`失敗しました: ${j?.error ?? (r.status === 413 ? '413 送信サイズが大きすぎます（サーバー前段の上限）' : r.status)}`);
           return;
         }
         await load();
@@ -167,13 +170,15 @@ export default function WorkSlipBookPage() {
             type="file"
             accept=".xlsx,.xls"
             className="hidden"
-            onChange={(e) => {
+            onChange={async (e) => {
               const f = e.currentTarget.files?.[0];
               e.currentTarget.value = '';
               if (!f || !confirmDiscard()) return;
               if (meta && !window.confirm('現在のブックをこのExcelで置き換えます（履歴に残ります）。よろしいですか？')) return;
+              const { blob, gzipped } = await gzipIfSupported(f);
               const fd = new FormData();
-              fd.append('file', f);
+              fd.append('file', blob, f.name);
+              if (gzipped) fd.append('encoding', 'gzip');
               void post('/api/work-slip-book/import', { method: 'POST', body: fd }, 'Excelで置き換えました。');
             }}
           />
