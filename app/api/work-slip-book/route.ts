@@ -3,6 +3,7 @@ import { gunzipLimited } from '@/server/gzip-body';
 import { getCurrentMeta, readVersion, saveVersion, WorkSlipBookConflictError } from '@/server/work-slip-book';
 import { guardWorkSlipBook } from '@/server/work-slip-book-auth';
 import { reflectBookToLedgerInBackground } from '@/server/work-slip-book-reflect';
+import { normalizeSnapshotFormats } from '@/shared/work-slip-book-convert';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,8 @@ export async function GET(request: Request) {
 
   const meta = await getCurrentMeta();
   if (!meta) return Response.json({ ok: true, meta: null, snapshot: null }, { headers: { 'Cache-Control': 'no-store' } });
-  const snapshot = await readVersion(meta.version);
+  const stored = await readVersion(meta.version);
+  const snapshot = stored ? normalizeSnapshotFormats(stored) : null;
   return Response.json({ ok: true, meta, snapshot }, { headers: { 'Cache-Control': 'no-store' } });
 }
 

@@ -26,11 +26,28 @@ const CELL_STRING = 1;
 const CELL_NUMBER = 2;
 const CELL_BOOLEAN = 3;
 export const WORK_SLIP_BOOK_ID = 'work-slip-book';
+const MAX_IMPORT_ROW_PX = 30;
+
+// SheetJS は .xls の組み込み書式ID56を中国語環境の時刻書式で解釈する。日本語Excelでは m"月"d"日" なので置き換える。
+const LEGACY_PATTERNS: Record<string, string> = {
+  '"上午/下午 "hh"時"mm"分"ss"秒 "': 'm"月"d"日"',
+};
+const fixPattern = (pattern: string) => LEGACY_PATTERNS[pattern] ?? pattern;
+
+// 保存済みブックの書式も同じ補正をかける(読み込み時用)。
+export function normalizeSnapshotFormats(snapshot: WorkSlipBookSnapshot): WorkSlipBookSnapshot {
+  for (const style of Object.values(snapshot.styles ?? {})) {
+    const n = (style as { n?: { pattern?: unknown } } | undefined)?.n;
+    if (n && typeof n.pattern === 'string') n.pattern = fixPattern(n.pattern);
+  }
+  return snapshot;
+}
 
 export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBookSnapshot {
   const styles: Record<string, unknown> = {};
   const styleByPattern = new Map<string, string>();
-  const styleFor = (pattern: string) => {
+  const styleFor = (rawPattern: string) => {
+    const pattern = fixPattern(rawPattern);
     let key = styleByPattern.get(pattern);
     if (!key) {
       key = `nf${styleByPattern.size + 1}`;
@@ -83,7 +100,8 @@ export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBook
     (ws?.['!rows'] ?? []).forEach((row, r) => {
       if (!row) return;
       const h = row.hpx ?? (row.hpt ? Math.round((row.hpt * 96) / 72) : undefined);
-      if (h || row.hidden) rowData[r] = { ...(h ? { h } : {}), ...(row.hidden ? { hd: 1 } : {}) };
+      const clamped = h ? Math.min(h, MAX_IMPORT_ROW_PX) : undefined;
+      if (clamped || row.hidden) rowData[r] = { ...(clamped ? { h: clamped } : {}), ...(row.hidden ? { hd: 1 } : {}) };
     });
 
     sheets[id] = {
@@ -113,7 +131,7 @@ export function snapshotToSheetJs(snapshot: WorkSlipBookSnapshot): XLSX.WorkBook
   const patternOf = (s: unknown): string | null => {
     const style = typeof s === 'string' ? snapshot.styles?.[s] : s;
     const pattern = (style as { n?: { pattern?: unknown } } | undefined)?.n?.pattern;
-    return typeof pattern === 'string' && pattern ? pattern : null;
+    return typeof pattern === 'string' && pattern ? fixPattern(pattern) : null;
   };
 
   for (const id of snapshot.sheetOrder ?? Object.keys(snapshot.sheets)) {

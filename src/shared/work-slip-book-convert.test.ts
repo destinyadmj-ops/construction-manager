@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as XLSX from 'xlsx';
-import { sheetJsToSnapshot, snapshotToSheetJs } from './work-slip-book-convert';
+import { normalizeSnapshotFormats, sheetJsToSnapshot, snapshotToSheetJs } from './work-slip-book-convert';
 
 function sample(): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
@@ -43,4 +43,22 @@ test('xlsx にバイナリ書き出しできる', () => {
   const re = XLSX.read(buf, { type: 'buffer' });
   assert.equal(re.SheetNames.length, 2);
   assert.equal(re.Sheets['作業伝票オリジナル'].A1.v, 'x');
+});
+
+test('xlsの組み込み書式56(中国語時刻書式に誤変換)を m月d日 に補正し、行高は上限に収める', () => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([['作業日']]);
+  ws.A2 = { t: 'n', v: 46303, z: '"上午/下午 "hh"時"mm"分"ss"秒 "' };
+  ws['!ref'] = 'A1:A2';
+  ws['!rows'] = [{ hpt: 40.4 }, { hpt: 15 }];
+  XLSX.utils.book_append_sheet(wb, ws, '作業伝票2026年10月');
+  const snap = sheetJsToSnapshot(wb, '作業伝票');
+  const patterns = Object.values(snap.styles).map((s) => (s as { n: { pattern: string } }).n.pattern);
+  assert.deepEqual(patterns, ['m"月"d"日"']);
+  const sheet = snap.sheets['sheet-1'] as { rowData: Record<string, { h?: number }> };
+  assert.equal(sheet.rowData[0].h, 30);
+  assert.equal(sheet.rowData[1].h, 20);
+
+  const stored = { ...snap, styles: { x: { n: { pattern: '"上午/下午 "hh"時"mm"分"ss"秒 "' } } } };
+  assert.equal((normalizeSnapshotFormats(stored).styles.x as { n: { pattern: string } }).n.pattern, 'm"月"d"日"');
 });

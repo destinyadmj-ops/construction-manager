@@ -152,7 +152,7 @@ export default function WorkSlipBookPage() {
   }
 
   return (
-    <main className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-screen-2xl flex-col gap-2 px-4 py-3 lg:px-6">
+    <main className="flex h-[calc(100dvh-4rem)] w-full flex-col gap-1 px-1 py-1">
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/site-ledger" className="text-xs text-sky-600 underline">← 現場台帳</Link>
         <h1 className="text-sm font-semibold">作業伝票ブック（第32期・全体）</h1>
@@ -228,7 +228,7 @@ export default function WorkSlipBookPage() {
         共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（色・罫線・フォント）は取り込み時に引き継がれません。
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-sm border border-zinc-200 dark:border-zinc-800">
         {loading ? (
           <div className="p-6 text-sm text-zinc-500">読み込み中…</div>
         ) : snapshot ? (
