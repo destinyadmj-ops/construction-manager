@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as XLSX from 'xlsx';
+import { readXlsStyles } from './xls-styles';
 import { normalizeSnapshotFormats, sheetJsToSnapshot, snapshotToSheetJs } from './work-slip-book-convert';
 
 function sample(): XLSX.WorkBook {
@@ -45,7 +46,7 @@ test('xlsx にバイナリ書き出しできる', () => {
   assert.equal(re.Sheets['作業伝票オリジナル'].A1.v, 'x');
 });
 
-test('xlsの組み込み書式56(中国語時刻書式に誤変換)を m月d日 に補正し、行高は上限に収める', () => {
+test('xlsの組み込み書式56(中国語時刻書式に誤変換)を m月d日 に補正し、行高は元の値を保つ', () => {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([['作業日']]);
   ws.A2 = { t: 'n', v: 46303, z: '"上午/下午 "hh"時"mm"分"ss"秒 "' };
@@ -56,9 +57,28 @@ test('xlsの組み込み書式56(中国語時刻書式に誤変換)を m月d日 
   const patterns = Object.values(snap.styles).map((s) => (s as { n: { pattern: string } }).n.pattern);
   assert.deepEqual(patterns, ['m"月"d"日"']);
   const sheet = snap.sheets['sheet-1'] as { rowData: Record<string, { h?: number }> };
-  assert.equal(sheet.rowData[0].h, 30);
+  assert.equal(sheet.rowData[0].h, 54);
   assert.equal(sheet.rowData[1].h, 20);
 
   const stored = { ...snap, styles: { x: { n: { pattern: '"上午/下午 "hh"時"mm"分"ss"秒 "' } } } };
   assert.equal((normalizeSnapshotFormats(stored).styles.x as { n: { pattern: string } }).n.pattern, 'm"月"d"日"');
+});
+
+function sheetBook(rows: unknown[][]): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'S');
+  return wb;
+}
+
+test('.xls の書式(罫線・塗り・太字・固定行)を Univer スタイルへ変換する', () => {
+  const buf = Buffer.from(XLSX.write(sheetBook([['a', 'b'], [1, 2]]), { type: 'buffer', bookType: 'biff8' }) as Uint8Array);
+  const xls = readXlsStyles(buf);
+  assert.ok(xls && xls.xfStyles.length > 0);
+  const sheetName = [...xls.sheets.keys()][0];
+  assert.ok(xls.sheets.get(sheetName)!.cellXf.size >= 4);
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const snap = sheetJsToSnapshot(wb, 'x', xls);
+  const cell = (snap.sheets['sheet-1'] as { cellData: Record<string, Record<string, { s?: string }>> }).cellData[0][0];
+  assert.ok(cell.s && (snap.styles[cell.s] as { fs?: number }).fs! > 0);
+  assert.equal(readXlsStyles(Buffer.from('not an xls')), null);
 });

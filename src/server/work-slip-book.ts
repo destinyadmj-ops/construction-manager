@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as XLSX from 'xlsx';
+import { readXlsStyles } from '@/shared/xls-styles';
 import { sheetJsToSnapshot, type WorkSlipBookSnapshot } from '@/shared/work-slip-book-convert';
 import { getStorageBaseDir } from '@/server/site-storage';
 
@@ -107,11 +109,10 @@ export function saveVersion(input: {
 }
 
 export function snapshotFromExcelFile(filePath: string, name = '作業伝票'): WorkSlipBookSnapshot {
-  const wb = XLSX.readFile(filePath, { cellFormula: true, cellNF: true, cellStyles: true });
-  return sheetJsToSnapshot(wb, name);
+  return snapshotFromExcelBuffer(readFileSync(filePath), name);
 }
 
 export function snapshotFromExcelBuffer(buffer: Buffer, name = '作業伝票'): WorkSlipBookSnapshot {
   const wb = XLSX.read(buffer, { type: 'buffer', cellFormula: true, cellNF: true, cellStyles: true });
-  return sheetJsToSnapshot(wb, name);
+  return sheetJsToSnapshot(wb, name, readXlsStyles(buffer));
 }

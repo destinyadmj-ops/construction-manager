@@ -225,7 +225,7 @@ export default function WorkSlipBookPage() {
         </div>
       ) : null}
       <div className="text-[11px] text-zinc-500">
-        共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（色・罫線・フォント）は取り込み時に引き継がれません。
+        共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（フォント・色・罫線・塗り・列幅・固定行）は .xls の取り込み時に引き継ぎます（Excel ダウンロードには書式は含まれません）。
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden rounded-sm border border-zinc-200 dark:border-zinc-800">

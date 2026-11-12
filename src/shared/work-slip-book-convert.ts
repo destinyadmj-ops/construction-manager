@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { CELL_KEY_COLS, type XlsStyles } from './xls-styles';
 
 // Univer の IWorkbookData 互換の素のJSON(型依存を避けるためゆるく定義)
 export type WorkSlipBookSnapshot = {
@@ -26,7 +27,6 @@ const CELL_STRING = 1;
 const CELL_NUMBER = 2;
 const CELL_BOOLEAN = 3;
 export const WORK_SLIP_BOOK_ID = 'work-slip-book';
-const MAX_IMPORT_ROW_PX = 30;
 
 // SheetJS は .xls の組み込み書式ID56を中国語環境の時刻書式で解釈する。日本語Excelでは m"月"d"日" なので置き換える。
 const LEGACY_PATTERNS: Record<string, string> = {
@@ -43,18 +43,26 @@ export function normalizeSnapshotFormats(snapshot: WorkSlipBookSnapshot): WorkSl
   return snapshot;
 }
 
-export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBookSnapshot {
+export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string, xls: XlsStyles | null = null): WorkSlipBookSnapshot {
   const styles: Record<string, unknown> = {};
-  const styleByPattern = new Map<string, string>();
-  const styleFor = (rawPattern: string) => {
-    const pattern = fixPattern(rawPattern);
-    let key = styleByPattern.get(pattern);
+  const styleByKey = new Map<string, string>();
+  // xf(.xlsの書式番号)と数値書式の組み合わせごとに1つのスタイルを共有する。
+  const styleFor = (xf: number | undefined, rawPattern: string | null): string | null => {
+    const base = xf != null ? xls?.xfStyles[xf] : undefined;
+    if (!base && !rawPattern) return null;
+    const style = { ...(base ?? {}), ...(rawPattern ? { n: { pattern: fixPattern(rawPattern) } } : {}) };
+    const json = JSON.stringify(style);
+    let key = styleByKey.get(json);
     if (!key) {
-      key = `nf${styleByPattern.size + 1}`;
-      styleByPattern.set(pattern, key);
-      styles[key] = { n: { pattern } };
+      key = `st${styleByKey.size + 1}`;
+      styleByKey.set(json, key);
+      styles[key] = style;
     }
     return key;
+  };
+  const isVisibleBlank = (xf: number) => {
+    const s = xls?.xfStyles[xf];
+    return !!s && (s.bd != null || s.bg != null);
   };
 
   const sheetOrder: string[] = [];
@@ -66,6 +74,9 @@ export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBook
     sheetOrder.push(id);
     const range = ws?.['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
     const cellData: Record<string, Record<string, Cell>> = {};
+    const info = xls?.sheets.get(sheetName);
+    let maxRow = range.e.r;
+    let maxCol = range.e.c;
 
     if (ws) {
       for (const addr of Object.keys(ws)) {
@@ -84,10 +95,23 @@ export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBook
           cell.t = CELL_STRING;
         }
         if (src.f) cell.f = `=${src.f}`;
-        if (src.t === 'n' && typeof src.z === 'string' && src.z !== 'General') cell.s = styleFor(src.z);
+        const pattern = src.t === 'n' && typeof src.z === 'string' && src.z !== 'General' ? src.z : null;
+        const s = styleFor(info?.cellXf.get(r * CELL_KEY_COLS + c), pattern);
+        if (s) cell.s = s;
         if (cell.v === undefined && !cell.f) continue;
         (cellData[r] ??= {})[c] = cell;
       }
+    }
+    // 値が空でも罫線・塗りのあるセルは書式だけ引き継ぐ
+    for (const [key, xf] of info?.cellXf ?? []) {
+      const r = Math.floor(key / CELL_KEY_COLS);
+      const c = key % CELL_KEY_COLS;
+      if (cellData[r]?.[c] || !isVisibleBlank(xf)) continue;
+      const s = styleFor(xf, null);
+      if (!s) continue;
+      (cellData[r] ??= {})[c] = { s };
+      maxRow = Math.max(maxRow, r);
+      maxCol = Math.max(maxCol, c);
     }
 
     const columnData: Record<string, { w?: number; hd?: number }> = {};
@@ -100,16 +124,19 @@ export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string): WorkSlipBook
     (ws?.['!rows'] ?? []).forEach((row, r) => {
       if (!row) return;
       const h = row.hpx ?? (row.hpt ? Math.round((row.hpt * 96) / 72) : undefined);
-      const clamped = h ? Math.min(h, MAX_IMPORT_ROW_PX) : undefined;
-      if (clamped || row.hidden) rowData[r] = { ...(clamped ? { h: clamped } : {}), ...(row.hidden ? { hd: 1 } : {}) };
+      if (h || row.hidden) rowData[r] = { ...(h ? { h } : {}), ...(row.hidden ? { hd: 1 } : {}) };
     });
 
     sheets[id] = {
       id,
       name: sheetName,
       hidden: wb.Workbook?.Sheets?.[index]?.Hidden ? 1 : 0,
-      rowCount: Math.max(range.e.r + 1 + 50, 100),
-      columnCount: Math.max(range.e.c + 1 + 5, 26),
+      rowCount: Math.max(maxRow + 1 + 50, 100),
+      columnCount: Math.max(maxCol + 1 + 5, 26),
+      ...(info?.frozen ? { freeze: { xSplit: info.frozen.x, ySplit: info.frozen.y, startRow: info.frozen.y, startColumn: info.frozen.x } } : {}),
+      ...(info ? { showGridlines: info.showGridlines ? 1 : 0 } : {}),
+      ...(info?.zoom ? { zoomRatio: info.zoom } : {}),
+      ...(info?.defaultRowHeightPx ? { defaultRowHeight: info.defaultRowHeightPx } : {}),
       cellData,
       mergeData: (ws?.['!merges'] ?? []).map((m) => ({ startRow: m.s.r, endRow: m.e.r, startColumn: m.s.c, endColumn: m.e.c })),
       columnData,
