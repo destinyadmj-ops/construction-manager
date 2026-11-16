@@ -174,7 +174,7 @@ export default function WorkSlipBookPage() {
               const f = e.currentTarget.files?.[0];
               e.currentTarget.value = '';
               if (!f || !confirmDiscard()) return;
-              if (meta && !window.confirm('現在のブックをこのExcelで置き換えます（履歴に残ります）。よろしいですか？')) return;
+              if (meta && !window.confirm('現在のブックの、セルの内容をこのExcelの内容に更新します。列幅・書式などの設定は維持されます（履歴に残ります）。行・列が挿入/削除されている場合、内容は位置どおりに入るためずれます。よろしいですか？')) return;
               const { blob, gzipped } = await gzipIfSupported(f);
               const fd = new FormData();
               fd.append('file', blob, f.name);
@@ -189,7 +189,7 @@ export default function WorkSlipBookPage() {
             disabled={busy}
             onClick={() => {
               if (!confirmDiscard()) return;
-              if (meta && !window.confirm('共有フォルダの作業伝票で現在のブックを置き換えます（履歴に残ります）。よろしいですか？')) return;
+              if (meta && !window.confirm('現在のブックの、セルの内容を共有フォルダの作業伝票の内容に更新します。列幅・書式などの設定は維持されます（履歴に残ります）。行・列が挿入/削除されている場合、内容は位置どおりに入るためずれます。よろしいですか？')) return;
               void post('/api/work-slip-book/import', { method: 'POST' }, '共有フォルダの作業伝票を取り込みました。');
             }}
           >
@@ -225,7 +225,7 @@ export default function WorkSlipBookPage() {
         </div>
       ) : null}
       <div className="text-[11px] text-zinc-500">
-        共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（フォント・色・罫線・塗り・列幅・固定行）は .xls の取り込み時に引き継ぎます（Excel ダウンロードには書式は含まれません）。
+        共有フォルダは取込元（一方向）で、このブックが正本です。保存すると現場台帳・関係会社へ自動反映されます。書式（フォント・色・罫線・塗り・列幅・固定行）は、ブックを初めて作るときに .xls から引き継ぎます。2回目以降の取り込みはセルの内容だけを更新し、列幅・行高・書式は維持します（Excel ダウンロードには書式は含まれません）。
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden rounded-sm border border-zinc-200 dark:border-zinc-800">

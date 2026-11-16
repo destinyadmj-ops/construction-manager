@@ -147,6 +147,103 @@ export function sheetJsToSnapshot(wb: XLSX.WorkBook, name: string, xls: XlsStyle
   return { id: WORK_SLIP_BOOK_ID, name, appVersion: '3.0.0-alpha', locale: 'jaJP', styles, sheetOrder, sheets };
 }
 
+type RawCell = Record<string, unknown>;
+type RawSheet = {
+  id?: string;
+  name?: string;
+  rowCount?: number;
+  columnCount?: number;
+  cellData?: Record<string, Record<string, RawCell>>;
+  [key: string]: unknown;
+};
+
+// セルの「内容」にあたるフィールド。これ以外(s など)は書式・設定として扱う。
+const CONTENT_KEYS = ['v', 't', 'f', 'si', 'p'] as const;
+const hasContent = (cell: RawCell) => CONTENT_KEYS.some((k) => cell[k] !== undefined);
+
+// 取込結果のセル内容だけを既存ブックへ反映する(シート名・セル位置で対応付け)。列幅・行高・結合・固定・書式は base のまま。入力は書き換えない。
+export function mergeImportedValues(base: WorkSlipBookSnapshot, imported: WorkSlipBookSnapshot): WorkSlipBookSnapshot {
+  const out = structuredClone(base);
+  const src = structuredClone(imported);
+  out.styles ??= {};
+  const styles = out.styles;
+
+  const keyByJson = new Map<string, string>();
+  for (const [key, style] of Object.entries(styles)) {
+    const json = JSON.stringify(style);
+    if (!keyByJson.has(json)) keyByJson.set(json, key);
+  }
+  let nextStyle = 1;
+  const adoptStyle = (key: unknown): string | undefined => {
+    const style = typeof key === 'string' ? src.styles?.[key] : undefined;
+    if (style == null) return undefined;
+    const json = JSON.stringify(style);
+    let found = keyByJson.get(json);
+    if (!found) {
+      while (`st${nextStyle}` in styles) nextStyle += 1;
+      found = `st${nextStyle}`;
+      styles[found] = style;
+      keyByJson.set(json, found);
+    }
+    return found;
+  };
+
+  const idByName = new Map<string, string>();
+  for (const id of out.sheetOrder) {
+    const name = (out.sheets[id] as RawSheet | undefined)?.name;
+    if (typeof name === 'string' && !idByName.has(name)) idByName.set(name, id);
+  }
+
+  for (const srcId of src.sheetOrder) {
+    const srcSheet = src.sheets[srcId] as RawSheet | undefined;
+    if (!srcSheet) continue;
+    const baseId = typeof srcSheet.name === 'string' ? idByName.get(srcSheet.name) : undefined;
+
+    if (!baseId) {
+      let n = Object.keys(out.sheets).length + 1;
+      while (`sheet-${n}` in out.sheets) n += 1;
+      const id = `sheet-${n}`;
+      for (const row of Object.values(srcSheet.cellData ?? {})) {
+        for (const cell of Object.values(row)) {
+          const s = adoptStyle(cell.s);
+          if (s) cell.s = s;
+          else delete cell.s;
+        }
+      }
+      srcSheet.id = id;
+      out.sheets[id] = srcSheet;
+      out.sheetOrder.push(id);
+      continue;
+    }
+
+    const sheet = out.sheets[baseId] as RawSheet;
+    const cells = (sheet.cellData ??= {});
+    for (const row of Object.values(cells)) for (const cell of Object.values(row)) for (const k of CONTENT_KEYS) delete cell[k];
+
+    for (const [r, srcRow] of Object.entries(srcSheet.cellData ?? {})) {
+      for (const [c, srcCell] of Object.entries(srcRow)) {
+        if (!hasContent(srcCell)) continue;
+        const row = (cells[r] ??= {});
+        let cell = row[c];
+        if (!cell) {
+          cell = row[c] = {};
+          const s = adoptStyle(srcCell.s);
+          if (s) cell.s = s;
+        }
+        for (const k of CONTENT_KEYS) if (srcCell[k] !== undefined) cell[k] = srcCell[k];
+      }
+    }
+
+    for (const [r, row] of Object.entries(cells)) {
+      for (const [c, cell] of Object.entries(row)) if (Object.keys(cell).length === 0) delete row[c];
+      if (Object.keys(row).length === 0) delete cells[r];
+    }
+    sheet.rowCount = Math.max(sheet.rowCount ?? 0, srcSheet.rowCount ?? 0);
+    sheet.columnCount = Math.max(sheet.columnCount ?? 0, srcSheet.columnCount ?? 0);
+  }
+  return out;
+}
+
 function cellText(cell: Cell): string | null {
   const stream = cell.p?.body?.dataStream;
   return typeof stream === 'string' ? stream.replace(/\r\n$/, '').replace(/\r/g, '\n') : null;
