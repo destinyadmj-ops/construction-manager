@@ -53,7 +53,7 @@
 ## ファイルロック表（編集中のみ記載）
 | status | chat | 対象ファイル | 目的 | 更新時刻 |
 |--------|------|-------------|------|---------|
-| locked | M(作業伝票ブック: 列幅/行高コントロール + 取込は内容のみ引用) | app/site-ledger/work-slip-book/work-slip-book-editor.tsx, app/site-ledger/work-slip-book/page.tsx, app/api/work-slip-book/import/route.ts, src/shared/work-slip-book-convert.ts(+test), src/server/work-slip-book.ts, README.md | (1)ツールバー帯に列幅/行高(シート全体一括・1px刻み)を追加 (2)取込時は位置対応でセル内容のみ更新し書式・列幅・行高は維持(初回作成のみ全体取込)。実DBへ保存/取込はしない | 2026-11-17 JST |
+| done | M(作業伝票ブック: 列幅/行高コントロール + 取込は内容のみ引用) | app/site-ledger/work-slip-book/work-slip-book-editor.tsx, app/site-ledger/work-slip-book/page.tsx, app/api/work-slip-book/import/route.ts, src/shared/work-slip-book-convert.ts(+test), src/server/work-slip-book.ts, README.md | (1)ツールバー帯に列幅/行高(シート全体一括・1px刻み)を追加 (2)取込時は位置対応でセル内容のみ更新し書式・列幅・行高は維持(初回作成のみ全体取込)。実DBへ保存/取込はしない | 2026-11-17 JST |
 | done | M(現場台帳・関係会社の引用元を作業伝票2タブへ限定 + 「作業伝票」ブック) | src/server/shared-excel-sync.ts(extractWorkSlipLedgerRows/ensurePartnerByName/site作成まわり), src/server/site-registry.ts, app/site-ledger/page.tsx, app/site-ledger/ 配下の新規ページ, app/api/ 配下の新規API, scripts/(クリーンアップ用), README.md。prisma/schema.prisma と prisma/migrations は承認後のみ | (A)台帳/関係会社の取込を「当該月」「作業伝票オリジナル」の2タブのみに限定し引用し直す (B)「作業伝票ボタン同期」→「作業伝票」ボタン+編集権限者限定のアプリ内Excelブック。実DB書込/削除・依存追加・schema変更は事前にユーザー承認。L(同期30分化)は done のため競合なし。getSharedSyncSourceVersion の作業伝票ファイル必須条件は B-2 の正本方針決定後に調整 | 2026-10-29 JST |
 | done | L(作業表☆同期30分おき化・未反映原因特定) | src/server/queue/worker.ts, scripts/worker.ts, src/server/queue/queues.ts, src/server/shared-excel-sync.ts(必要範囲のみ), src/server/shared-sync-lock.ts(新規), app/api/sites/shared-sync/route.ts(BUSYの409のみ), .github/workflows/deploy.yml(共有フォルダ設定の保持のみ・ユーザー承認済み), docker-compose.prod.yml, .env.production.example, DEPLOYMENT.md, README.md(設定説明のみ) | 共有フォルダ Excel→週予定DB の同期を30分おき(強制同期+起動直後1回+重複実行防止)に変更し、Desktop表示がExcelと食い違う原因を特定。実DBへの sync 書込はユーザー承認後のみ | 2026-10-29 JST |
 | done | K(月/年/週の上部横スクロールバー共通化・右列はみ出し修正) | app/week-hub.tsx, app/top-horizontal-scrollbar.tsx(新規), e2e/top-scrollbar.spec.ts(新規), README.md | 右列 1fr による幅の押し広げで月予定の上部バーが出ない件の修正と、月/週/年での上部バー共通部品化 | 2026-10-23 JST |
@@ -205,6 +205,9 @@ pm run test:unit を追加(node:test、合成ブックのみ・実データ非�
 - (M) 2026-11-05 作業伝票ブックの日付が「####」になる原因: SheetJSが .xls の組み込み書式ID56(日本語Excelでは m月d日)を中国語の時刻書式「上午/下午 hh時mm分ss秒」と誤解釈 -> Univerが長い時刻文字列を列幅に収められず ### 表示(第32期の7月～11月タブの作業日列)。対策: 変換時と読み込み時(GET)に m"月"d"日" へ補正(src/shared/work-slip-book-convert.ts)。あわせて取り込み時の行高を最大30pxに抑え、画面の余白を縮小。保存済みv1の行高は「Excelで置き換え」「共有フォルダから取込」で再取り込みすると反映。
 
 - (M) 2026-11-05 作業伝票ブックが元Excelと見た目が違った原因: SheetJS CE は .xls の書式(フォント/色/罫線/塗り/固定行/倍率)を返さず、列幅・数値書式しか取り込んでいなかった(行高も30pxに制限)。対策: BIFF8 を直接読む src/shared/xls-styles.ts を追加し、フォント・文字色・罫線の太さ・塗り・配置・折返し・見出し行固定・目盛線・倍率・既定行高・元の行高をUniverへ変換(実ファイルで確認: gzip約200KB)。制限: .xlsx取込は書式なし/Excelダウンロードは書式を含まない/セル内の部分書式(リッチテキスト)は非対応。保存済みv1は「共有フォルダから取込」または「Excelで置き換え」で再取込が必要。
+
+- (M) 2026-11-17 決定: 作業伝票ブックの取込(共有フォルダ/Excelで置き換え)は、ブックが既にある場合はセル内容(v/t/f/si/p)のみ引用し(シート名+セル位置で対応付け=src/shared/work-slip-book-convert.ts の mergeImportedValues)、書式・列幅・行高・結合・固定・非表示は維持。初回作成のみ書式つき全体取込。新タブは末尾追加、ブックのみのタブは残す。既知の制約: 取込元で行/列が挿入・削除されると内容がずれる(履歴から復元可)。他者が先に保存していた場合は 409(再読込して再実行)。完全置き換え(mode=full)は未実装=ユーザー確認待ち。
+- (M) 2026-11-17 決定: 列幅/行高コントロールはシート全体を一括・1px刻み(列10〜500/行10〜300)。Univer のタブ行(開始/数式/表示)の左の空きに配置(ツールバー行は幅1500px以下で空きが無いため)。
 
 ## 引き継ぎ／連絡（宛先チャットを明記）
 - (B→A) 設定UIの「日付幅/名前幅」入力は header.tsx の数値input。手順書を書く時はキー分離（week/month/year・user別）を前提に。
