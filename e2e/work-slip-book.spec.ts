@@ -57,3 +57,21 @@ test('作業伝票ブック: 共有フォルダが見えない時はこのPCのE
   await page.getByRole('button', { name: '共有フォルダの作業伝票から作成' }).click({ timeout: 30_000 });
   await expect(page.getByTestId('work-slip-book-shared-missing')).toBeVisible();
 });
+
+test('作業伝票ブック: 列幅/行高コントロールで一括変更すると未保存になり、範囲外はクランプされる', async ({ page }) => {
+  await mock(page, true);
+  await page.goto('/site-ledger/work-slip-book');
+  const controls = page.getByTestId('work-slip-book-size-controls');
+  await expect(controls).toBeVisible({ timeout: 30_000 });
+  const col = page.getByLabel('列幅(px)');
+  const row = page.getByLabel('行高(px)');
+  await expect(col).not.toHaveValue('', { timeout: 30_000 });
+  await page.waitForTimeout(2000);
+  await col.fill('9999');
+  await col.press('Enter');
+  await expect(col).toHaveValue('500');
+  await expect(page.getByTestId('work-slip-book-meta')).toContainText('未保存の変更あり');
+  await row.fill('1');
+  await row.press('Enter');
+  await expect(row).toHaveValue('10');
+});
