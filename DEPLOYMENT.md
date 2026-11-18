@@ -110,7 +110,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 - `masterhub_outbox` ボリュームに印刷/FAX 出力ファイルを載せる
 - まずは 1 台構成で十分で、Redis を外出しするのは負荷や可用性要件が出てからでよい
 - 共有フォルダ(作業表☆/作業伝票)自動同期を使う場合、本番ホスト上で共有フォルダが置かれているローカルパスを `SHARED_SOURCE_HOST_PATH` に設定する（未設定時はダミーの空フォルダがマウントされ同期は「ファイル無し」扱いになるだけで起動は失敗しない）。共有フォルダがこの本番PC自体でホストされている前提のため、別PC/NAS宛のネットワーク越しマウント設定は不要。
-- 共有フォルダ同期(worker): 起動直後に1回、その後 `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごとに、ファイル更新時刻に関わらず 作業表☆(+作業伝票) を同期する。再実行は冪等で、失敗しても次回に再試行する。画面の「共有フォルダ同期」(`/api/sites/shared-sync`)との同時実行は排他され、実行中なら 409 を返す。
+- 共有フォルダ同期(worker): 起動直後に1回、その後ファイル更新時刻に関わらず定期実行する。2系統に分かれている。
+  - 週予定(`scope=schedule`): 作業表☆(原本)だけを読み、`SHARED_SYNC_SCHEDULE_INTERVAL_MS`（既定 300000 = 5分、最小 60000）ごとに週予定へ反映する。作業伝票ファイルが無くても動く。専用キュー(`shared-sync-schedule`)・専用ロックで、台帳同期の長時間処理に待たされない。原本が扱っている日付範囲を原本と完全一致させる差分同期(追加・更新・削除。変更のない予定は ID を保つ)。同じ人・日・現場の手入力の予定は原本の内容で上書きし、同じセルのそれ以外の手入力は残す。
+  - 台帳・関係会社(`scope=ledger`): 作業伝票(アプリ内ブック)から `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごと。ブック保存時は即時に反映する。
+  再実行は冪等で、失敗しても次回に再試行する。画面の「共有フォルダ同期」(`/api/sites/shared-sync`)との同時実行は同じ系統のみ排他され、実行中なら 409 を返す。最終同期の時刻・結果・件数は現場台帳画面（編集権限者のみ）に表示される。
 - `SHARED_SYNC_POLL_ENABLED`: `1` で強制有効 / `0` で無効。未設定時は `NODE_ENV=production`（本番の worker コンテナ）のみ有効で、開発PCの `npm run worker` は実DBへ同期しない。
 - 同期を実行する worker は本番ホスト上の1台のみにする（本番とローカルPCの両方で動かすと、別々の Redis の下で二重に同期が走る）。
 - いつ同期されたかは worker のログで確認する: `docker compose -f docker-compose.prod.yml --env-file .env.production logs --tail=200 worker | findstr shared-sync`（`poller started` / `enqueued` / `success`(counts と所要時間) / `failed` / `skip`(共有フォルダにファイルが無い) の各行）。
