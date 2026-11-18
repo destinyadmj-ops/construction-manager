@@ -8,9 +8,9 @@ export type SharedSyncRunStatus = {
   kind: SiteKind;
   /** 直近の実行の完了時刻(ISO) */
   at: string;
-  result: 'success' | 'failed';
+  result: 'success' | 'failed' | 'skipped';
   durationMs: number;
-  /** 失敗時の理由 / 成功時は未設定 */
+  /** 失敗・スキップ時の理由 / 成功時は未設定 */
   message?: string;
   /** 直近の成功時刻(ISO)。失敗が続いても最後に成功した時刻を保つ */
   lastSuccessAt?: string;

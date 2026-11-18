@@ -108,6 +108,8 @@ export type SharedSyncRunResult = SharedSyncPreview & {
 export type SharedSyncSourceVersion = {
   kind: SiteKind;
   sharedDir: string;
+  /** 共有フォルダを読めなかった理由(読めた場合は null) */
+  accessError: string | null;
   hasSources: boolean;
   key: string | null;
   workTableFileName: string | null;
@@ -367,7 +369,13 @@ function isCurrentDateInRange(meta: WorkSlipFileMeta | null): boolean {
 
 async function discoverSharedFiles(targetTerm?: number | null): Promise<DiscoveredSharedFiles> {
   const fs = await import('node:fs/promises');
-  const dirents = await fs.readdir(SHARED_SOURCE_DIR, { withFileTypes: true });
+  let dirents: Awaited<ReturnType<typeof fs.readdir<{ withFileTypes: true }>>>;
+  try {
+    dirents = await fs.readdir(SHARED_SOURCE_DIR, { withFileTypes: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code ?? 'UNKNOWN';
+    throw new SharedSyncError('MISSING_SOURCE', `共有フォルダにアクセスできません: ${SHARED_SOURCE_DIR} (${code})`);
+  }
 
   const files: SharedFileInfo[] = [];
   for (const dirent of dirents) {
@@ -421,6 +429,18 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
     workSlipMeta: selectedSlipMeta,
     workSlipCandidates: workSlipCandidates.length,
   };
+}
+
+// 共有フォルダが見えない環境(本番の worker など)でも、アプリ内の作業伝票ブックだけで台帳反映できるよう、アクセス失敗はファイル無し扱いにして理由だけ返す。
+async function discoverSharedFilesOrEmpty(targetTerm?: number | null): Promise<{ files: DiscoveredSharedFiles; accessError: string | null }> {
+  try {
+    return { files: await discoverSharedFiles(targetTerm), accessError: null };
+  } catch (error) {
+    return {
+      files: { sharedDir: SHARED_SOURCE_DIR, workTable: null, workSlip: null, workSlipMeta: null, workSlipCandidates: 0 },
+      accessError: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export function readWorkbook(filePath: string, options?: { fontColors?: boolean }): XLSX.WorkBook {
@@ -1223,9 +1243,10 @@ function buildPreview(input: {
 }
 
 export async function getSharedSyncPreview(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncPreview> {
-  const files = await discoverSharedFiles(input.targetTerm ?? null);
+  const { files, accessError } = await discoverSharedFilesOrEmpty(input.targetTerm ?? null);
   const warnings: string[] = [];
 
+  if (accessError) warnings.push(accessError);
   if (!files.workTable) warnings.push('共有フォルダ直下に 作業表☆(.xls/.xlsx) が見つかりません。');
   if (!files.workSlip) warnings.push('共有フォルダ直下に 作業伝票 系(.xls/.xlsx) が見つかりません。');
   if (files.workSlipCandidates > 1) warnings.push(`作業伝票候補が ${files.workSlipCandidates} 件あります。対象期一致 > 更新日時の優先順で選択します。`);
@@ -1256,21 +1277,23 @@ export async function getSharedSyncSourceVersion(input: {
   targetTerm?: number | null;
   scope?: SharedSyncScope;
 }): Promise<SharedSyncSourceVersion> {
-  const files = await discoverSharedFiles(input.targetTerm ?? null);
+  const { files, accessError } = await discoverSharedFilesOrEmpty(input.targetTerm ?? null);
   const workTableMtimeMs = files.workTable?.mtimeMs ?? null;
   const workSlipMtimeMs = files.workSlip?.mtimeMs ?? null;
-  // 週予定の同期は作業表☆だけで動く(作業伝票ファイルが無くても止めない)。
-  const scheduleOnly = input.scope === 'schedule';
-  const hasSources = !!files.workTable && (scheduleOnly || !!files.workSlip);
-  const key = !hasSources
-    ? null
-    : scheduleOnly
-      ? `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workTable?.sizeBytes ?? 0}`
-      : `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`;
+  const scope = input.scope ?? 'all';
+  // 週予定は作業表☆だけ、台帳はアプリ内の作業伝票ブック(無い間だけ共有フォルダの作業伝票)だけで動く。
+  const needSchedule = scope !== 'ledger';
+  const needLedger = scope !== 'schedule';
+  const bookMeta = needLedger ? await getCurrentMeta() : null;
+  const hasSources = (!needSchedule || !!files.workTable) && (!needLedger || !!bookMeta || !!files.workSlip);
+  const scheduleKey = `${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workTable?.sizeBytes ?? 0}`;
+  const ledgerKey = bookMeta ? `book:v${bookMeta.version}` : `${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`;
+  const key = !hasSources ? null : [input.kind, needSchedule ? scheduleKey : null, needLedger ? ledgerKey : null].filter((x) => x != null).join('|');
 
   return {
     kind: input.kind,
     sharedDir: files.sharedDir,
+    accessError,
     hasSources,
     key,
     workTableFileName: files.workTable?.fileName ?? null,
@@ -1330,38 +1353,45 @@ async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSync
   const scope = input.scope ?? 'all';
   const needSchedule = scope !== 'ledger';
   const needLedger = scope !== 'schedule';
-  const files = await discoverSharedFiles(input.targetTerm ?? null);
+  const { files, accessError } = await discoverSharedFilesOrEmpty(input.targetTerm ?? null);
 
-  const requiresWorkSlip = needLedger;
-  if (!files.workTable || (requiresWorkSlip && !files.workSlip)) {
-    const missing = [
-      !files.workTable ? '作業表☆(.xls/.xlsx)' : null,
-      requiresWorkSlip && !files.workSlip ? '作業伝票系(.xls/.xlsx)' : null,
-    ].filter(Boolean);
-    throw new SharedSyncError('MISSING_SOURCE', `共有フォルダに必要ファイルがありません: ${missing.join(' / ')}`);
+  // アプリ内の作業伝票ブックが正本。台帳反映は共有フォルダが無くても動き、ブックが無い間だけ共有フォルダの作業伝票から読む。
+  const bookMeta = needLedger ? await getCurrentMeta() : null;
+  const bookSnapshot = bookMeta ? await readBookVersion(bookMeta.version) : null;
+  const workTableFile = needSchedule ? files.workTable : null;
+  const missing = [
+    needSchedule && !workTableFile ? '作業表☆(.xls/.xlsx)' : null,
+    needLedger && !bookSnapshot && !files.workSlip ? '作業伝票ブック(アプリ内)も共有フォルダの作業伝票系(.xls/.xlsx)もありません' : null,
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    throw new SharedSyncError(
+      'MISSING_SOURCE',
+      `必要な元データがありません: ${missing.join(' / ')}${accessError ? ` (${accessError})` : ''}`,
+    );
   }
 
   const kind = input.kind;
-  const workTableFileName = files.workTable.fileName;
-
-  const workTableBook = await readWorkbookWithRetry(files.workTable.filePath, { fontColors: needSchedule });
-  // 年なしの日付は原本の更新日に最も近い年で補う
-  const workTable = extractWorkTable(workTableBook, new Date(files.workTable.mtimeMs));
-  const scheduleRows = workTable.rows;
   const warnings: string[] = [];
+  let scheduleRows: WorkTableRow[] = [];
+  let coveredRange: WorkTableExtraction['coveredRange'] = null;
+  const workTableFileName = workTableFile?.fileName ?? '';
+  if (workTableFile) {
+    const workTableBook = await readWorkbookWithRetry(workTableFile.filePath, { fontColors: true });
+    // 年なしの日付は原本の更新日に最も近い年で補う
+    const workTable = extractWorkTable(workTableBook, new Date(workTableFile.mtimeMs));
+    scheduleRows = workTable.rows;
+    coveredRange = workTable.coveredRange;
+  }
   let ledgerRows: WorkSlipLedgerRow[] = [];
   let ledgerSheets: WorkSlipLedgerSheets | null = null;
-  if (needLedger && files.workSlip) {
-    // アプリ内の作業伝票ブックが正本。無い間だけ共有フォルダの作業伝票から読む。
-    const bookMeta = await getCurrentMeta();
-    const bookSnapshot = bookMeta ? await readBookVersion(bookMeta.version) : null;
-    const workSlipBook = bookSnapshot ? snapshotToSheetJs(bookSnapshot) : readWorkbook(files.workSlip.filePath);
+  if (needLedger) {
+    const workSlipBook = bookSnapshot ? snapshotToSheetJs(bookSnapshot) : readWorkbook(files.workSlip!.filePath);
     const extracted = extractWorkSlipLedgerRows(workSlipBook);
     ledgerRows = extracted.rows;
     ledgerSheets = extracted.sheets;
     warnings.push(...extracted.sheets.warnings);
   }
-  if (needSchedule && files.workTable.extension === '.xls') {
+  if (workTableFile && workTableFile.extension === '.xls') {
     warnings.push('作業表☆が .xls のため、セル全体の赤文字は読み取れません(一部の文字だけ赤い場合のみ反映)。.xlsx で保存してください。');
   }
 
@@ -1446,18 +1476,18 @@ async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSync
     touchedSiteIds.add(created.id);
   }
 
-  if (needSchedule) {
+  if (needSchedule && workTableFile) {
     await syncScheduleEntries({
       kind,
       scheduleRows,
-      coveredRange: workTable.coveredRange,
+      coveredRange,
       workTableFileName,
       counts,
       warnings,
     });
   }
 
-  // 作業伝票の保存コピーは台帳側(ledger)の処理。週予定だけの同期では作業伝票ファイルに触れない。
+  // 作業伝票の保存コピーは台帳側(ledger)の処理で、共有フォルダに作業伝票ファイルがある場合だけ(無ければ黙ってスキップ)。
   const slipFile = needLedger ? files.workSlip : null;
   const todayYmd = todayYmdTokyo();
   const fileSafeName = safeStoredFileName(slipFile?.fileName ?? '');
@@ -1527,7 +1557,9 @@ async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSync
     }
   }
 
-  if (needLedger) {
+  // ふりがな補完は作業表☆の現場名が基準のため、作業表☆を読む週予定同期で行う(予定に変更があった回と手動の全同期だけ)。
+  const scheduleChanged = counts.scheduleCreated + counts.scheduleUpdated + counts.scheduleDeleted > 0;
+  if (workTableFile && (scope === 'all' || scheduleChanged)) {
     const furiganaBackfill = await backfillFuriganaFromWorkTable(kind, scheduleRows);
     counts.furiganaSitesBackfilled = furiganaBackfill.sitesUpdated;
     counts.furiganaSummariesBackfilled = furiganaBackfill.summariesUpdated;
