@@ -112,7 +112,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 - 共有フォルダ(作業表☆/作業伝票)自動同期を使う場合、本番ホスト上で共有フォルダが置かれているローカルパスを `SHARED_SOURCE_HOST_PATH` に設定する（未設定時はダミーの空フォルダがマウントされ同期は「ファイル無し」扱いになるだけで起動は失敗しない）。共有フォルダがこの本番PC自体でホストされている前提のため、別PC/NAS宛のネットワーク越しマウント設定は不要。
 - 共有フォルダ同期(worker): 起動直後に1回、その後ファイル更新時刻に関わらず定期実行する。2系統に分かれている。
   - 週予定(`scope=schedule`): 作業表☆(原本)だけを読み、`SHARED_SYNC_SCHEDULE_INTERVAL_MS`（既定 300000 = 5分、最小 60000）ごとに週予定へ反映する。作業伝票ファイルが無くても動く。専用キュー(`shared-sync-schedule`)・専用ロックで、台帳同期の長時間処理に待たされない。原本が扱っている日付範囲を原本と完全一致させる差分同期(追加・更新・削除。変更のない予定は ID を保つ)。同じ人・日・現場の手入力の予定は原本の内容で上書きし、同じセルのそれ以外の手入力は残す。
-  - 台帳・関係会社(`scope=ledger`): 作業伝票(アプリ内ブック)から `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごと。ブック保存時は即時に反映する。
+  - 台帳・関係会社(`scope=ledger`): 作業伝票(アプリ内ブック)から `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごと。ブック保存時は即時に反映する。ブックが正本のため共有フォルダ(作業表☆含む)には依存しない。ブックが未作成のときだけ共有フォルダの作業伝票ファイルを元データにする。
+  - ふりがなの補完(現場・予定の摘要)は週予定の同期で行う。週予定に追加・更新・削除があったとき(画面の手動「全部」同期では常に)だけ実行する。
   再実行は冪等で、失敗しても次回に再試行する。画面の「共有フォルダ同期」(`/api/sites/shared-sync`)との同時実行は同じ系統のみ排他され、実行中なら 409 を返す。最終同期の時刻・結果・件数は現場台帳画面（編集権限者のみ）に表示される。
 - `SHARED_SYNC_POLL_ENABLED`: `1` で強制有効 / `0` で無効。未設定時は `NODE_ENV=production`（本番の worker コンテナ）のみ有効で、開発PCの `npm run worker` は実DBへ同期しない。
 - 同期を実行する worker は本番ホスト上の1台のみにする（本番とローカルPCの両方で動かすと、別々の Redis の下で二重に同期が走る）。
@@ -319,7 +320,7 @@ $c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
 3. 共有フォルダが worker から見えているか: `docker $c exec worker ls /shared-source` — `作業表☆.xlsx` が見えること。空・`No such file or directory` なら `SHARED_SOURCE_HOST_PATH` が誤り。
 4. 環境変数が入っているか: `docker $c exec worker sh -c "printenv | grep -E 'SHARED|MASTER_HUB'"` — `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` と `MASTER_HUB_STORAGE_DIR` があること。`SHARED_SOURCE_HOST_PATH` は compose 側(ホスト)の値なので、コンテナ内には出ない場合がある。ホスト側は `Select-String -Path .env.production -Pattern 'SHARED'` で確認する。
 5. Redis が生きているか: `docker $c exec redis redis-cli ping` — `PONG`。
-6. 現場台帳画面(編集権限者)の同期ステータス行: 「週予定の同期(5分おき)」の最終成功が5分以内(目安: 最大でも10分)で、「注意: ...が止まっている可能性」の赤/黄の行が出ていないこと。
+6. 現場台帳画面(編集権限者)の同期ステータス行: 「週予定の同期(5分おき)」の最終成功が5分前後以内で、「注意: ...が止まっている可能性」の行が出ていないこと(警告は最終成功が15分を超えた時点から出る)。
 7. 修正が本番に届いているか: push 済み(`git log origin/main -n 5` に目的のコミットがある)かつ配備済み(GitHub Actions の `Deploy to Production` が成功、本番ホストで `git log -n 1` が同じコミット)。push するだけで自動配備される。
 
 ### よくある失敗
@@ -340,7 +341,7 @@ $c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
 ### 停止の自動検知(画面警告)
 
 - worker は周期ごとの結果(`enqueued` / `no-sources` / `previous-pending` / `error`)を Redis のキー `masterhub:shared-sync:poller:{scope}:{kind}` に記録する(心拍)。
-- 現場台帳画面(編集権限者のみ)は、最終成功が 週予定 15分 / 台帳 90分 を超える、またはポーラーの記録が古い・無い場合に「注意: ... が止まっている可能性」と理由を表示する。しきい値は `src/shared/shared-sync-health.ts` の定数(`SCHEDULE_STALE_MS` / `LEDGER_STALE_MS`)。
+- 現場台帳画面(編集権限者のみ)は、最終成功が 週予定 15分 / 台帳 90分 を超えた場合に、理由(ポーラーの記録が無い・古い / 同期元なし / 滞留 / 直近の失敗)つきで「注意: ... が止まっている可能性」を表示する。成功が新しい間は警告しない。しきい値は `src/shared/shared-sync-health.ts` の定数(`SCHEDULE_STALE_MS` / `LEDGER_STALE_MS`)。
 - 同じ情報は `GET /api/sites/shared-sync`(`status` / `poller` / `health`)でも取得できる。
 
 ### worker ヘルスチェックの提案(未適用)
