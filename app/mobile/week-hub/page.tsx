@@ -21,6 +21,7 @@ import {
 import { readStoredScheduleReturn, writeStoredScheduleReturn } from '@/shared/schedule-return';
 import { normalizeSiteLookupKey } from '@/shared/site-lookup';
 import { readWeekPayloadCache, writeWeekPayloadCache } from '../../week-payload-cache';
+import { useAutoRefresh } from '../../use-auto-refresh';
 
 type ScheduleKind = 'normal' | 'daily';
 type MobileTab = 'week' | 'personal';
@@ -403,6 +404,9 @@ function MobileWeekHubInner() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
+  // 共有フォルダ同期(5分おき)の結果を反映するための週予定の自動再取得(現場一覧は再取得しない)
+  const [autoRefreshTick, setAutoRefreshTick] = useState(0);
+  useAutoRefresh(() => setAutoRefreshTick((current) => current + 1), 5 * 60 * 1000);
   const [cellEntryMenu, setCellEntryMenu] = useState<CellEntryMenuState | null>(null);
   const [personalScheduleSummaryByUser, setPersonalScheduleSummaryByUser] = useState<Record<string, Record<string, PersonalScheduleSummaryDay>>>({});
   const [personalScheduleMenu, setPersonalScheduleMenu] = useState<PersonalScheduleMenuState | null>(null);
@@ -773,7 +777,7 @@ function MobileWeekHubInner() {
       });
 
     return () => controller.abort();
-  }, [refreshRevision, scheduleKind, weekStart]);
+  }, [autoRefreshTick, refreshRevision, scheduleKind, weekStart]);
 
   // 現場一覧は月(viewMonth)・種別・手動更新が変わったときだけ取得する(同じ月内の週切替では再取得しない)
   useEffect(() => {

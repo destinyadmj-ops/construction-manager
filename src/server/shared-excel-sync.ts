@@ -11,7 +11,8 @@ import {
   resolveColorAttrs,
 } from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
-import { tryAcquireSharedSyncLock } from '@/server/shared-sync-lock';
+import { tryAcquireSharedSyncLock, type SharedSyncScope } from '@/server/shared-sync-lock';
+import { recordSharedSyncStatus } from '@/server/shared-sync-status';
 import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
 import { snapshotToSheetJs } from '@/shared/work-slip-book-convert';
 import { getCurrentMeta, readVersion as readBookVersion } from '@/server/work-slip-book';
@@ -27,6 +28,7 @@ type SharedFileInfo = {
   baseName: string;
   extension: string;
   mtimeMs: number;
+  sizeBytes: number;
 };
 
 type WorkSlipFileMeta = {
@@ -64,7 +66,12 @@ type SharedSyncCounts = {
   sitesMatched: number;
   sitesSkipped: number;
   scheduleCreated: number;
+  scheduleUpdated: number;
+  scheduleDeleted: number;
+  /** 変更なし(既に原本と一致) */
   scheduleSkipped: number;
+  /** 原本の内容で上書きした、同期由来でない既存予定(手入力など) */
+  scheduleOverwritten: number;
   workSlipsCreated: number;
   workSlipsSkipped: number;
   unknownUsers: number;
@@ -365,6 +372,8 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
   const files: SharedFileInfo[] = [];
   for (const dirent of dirents) {
     if (!dirent.isFile()) continue;
+    // Excel が開いている間にできるロックファイル(~$...)や隠しファイルは対象外
+    if (dirent.name.startsWith('~$') || dirent.name.startsWith('.')) continue;
     const extension = extname(dirent.name).toLowerCase();
     if (!EXCEL_EXTENSIONS.has(extension)) continue;
 
@@ -377,6 +386,7 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
       baseName,
       extension,
       mtimeMs: stat.mtimeMs,
+      sizeBytes: stat.size,
     });
   }
 
@@ -472,7 +482,22 @@ function createGridCellResolver(sheet: XLSX.WorkSheet): GridCellResolver {
   };
 }
 
-function parseDateToYmd(value: unknown, fallbackYear: number): string | null {
+// 年なし(「M月D日」)の日付は、基準日(原本の更新日)に最も近い年を採用する。年末年始の編集でも年がずれない。
+function resolveYearNearBase(month: number, day: number, baseDate: Date): number {
+  const baseYear = baseDate.getFullYear();
+  let bestYear = baseYear;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const year of [baseYear - 1, baseYear, baseYear + 1]) {
+    const diff = Math.abs(new Date(year, month - 1, day).getTime() - baseDate.getTime());
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestYear = year;
+    }
+  }
+  return bestYear;
+}
+
+function parseDateToYmd(value: unknown, baseDate: Date): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     const y = value.getFullYear();
     const m = String(value.getMonth() + 1).padStart(2, '0');
@@ -518,7 +543,7 @@ function parseDateToYmd(value: unknown, fallbackYear: number): string | null {
     const m = Number(match[1]);
     const d = Number(match[2]);
     if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      return `${fallbackYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return `${resolveYearNearBase(m, d, baseDate)}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     }
   }
 
@@ -602,7 +627,12 @@ function looksLikeAssigneeName(value: unknown): boolean {
   return /[\u3040-\u30ff\u3400-\u9fff]/.test(text);
 }
 
-function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][], fallbackYear: number): WorkTableRow[] {
+function extractWorkTableRowsFromMatrix(
+  sheet: XLSX.WorkSheet,
+  grid: unknown[][],
+  baseDate: Date,
+  coveredDays: Set<string>,
+): WorkTableRow[] {
   // Week-matrix format: first column is assignee, date headers are on one row.
   const rows: WorkTableRow[] = [];
   const cellAt = createGridCellResolver(sheet);
@@ -613,7 +643,7 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
     const row = grid[rowIndex] ?? [];
     const cols: number[] = [];
     for (let col = 0; col < row.length; col += 1) {
-      if (parseDateToYmd(row[col], fallbackYear)) cols.push(col);
+      if (parseDateToYmd(row[col], baseDate)) cols.push(col);
     }
     if (cols.length >= 4) {
       headerRowIndex = rowIndex;
@@ -622,6 +652,12 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
     }
   }
   if (headerRowIndex < 0 || dateCols.length === 0) return rows;
+
+  // 日付見出しの日は、予定が空でも「原本が扱っている日」として扱う(消した予定を反映するため)
+  for (const col of dateCols) {
+    const headerDay = parseDateToYmd((grid[headerRowIndex] ?? [])[col], baseDate);
+    if (headerDay) coveredDays.add(headerDay);
+  }
 
   let emptyRun = 0;
   for (let rowIndex = headerRowIndex + 2; rowIndex < grid.length; rowIndex += 1) {
@@ -639,7 +675,7 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
     if (!looksLikeAssigneeName(assignee)) continue;
 
     for (const col of dateCols) {
-      const dayYmd = parseDateToYmd((grid[headerRowIndex] ?? [])[col], fallbackYear);
+      const dayYmd = parseDateToYmd((grid[headerRowIndex] ?? [])[col], baseDate);
       const siteName = normalizeTextStrippingReadingParens(toCellText(row[col]));
       if (!dayYmd || !siteName) continue;
 
@@ -660,9 +696,19 @@ function extractWorkTableRowsFromMatrix(sheet: XLSX.WorkSheet, grid: unknown[][]
   return rows;
 }
 
-export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
+export type WorkTableExtraction = {
+  rows: WorkTableRow[];
+  /** 原本が扱っている日の範囲(最小日〜最大日。予定のある日だけではない)。日付が読めない場合は null */
+  coveredRange: { minDay: string; maxDay: string } | null;
+};
+
+export function extractWorkTableRows(workbook: XLSX.WorkBook, baseDate: Date = new Date()): WorkTableRow[] {
+  return extractWorkTable(workbook, baseDate).rows;
+}
+
+export function extractWorkTable(workbook: XLSX.WorkBook, baseDate: Date = new Date()): WorkTableExtraction {
   const rows: WorkTableRow[] = [];
-  const fallbackYear = new Date().getFullYear();
+  const coveredDays = new Set<string>();
 
   for (const sheetName of workbook.SheetNames ?? []) {
     const sheet = workbook.Sheets[sheetName];
@@ -684,7 +730,8 @@ export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
       for (let rowIndex = found.headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
         const row = grid[rowIndex] ?? [];
         const siteName = normalizeTextStrippingReadingParens(toCellText(row[found.indexMap.site]));
-        const dateYmd = parseDateToYmd(row[found.indexMap.date], fallbackYear);
+        const dateYmd = parseDateToYmd(row[found.indexMap.date], baseDate);
+        if (dateYmd) coveredDays.add(dateYmd);
         const companyName = normalizeRegistryText(toCellText(row[found.indexMap.company]));
         const lead = normalizeRegistryText(toCellText(row[found.indexMap.lead]));
         const members = normalizeRegistryText(toCellText(row[found.indexMap.members]));
@@ -724,7 +771,7 @@ export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
     }
 
     if (sheetRows.length === 0) {
-      sheetRows.push(...extractWorkTableRowsFromMatrix(sheet, grid, fallbackYear));
+      sheetRows.push(...extractWorkTableRowsFromMatrix(sheet, grid, baseDate, coveredDays));
     }
     rows.push(...sheetRows);
   }
@@ -752,7 +799,11 @@ export function extractWorkTableRows(workbook: XLSX.WorkBook): WorkTableRow[] {
     if (!hasNewKey) continue;
     deduped.push({ ...row, entries: filteredEntries });
   }
-  return deduped;
+  const sortedDays = Array.from(coveredDays).sort();
+  return {
+    rows: deduped,
+    coveredRange: sortedDays.length > 0 ? { minDay: sortedDays[0], maxDay: sortedDays[sortedDays.length - 1] } : null,
+  };
 }
 
 // 台帳・関係会社の引用元は「当該月」と「作業伝票オリジナル」のタブのみ(見つからない時は全シートへフォールバックしない)。
@@ -854,21 +905,23 @@ function hasSharedExcelSyncMeta(value: unknown): boolean {
   return !!obj.sharedExcelSync && typeof obj.sharedExcelSync === 'object' && !Array.isArray(obj.sharedExcelSync);
 }
 
-function hasLegacySharedExcelSyncShape(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.labelColor === 'string' ||
-    typeof obj.scheduleGroupIndex === 'number' ||
-    typeof obj.scheduleItemIndex === 'number'
-  );
+function getSharedSyncRowKey(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const shared = (value as Record<string, unknown>).sharedExcelSync;
+  if (!shared || typeof shared !== 'object' || Array.isArray(shared)) return null;
+  const rowKey = (shared as Record<string, unknown>).rowKey;
+  return typeof rowKey === 'string' ? rowKey : null;
 }
 
-function normalizedSummaryMatches(left: string | null | undefined, right: string | null | undefined): boolean {
-  const leftKey = normalizeKey(left);
-  const rightKey = normalizeKey(right);
-  if (!leftKey || !rightKey) return true;
-  return leftKey === rightKey;
+// キー順に依存しない比較用の文字列化(JSON の保存順が変わっても同一と判定する)
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
+    .join(',')}}`;
 }
 
 function hasReadingParens(text: string): boolean {
@@ -1201,14 +1254,19 @@ export async function getSharedWorkSlipFile(): Promise<{ filePath: string; fileN
 export async function getSharedSyncSourceVersion(input: {
   kind: SiteKind;
   targetTerm?: number | null;
+  scope?: SharedSyncScope;
 }): Promise<SharedSyncSourceVersion> {
   const files = await discoverSharedFiles(input.targetTerm ?? null);
   const workTableMtimeMs = files.workTable?.mtimeMs ?? null;
   const workSlipMtimeMs = files.workSlip?.mtimeMs ?? null;
-  const hasSources = !!files.workTable && !!files.workSlip;
-  const key = hasSources
-    ? `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`
-    : null;
+  // 週予定の同期は作業表☆だけで動く(作業伝票ファイルが無くても止めない)。
+  const scheduleOnly = input.scope === 'schedule';
+  const hasSources = !!files.workTable && (scheduleOnly || !!files.workSlip);
+  const key = !hasSources
+    ? null
+    : scheduleOnly
+      ? `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workTable?.sizeBytes ?? 0}`
+      : `${input.kind}|${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`;
 
   return {
     kind: input.kind,
@@ -1222,23 +1280,63 @@ export async function getSharedSyncSourceVersion(input: {
   };
 }
 
-export async function runSharedSync(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncRunResult> {
-  const release = await tryAcquireSharedSyncLock();
-  if (!release) throw new SharedSyncError('BUSY', '別の共有フォルダ同期が実行中です。完了後にやり直してください。');
+type SharedSyncInput = { kind: SiteKind; targetTerm?: number | null; scope?: SharedSyncScope };
+
+// scope: schedule=週予定のみ(5分おき・軽量) / ledger=台帳・関係会社・作業伝票コピー・ふりがな補完(30分おき) / all=手動同期(既定)
+export async function runSharedSync(input: SharedSyncInput): Promise<SharedSyncRunResult> {
+  const scope = input.scope ?? 'all';
+  const release = await tryAcquireSharedSyncLock(scope);
+  if (!release) throw new SharedSyncError('BUSY', `別の共有フォルダ同期(${scope})が実行中です。完了後にやり直してください。`);
+  const startedAt = Date.now();
   try {
-    return await runSharedSyncUnlocked(input);
+    const result = await runSharedSyncUnlocked({ ...input, scope });
+    await recordSharedSyncStatus(scope, {
+      kind: input.kind,
+      at: new Date().toISOString(),
+      result: 'success',
+      durationMs: Date.now() - startedAt,
+      counts: result.counts,
+      warnings: result.warnings.slice(0, 5),
+    });
+    return result;
+  } catch (error) {
+    await recordSharedSyncStatus(scope, {
+      kind: input.kind,
+      at: new Date().toISOString(),
+      result: 'failed',
+      durationMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await release();
   }
 }
 
-async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: number | null }): Promise<SharedSyncRunResult> {
+async function readWorkbookWithRetry(filePath: string, options?: { fontColors?: boolean }): Promise<XLSX.WorkBook> {
+  // 原本の保存中に読んでしまった場合に備えて、数秒空けて再試行する(パスワード保護は再試行しない)。
+  const maxAttempts = 3;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return readWorkbook(filePath, options);
+    } catch (error) {
+      if (attempt >= maxAttempts || (error instanceof SharedSyncError && error.code === 'PASSWORD_PROTECTED')) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+  }
+}
+
+async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSyncRunResult> {
+  const scope = input.scope ?? 'all';
+  const needSchedule = scope !== 'ledger';
+  const needLedger = scope !== 'schedule';
   const files = await discoverSharedFiles(input.targetTerm ?? null);
 
-  if (!files.workTable || !files.workSlip) {
+  const requiresWorkSlip = needLedger;
+  if (!files.workTable || (requiresWorkSlip && !files.workSlip)) {
     const missing = [
       !files.workTable ? '作業表☆(.xls/.xlsx)' : null,
-      !files.workSlip ? '作業伝票系(.xls/.xlsx)' : null,
+      requiresWorkSlip && !files.workSlip ? '作業伝票系(.xls/.xlsx)' : null,
     ].filter(Boolean);
     throw new SharedSyncError('MISSING_SOURCE', `共有フォルダに必要ファイルがありません: ${missing.join(' / ')}`);
   }
@@ -1246,16 +1344,24 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   const kind = input.kind;
   const workTableFileName = files.workTable.fileName;
 
-  const workTableBook = readWorkbook(files.workTable.filePath, { fontColors: true });
-  // アプリ内の作業伝票ブックが正本。無い間だけ共有フォルダの作業伝票から読む。
-  const bookMeta = await getCurrentMeta();
-  const bookSnapshot = bookMeta ? await readBookVersion(bookMeta.version) : null;
-  const workSlipBook = bookSnapshot ? snapshotToSheetJs(bookSnapshot) : readWorkbook(files.workSlip.filePath);
-
-  const scheduleRows = extractWorkTableRows(workTableBook);
-  const { rows: ledgerRows, sheets: ledgerSheets } = extractWorkSlipLedgerRows(workSlipBook);
-  const warnings: string[] = [...ledgerSheets.warnings];
-  if (files.workTable.extension === '.xls') {
+  const workTableBook = await readWorkbookWithRetry(files.workTable.filePath, { fontColors: needSchedule });
+  // 年なしの日付は原本の更新日に最も近い年で補う
+  const workTable = extractWorkTable(workTableBook, new Date(files.workTable.mtimeMs));
+  const scheduleRows = workTable.rows;
+  const warnings: string[] = [];
+  let ledgerRows: WorkSlipLedgerRow[] = [];
+  let ledgerSheets: WorkSlipLedgerSheets | null = null;
+  if (needLedger && files.workSlip) {
+    // アプリ内の作業伝票ブックが正本。無い間だけ共有フォルダの作業伝票から読む。
+    const bookMeta = await getCurrentMeta();
+    const bookSnapshot = bookMeta ? await readBookVersion(bookMeta.version) : null;
+    const workSlipBook = bookSnapshot ? snapshotToSheetJs(bookSnapshot) : readWorkbook(files.workSlip.filePath);
+    const extracted = extractWorkSlipLedgerRows(workSlipBook);
+    ledgerRows = extracted.rows;
+    ledgerSheets = extracted.sheets;
+    warnings.push(...extracted.sheets.warnings);
+  }
+  if (needSchedule && files.workTable.extension === '.xls') {
     warnings.push('作業表☆が .xls のため、セル全体の赤文字は読み取れません(一部の文字だけ赤い場合のみ反映)。.xlsx で保存してください。');
   }
 
@@ -1265,7 +1371,10 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
     sitesMatched: 0,
     sitesSkipped: 0,
     scheduleCreated: 0,
+    scheduleUpdated: 0,
+    scheduleDeleted: 0,
     scheduleSkipped: 0,
+    scheduleOverwritten: 0,
     workSlipsCreated: 0,
     workSlipsSkipped: 0,
     unknownUsers: 0,
@@ -1336,6 +1445,112 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
     counts.sitesCreated += 1;
     touchedSiteIds.add(created.id);
   }
+
+  if (needSchedule) {
+    await syncScheduleEntries({
+      kind,
+      scheduleRows,
+      coveredRange: workTable.coveredRange,
+      workTableFileName,
+      counts,
+      warnings,
+    });
+  }
+
+  // 作業伝票の保存コピーは台帳側(ledger)の処理。週予定だけの同期では作業伝票ファイルに触れない。
+  const slipFile = needLedger ? files.workSlip : null;
+  const todayYmd = todayYmdTokyo();
+  const fileSafeName = safeStoredFileName(slipFile?.fileName ?? '');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const subject = `共有同期: ${slipFile?.baseName ?? ''}`;
+  const siteIds = slipFile ? Array.from(touchedSiteIds) : [];
+
+  if (slipFile && siteIds.length > 0) {
+    try {
+      const slipBuffer = await (await import('node:fs/promises')).readFile(slipFile.filePath);
+      const sites = await prisma.site.findMany({
+        where: { id: { in: siteIds } },
+        select: { id: true, name: true },
+      });
+
+      for (const site of sites) {
+        const existing = await prisma.storedDocument.findFirst({
+          where: {
+            siteId: site.id,
+            kind: 'WORK_SLIP',
+            fileName: slipFile.fileName,
+            subject,
+          },
+          select: { id: true },
+        });
+
+        if (existing) {
+          counts.workSlipsSkipped += 1;
+          continue;
+        }
+
+        const { workSlipsDir } = await ensureSiteDayFolders({
+          siteId: site.id,
+          siteName: site.name,
+          dayYmd: todayYmd,
+        });
+
+        const storedName = `${stamp}__shared-sync__${fileSafeName}`;
+        const storedPath = join(workSlipsDir, storedName);
+        await writeFile(storedPath, slipBuffer);
+
+        await prisma.storedDocument.create({
+          data: {
+            siteId: site.id,
+            kind: 'WORK_SLIP',
+            subject,
+            bizDateYmd: todayYmd,
+            fileName: slipFile.fileName,
+            mimeType: workSlipMimeByExtension(slipFile.extension),
+            sizeBytes: slipBuffer.length,
+            storedPath,
+            tags: {
+              sharedSync: true,
+              source: '作業伝票',
+              sourceFileName: slipFile.fileName,
+              sourceMtimeIso: new Date(slipFile.mtimeMs).toISOString(),
+            },
+          },
+          select: { id: true },
+        });
+
+        counts.workSlipsCreated += 1;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`作業伝票コピーはスキップしました: ${message}`);
+    }
+  }
+
+  if (needLedger) {
+    const furiganaBackfill = await backfillFuriganaFromWorkTable(kind, scheduleRows);
+    counts.furiganaSitesBackfilled = furiganaBackfill.sitesUpdated;
+    counts.furiganaSummariesBackfilled = furiganaBackfill.summariesUpdated;
+  }
+
+  return {
+    ...buildPreview({ files, kind, warnings, ledgerSheets }),
+    mode: 'sync',
+    counts,
+  };
+}
+
+// 作業表☆(原本)の内容を週予定へ反映する。原本が扱っている日付範囲を「完全同期」し、差分(追加・更新・削除)だけを1トランザクションで書く。
+async function syncScheduleEntries(args: {
+  kind: SiteKind;
+  scheduleRows: WorkTableRow[];
+  coveredRange: WorkTableExtraction['coveredRange'];
+  workTableFileName: string;
+  counts: SharedSyncCounts;
+  warnings: string[];
+}): Promise<void> {
+  const { kind, scheduleRows, coveredRange, workTableFileName, counts, warnings } = args;
+  const unknownAssigneeNames = new Set<string>();
 
   const users = await listSharedSyncUsers(prisma, kind);
   const globalOrder = await readGlobalScheduleUserOrder(kind);
@@ -1528,6 +1743,7 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
       const user = userByName.get(normalizeUserKey(assignee.name));
       if (!user) {
         counts.unknownUsers += 1;
+        unknownAssigneeNames.add(assignee.name);
         continue;
       }
 
@@ -1562,226 +1778,200 @@ async function runSharedSyncUnlocked(input: { kind: SiteKind; targetTerm?: numbe
   }
 
   const finalRows = Array.from(uniqueRows.values());
-  const finalRowsByCellSiteKey = new Map<string, (typeof finalRows)[number]>();
+
+  // 同期対象の日付範囲 = 原本が扱っている日(日付見出し・日付列)の最小〜最大。予定のある日だけでなく空の日も含める。
+  let minDay: string | null = coveredRange?.minDay ?? null;
+  let maxDay: string | null = coveredRange?.maxDay ?? null;
+  const dataDays = new Set<string>();
   for (const row of finalRows) {
-    if (row.siteId) finalRowsByCellSiteKey.set(`${row.userId}|${row.dayYmd}|${row.siteId}`, row);
+    dataDays.add(row.dayYmd);
+    if (!minDay || row.dayYmd < minDay) minDay = row.dayYmd;
+    if (!maxDay || row.dayYmd > maxDay) maxDay = row.dayYmd;
   }
-  if (finalRows.length > 0) {
-    const dayList = scheduleRows.map((row) => row.dayYmd).sort();
-    const minDay = dayList[0] ?? null;
-    const maxDay = dayList[dayList.length - 1] ?? null;
-
-    let existingRows: Array<{
-      id: string;
-      userId: string;
-      startAt: Date;
-      summary: string | null;
-      siteId: string | null;
-      accountingMeta: Prisma.JsonValue | null;
-    }> = [];
-    if (minDay && maxDay) {
-      const minDayForQuery = addDaysYmd(minDay, -1);
-      const maxDayForQueryExclusive = addDaysYmd(maxDay, 2);
-
-      await prisma.$transaction(async (tx) => {
-        existingRows = await tx.workEntry.findMany({
-          where: {
-            kind,
-            startAt: { gte: startOfDayUtc(minDayForQuery), lt: startOfDayUtc(maxDayForQueryExclusive) },
-          },
-          select: {
-            id: true,
-            userId: true,
-            startAt: true,
-            summary: true,
-            siteId: true,
-            accountingMeta: true,
-          },
-        });
-
-        const sharedIds = new Set(existingRows.filter((row) => hasSharedExcelSyncMeta(row.accountingMeta)).map((row) => row.id));
-        for (const row of existingRows) {
-          if (sharedIds.has(row.id)) continue;
-          if (!row.siteId) continue;
-          if (!hasLegacySharedExcelSyncShape(row.accountingMeta)) continue;
-          const dayYmd = toYmdLocal(row.startAt);
-          const matched = finalRowsByCellSiteKey.get(`${row.userId}|${dayYmd}|${row.siteId}`);
-          if (!matched) continue;
-
-          const meta = row.accountingMeta && typeof row.accountingMeta === 'object' && !Array.isArray(row.accountingMeta)
-            ? (row.accountingMeta as Record<string, unknown>)
-            : null;
-          const labelColor = typeof meta?.labelColor === 'string' ? meta.labelColor : null;
-          const groupIndex = typeof meta?.scheduleGroupIndex === 'number' ? meta.scheduleGroupIndex : null;
-          const itemIndex = typeof meta?.scheduleItemIndex === 'number' ? meta.scheduleItemIndex : null;
-          const sharedMeta = meta?.sharedExcelSync && typeof meta.sharedExcelSync === 'object' && !Array.isArray(meta.sharedExcelSync)
-            ? (meta.sharedExcelSync as Record<string, unknown>)
-            : null;
-          const hasConsistentSharedMeta =
-            sharedMeta?.source === '作業表☆' &&
-            sharedMeta?.fileName === workTableFileName &&
-            sharedMeta?.rowKey === matched.sourceKey &&
-            labelColor === matched.labelColor &&
-            groupIndex === matched.groupIndex &&
-            itemIndex === matched.itemIndex;
-
-          if (hasConsistentSharedMeta && normalizedSummaryMatches(row.summary, matched.summary)) continue;
-          if (!normalizedSummaryMatches(row.summary, matched.summary)) continue;
-          sharedIds.add(row.id);
-        }
-
-        const deleteIds = Array.from(sharedIds);
-        if (deleteIds.length > 0) {
-          await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
-        }
-
-        const baseRows = existingRows.filter((row) => !sharedIds.has(row.id));
-        const existingSiteKeySet = new Set<string>();
-        const existingCountByCell = new Map<string, number>();
-
-        for (const row of baseRows) {
-          const ymd = toYmdLocal(row.startAt);
-          const cellKey = `${row.userId}|${ymd}`;
-          existingCountByCell.set(cellKey, (existingCountByCell.get(cellKey) ?? 0) + 1);
-          if (row.siteId) {
-            existingSiteKeySet.add(`${cellKey}|${row.siteId}`);
-          }
-        }
-
-        const createData: Array<{
-          userId: string;
-          kind: SiteKind;
-          startAt: Date;
-          summary: string;
-          note: string | null;
-          siteId: string | null;
-          accountingMeta: Prisma.InputJsonValue;
-        }> = [];
-
-        const appendedPerCell = new Map<string, number>();
-
-        for (const row of finalRows) {
-          const cellKey = `${row.userId}|${row.dayYmd}`;
-          const siteDedupeKey = row.siteId ? `${cellKey}|${row.siteId}` : `${cellKey}|name:${normalizeKey(row.summary)}`;
-          if (existingSiteKeySet.has(siteDedupeKey)) {
-            counts.scheduleSkipped += 1;
-            continue;
-          }
-
-          const existingCount = existingCountByCell.get(cellKey) ?? 0;
-          const appendedCount = appendedPerCell.get(cellKey) ?? 0;
-          const minuteOffset = existingCount + appendedCount;
-          appendedPerCell.set(cellKey, appendedCount + 1);
-          existingSiteKeySet.add(siteDedupeKey);
-
-          createData.push({
-            userId: row.userId,
-            kind,
-            startAt: addMinutes(startOfSharedSyncDay(row.dayYmd), minuteOffset),
-            summary: row.summary,
-            note: null,
-            siteId: row.siteId,
-            accountingMeta: {
-              scheduleEntryKind: 'site',
-              sharedExcelSync: {
-                source: '作業表☆',
-                fileName: workTableFileName,
-                rowKey: row.sourceKey,
-              },
-              labelColor: row.labelColor,
-              scheduleGroupIndex: row.groupIndex,
-              scheduleItemIndex: row.itemIndex,
-            } as Prisma.InputJsonValue,
-          });
-        }
-
-        if (createData.length > 0) {
-          await tx.workEntry.createMany({ data: createData });
-          counts.scheduleCreated += createData.length;
-        }
-      });
-    }
+  if (!minDay || !maxDay) {
+    // 日付が1つも読めない = 原本を読み取れていない。誤って全削除しないよう何も変更しない。
+    warnings.push('作業表☆から日付を読み取れなかったため、週予定は変更していません。');
+    return;
   }
 
-  const slipBuffer = await (await import('node:fs/promises')).readFile(files.workSlip.filePath);
-  const todayYmd = todayYmdTokyo();
-  const fileSafeName = safeStoredFileName(files.workSlip.fileName);
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const subject = `共有同期: ${files.workSlip.baseName}`;
-  const siteIds = Array.from(touchedSiteIds);
+  // 誤った日付(年違いなど)が1つ混ざって範囲が極端に広がっても、広範囲を削除しない。
+  const MAX_COVERED_SPAN_DAYS = 400;
+  const spanDays = Math.round((startOfDayUtc(maxDay).getTime() - startOfDayUtc(minDay).getTime()) / 86_400_000);
+  const rangeIsWide = spanDays > MAX_COVERED_SPAN_DAYS;
+  if (rangeIsWide) {
+    warnings.push(`作業表☆の日付範囲が ${spanDays} 日と広いため、予定のある日だけを同期対象にしました。`);
+    const sortedDataDays = Array.from(dataDays).sort();
+    if (sortedDataDays.length === 0) return;
+    minDay = sortedDataDays[0];
+    maxDay = sortedDataDays[sortedDataDays.length - 1];
+  }
+  const rangeMin = minDay;
+  const rangeMax = maxDay;
+  const isCoveredDay = (ymd: string) => (rangeIsWide ? dataDays.has(ymd) : ymd >= rangeMin && ymd <= rangeMax);
 
-  if (siteIds.length > 0) {
-    try {
-      const sites = await prisma.site.findMany({
-        where: { id: { in: siteIds } },
-        select: { id: true, name: true },
-      });
-
-      for (const site of sites) {
-        const existing = await prisma.storedDocument.findFirst({
-          where: {
-            siteId: site.id,
-            kind: 'WORK_SLIP',
-            fileName: files.workSlip.fileName,
-            subject,
-          },
-          select: { id: true },
-        });
-
-        if (existing) {
-          counts.workSlipsSkipped += 1;
-          continue;
-        }
-
-        const { workSlipsDir } = await ensureSiteDayFolders({
-          siteId: site.id,
-          siteName: site.name,
-          dayYmd: todayYmd,
-        });
-
-        const storedName = `${stamp}__shared-sync__${fileSafeName}`;
-        const storedPath = join(workSlipsDir, storedName);
-        await writeFile(storedPath, slipBuffer);
-
-        await prisma.storedDocument.create({
-          data: {
-            siteId: site.id,
-            kind: 'WORK_SLIP',
-            subject,
-            bizDateYmd: todayYmd,
-            fileName: files.workSlip.fileName,
-            mimeType: workSlipMimeByExtension(files.workSlip.extension),
-            sizeBytes: slipBuffer.length,
-            storedPath,
-            tags: {
-              sharedSync: true,
-              source: '作業伝票',
-              sourceFileName: files.workSlip.fileName,
-              sourceMtimeIso: new Date(files.workSlip.mtimeMs).toISOString(),
-            },
-          },
-          select: { id: true },
-        });
-
-        counts.workSlipsCreated += 1;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      warnings.push(`作業伝票コピーはスキップしました: ${message}`);
-    }
+  // 同じ人・日で同じ現場は1件にまとめる(従来どおり)
+  const desiredByCell = new Map<string, Array<(typeof finalRows)[number]>>();
+  const desiredDedupe = new Set<string>();
+  for (const row of finalRows) {
+    const cellKey = `${row.userId}|${row.dayYmd}`;
+    const dedupeKey = `${cellKey}|${row.siteId ? `site:${row.siteId}` : `name:${normalizeKey(row.summary)}`}`;
+    if (desiredDedupe.has(dedupeKey)) continue;
+    desiredDedupe.add(dedupeKey);
+    const list = desiredByCell.get(cellKey) ?? [];
+    list.push(row);
+    desiredByCell.set(cellKey, list);
   }
 
-  const furiganaBackfill = await backfillFuriganaFromWorkTable(kind, scheduleRows);
-  counts.furiganaSitesBackfilled = furiganaBackfill.sitesUpdated;
-  counts.furiganaSummariesBackfilled = furiganaBackfill.summariesUpdated;
-
-  if (counts.unknownUsers > 0) {
-    warnings.push(`担当者名が一致しない行が ${counts.unknownUsers} 件あり、週予定へは未反映です。`);
-  }
-
-  return {
-    ...buildPreview({ files, kind, warnings, ledgerSheets }),
-    mode: 'sync',
-    counts,
+  type ExistingScheduleRow = {
+    id: string;
+    userId: string;
+    startAt: Date;
+    summary: string | null;
+    siteId: string | null;
+    accountingMeta: Prisma.JsonValue | null;
   };
+
+  await prisma.$transaction(
+    async (tx) => {
+      const existingRows: ExistingScheduleRow[] = await tx.workEntry.findMany({
+        where: {
+          kind,
+          startAt: {
+            gte: startOfDayUtc(addDaysYmd(rangeMin, -1)),
+            lt: startOfDayUtc(addDaysYmd(rangeMax, 2)),
+          },
+        },
+        select: { id: true, userId: true, startAt: true, summary: true, siteId: true, accountingMeta: true },
+        orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+      });
+
+      const existingByCell = new Map<string, ExistingScheduleRow[]>();
+      for (const row of existingRows) {
+        const ymd = toYmdLocal(row.startAt);
+        if (!isCoveredDay(ymd)) continue;
+        const cellKey = `${row.userId}|${ymd}`;
+        const list = existingByCell.get(cellKey) ?? [];
+        list.push(row);
+        existingByCell.set(cellKey, list);
+      }
+
+      const deleteIds: string[] = [];
+      const updates: Array<{
+        id: string;
+        data: { startAt: Date; summary: string; siteId: string | null; accountingMeta: Prisma.InputJsonValue };
+      }> = [];
+      const createData: Array<{
+        userId: string;
+        kind: SiteKind;
+        startAt: Date;
+        summary: string;
+        note: string | null;
+        siteId: string | null;
+        accountingMeta: Prisma.InputJsonValue;
+      }> = [];
+
+      const cellKeys = new Set<string>([...desiredByCell.keys(), ...existingByCell.keys()]);
+      for (const cellKey of cellKeys) {
+        const desired = desiredByCell.get(cellKey) ?? [];
+        const existing = existingByCell.get(cellKey) ?? [];
+        const usedIds = new Set<string>();
+        const matchByKey = new Map<string, ExistingScheduleRow>();
+
+        // 1) 同じ rowKey の同期済み予定をそのまま対応づける(ID を保つ)
+        for (const want of desired) {
+          const hit = existing.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
+          if (!hit) continue;
+          usedIds.add(hit.id);
+          matchByKey.set(want.sourceKey, hit);
+        }
+        // 2) 同じ人・日・現場の既存予定(手入力など)は原本の内容で上書きする(ID を保つ)
+        for (const want of desired) {
+          if (matchByKey.has(want.sourceKey)) continue;
+          const wantSummaryKey = normalizeKey(want.summary);
+          const hit = existing.find(
+            (row) =>
+              !usedIds.has(row.id) &&
+              ((want.siteId != null && row.siteId === want.siteId) ||
+                (wantSummaryKey !== '' && normalizeKey(row.summary) === wantSummaryKey)),
+          );
+          if (!hit) continue;
+          usedIds.add(hit.id);
+          matchByKey.set(want.sourceKey, hit);
+        }
+
+        // 3) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
+        let keptManualCount = 0;
+        for (const row of existing) {
+          if (usedIds.has(row.id)) continue;
+          if (hasSharedExcelSyncMeta(row.accountingMeta)) {
+            deleteIds.push(row.id);
+            counts.scheduleDeleted += 1;
+          } else {
+            keptManualCount += 1;
+          }
+        }
+
+        const dayYmd = cellKey.slice(cellKey.indexOf('|') + 1);
+        desired.forEach((want, index) => {
+          const startAt = addMinutes(startOfSharedSyncDay(dayYmd), keptManualCount + index);
+          const accountingMeta = {
+            scheduleEntryKind: 'site',
+            sharedExcelSync: {
+              source: '作業表☆',
+              fileName: workTableFileName,
+              rowKey: want.sourceKey,
+            },
+            labelColor: want.labelColor,
+            scheduleGroupIndex: want.groupIndex,
+            scheduleItemIndex: want.itemIndex,
+          } as Prisma.InputJsonValue;
+
+          const current = matchByKey.get(want.sourceKey);
+          if (!current) {
+            createData.push({
+              userId: want.userId,
+              kind,
+              startAt,
+              summary: want.summary,
+              note: null,
+              siteId: want.siteId,
+              accountingMeta,
+            });
+            counts.scheduleCreated += 1;
+            return;
+          }
+
+          const wasSyncOrigin = hasSharedExcelSyncMeta(current.accountingMeta);
+          const same =
+            wasSyncOrigin &&
+            current.startAt.getTime() === startAt.getTime() &&
+            current.summary === want.summary &&
+            current.siteId === want.siteId &&
+            stableStringify(current.accountingMeta) === stableStringify(accountingMeta);
+          if (same) {
+            counts.scheduleSkipped += 1;
+            return;
+          }
+          if (!wasSyncOrigin) counts.scheduleOverwritten += 1;
+          updates.push({ id: current.id, data: { startAt, summary: want.summary, siteId: want.siteId, accountingMeta } });
+          counts.scheduleUpdated += 1;
+        });
+      }
+
+      if (deleteIds.length > 0) await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
+      for (const update of updates) {
+        await tx.workEntry.update({ where: { id: update.id }, data: update.data, select: { id: true } });
+      }
+      if (createData.length > 0) await tx.workEntry.createMany({ data: createData });
+    },
+    { timeout: 120_000, maxWait: 10_000 },
+  );
+
+  if (unknownAssigneeNames.size > 0) {
+    const names = Array.from(unknownAssigneeNames);
+    const shown = names.slice(0, 10).join('、');
+    const message = `担当者名が一致せず週予定へ未反映の行が ${counts.unknownUsers} 件あります(担当者 ${names.length} 名: ${shown}${names.length > 10 ? ' ほか' : ''})。`;
+    warnings.push(message);
+    console.warn(`[shared-sync] ${message}`);
+  }
 }

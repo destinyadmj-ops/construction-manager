@@ -1,6 +1,6 @@
 import "dotenv/config";
 import type { Worker } from "bullmq";
-import { isSharedSyncPollEnabled, startRemindersWorker, startSharedSyncPoller, startSharedSyncWorker } from "../src/server/queue/worker";
+import { isSharedSyncPollEnabled, startRemindersWorker, startSharedSyncPoller, startSharedSyncScheduleWorker, startSharedSyncWorker } from "../src/server/queue/worker";
 import { RedisUnavailableError } from "../src/server/queue/connection";
 
 const workers: Worker[] = [];
@@ -8,6 +8,7 @@ let stopSharedSyncPoller: (() => void) | null = null;
 try {
   workers.push(startRemindersWorker());
   workers.push(startSharedSyncWorker());
+  workers.push(startSharedSyncScheduleWorker());
   if (isSharedSyncPollEnabled()) {
     stopSharedSyncPoller = startSharedSyncPoller();
   } else {

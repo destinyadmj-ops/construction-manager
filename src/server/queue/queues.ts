@@ -4,10 +4,12 @@ import { createRedisConnectionOrNull, RedisUnavailableError } from './connection
 export const QUEUE_NAMES = {
   reminders: 'reminders',
   sharedSync: 'shared-sync',
+  sharedSyncSchedule: 'shared-sync-schedule',
 } as const;
 
 let remindersQueue: Queue | undefined;
 let sharedSyncQueue: Queue | undefined;
+let sharedSyncScheduleQueue: Queue | undefined;
 
 export function getRemindersQueue() {
   if (!remindersQueue) {
@@ -27,4 +29,14 @@ export function getSharedSyncQueue() {
   }
 
   return sharedSyncQueue;
+}
+
+export function getSharedSyncScheduleQueue() {
+  if (!sharedSyncScheduleQueue) {
+    const connection = createRedisConnectionOrNull();
+    if (!connection) throw new RedisUnavailableError('REDIS_URL is not set');
+    sharedSyncScheduleQueue = new Queue(QUEUE_NAMES.sharedSyncSchedule, { connection });
+  }
+
+  return sharedSyncScheduleQueue;
 }

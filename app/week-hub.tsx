@@ -67,6 +67,7 @@ import { writeCachedUserCandidates } from './user-candidate-cache';
 import { fetchSharedInflight } from './fetch-inflight';
 import { TopHorizontalScrollbar, useTopHorizontalScrollbar } from './top-horizontal-scrollbar';
 import { readWeekPayloadCache, writeWeekPayloadCache } from './week-payload-cache';
+import { useAutoRefresh } from './use-auto-refresh';
 
 type ViewMode = 'week' | 'month' | 'year';
 
@@ -92,7 +93,8 @@ type WeekHubHistoryState = {
 };
 
 const WEEK_HUB_HISTORY_STATE_KEY = 'masterHub.weekHubState';
-const ELECTRON_WEEK_POLL_INTERVAL_MS = 5 * 60 * 1000;
+// 共有フォルダ同期(5分おき)に合わせ、表示中の週・月・年を5分おきに再取得する
+const SCHEDULE_AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 type GridLayout = 'compact' | 'comfortable';
 type CellClickAction = 'toggle' | 'add' | 'remove' | 'replace2' | 'swap' | 'recolor';
@@ -2903,45 +2905,6 @@ function WeekHubInner() {
     };
   }, [applyWeekPayloadText, kindQuery, mode, weekStart]);
 
-  useEffect(() => {
-    if (!isElectronShell || mode !== 'week') return;
-
-    let cancelled = false;
-    let inFlight = false;
-    const intervalMs = ELECTRON_WEEK_POLL_INTERVAL_MS;
-
-    const tick = async () => {
-      if (cancelled || inFlight) return;
-      if (typeof document !== 'undefined' && document.hidden) return;
-      inFlight = true;
-      try {
-        const res = await fetch(`/api/schedule/week?weekStart=${encodeURIComponent(toYmd(weekStart))}&${kindQuery}`, {
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          const text = await res.text();
-          if (!cancelled) {
-            applyWeekPayloadText(text);
-            writeWeekPayloadCache(`week:${toYmd(weekStart)}:${kindQuery}`, text);
-          }
-        }
-      } catch {
-        // ignore background refresh errors
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    const timer = window.setInterval(() => {
-      void tick();
-    }, intervalMs);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [applyWeekPayloadText, isElectronShell, kindQuery, mode, weekStart]);
-
   const viewMonth = useMemo(() => {
     return `${cursorDate.getFullYear()}-${pad2(cursorDate.getMonth() + 1)}`;
   }, [cursorDate]);
@@ -2979,6 +2942,8 @@ function WeekHubInner() {
       // ignore
     }
   }, [applyWeekPayloadText, kindQuery, mode, viewMonth, viewYear, weekStart]);
+
+  useAutoRefresh(() => void refreshCurrentView(), SCHEDULE_AUTO_REFRESH_INTERVAL_MS);
 
   const createUser = useCallback(
     async (input: { name: string; email: string }) => {

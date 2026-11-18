@@ -138,6 +138,29 @@ type SharedSyncPreview = {
   warnings: string[];
 };
 
+type SharedSyncRunStatusView = {
+  at: string;
+  result: 'success' | 'failed';
+  message: string | null;
+  lastSuccessAt: string | null;
+  counts: Record<string, number> | null;
+};
+
+type SharedSyncStatusView = { schedule: SharedSyncRunStatusView | null; ledger: SharedSyncRunStatusView | null };
+
+function formatSyncTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function describeSharedSyncStatus(label: string, status: SharedSyncRunStatusView | null): string {
+  if (!status) return `${label}: 実行記録なし(worker 未稼働の可能性)`;
+  if (status.result === 'success') return `${label}: ${formatSyncTime(status.at)} 成功`;
+  const lastSuccess = status.lastSuccessAt ? `最終成功 ${formatSyncTime(status.lastSuccessAt)}` : '成功実績なし';
+  return `${label}: ${formatSyncTime(status.at)} 失敗(${status.message ?? '原因不明'}) / ${lastSuccess}`;
+}
+
 type SharedSyncResult = SharedSyncPreview & {
   counts: {
     sitesCreated: number;
@@ -145,6 +168,8 @@ type SharedSyncResult = SharedSyncPreview & {
     sitesMatched: number;
     sitesSkipped: number;
     scheduleCreated: number;
+    scheduleUpdated: number;
+    scheduleDeleted: number;
     scheduleSkipped: number;
     workSlipsCreated: number;
     workSlipsSkipped: number;
@@ -229,6 +254,7 @@ export default function SiteLedgerPage() {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [sharedSyncPreview, setSharedSyncPreview] = useState<SharedSyncPreview | null>(null);
   const [sharedSyncMsg, setSharedSyncMsg] = useState<string | null>(null);
+  const [sharedSyncStatus, setSharedSyncStatus] = useState<SharedSyncStatusView | null>(null);
   const [isSharedSyncing, setIsSharedSyncing] = useState(false);
 
   // 削除機能関連のstate
@@ -511,6 +537,21 @@ export default function SiteLedgerPage() {
         },
         warnings: warningsRaw.filter((x): x is string => typeof x === 'string'),
       });
+
+      const parseRunStatus = (raw: unknown): SharedSyncRunStatusView | null => {
+        if (!raw || typeof raw !== 'object') return null;
+        const item = raw as Record<string, unknown>;
+        if (typeof item.at !== 'string') return null;
+        return {
+          at: item.at,
+          result: item.result === 'success' ? 'success' : 'failed',
+          message: typeof item.message === 'string' ? item.message : null,
+          lastSuccessAt: typeof item.lastSuccessAt === 'string' ? item.lastSuccessAt : null,
+          counts: item.counts && typeof item.counts === 'object' ? (item.counts as Record<string, number>) : null,
+        };
+      };
+      const statusRaw = obj?.status && typeof obj.status === 'object' ? (obj.status as Record<string, unknown>) : null;
+      setSharedSyncStatus({ schedule: parseRunStatus(statusRaw?.schedule), ledger: parseRunStatus(statusRaw?.ledger) });
     } catch (e) {
       setSharedSyncPreview(null);
       setSharedSyncMsg(e instanceof Error ? `共有同期の候補確認に失敗: ${e.message}` : '共有同期の候補確認に失敗しました');
@@ -587,6 +628,8 @@ export default function SiteLedgerPage() {
           sitesMatched: typeof countsRaw?.sitesMatched === 'number' ? countsRaw.sitesMatched : 0,
           sitesSkipped: typeof countsRaw?.sitesSkipped === 'number' ? countsRaw.sitesSkipped : 0,
           scheduleCreated: typeof countsRaw?.scheduleCreated === 'number' ? countsRaw.scheduleCreated : 0,
+          scheduleUpdated: typeof countsRaw?.scheduleUpdated === 'number' ? countsRaw.scheduleUpdated : 0,
+          scheduleDeleted: typeof countsRaw?.scheduleDeleted === 'number' ? countsRaw.scheduleDeleted : 0,
           scheduleSkipped: typeof countsRaw?.scheduleSkipped === 'number' ? countsRaw.scheduleSkipped : 0,
           workSlipsCreated: typeof countsRaw?.workSlipsCreated === 'number' ? countsRaw.workSlipsCreated : 0,
           workSlipsSkipped: typeof countsRaw?.workSlipsSkipped === 'number' ? countsRaw.workSlipsSkipped : 0,
@@ -595,7 +638,7 @@ export default function SiteLedgerPage() {
       };
 
       setSharedSyncMsg(
-        `共有同期: 現場 新規${result.counts.sitesCreated} / 補完${result.counts.sitesUpdated} / 既存${result.counts.sitesMatched} / スキップ${result.counts.sitesSkipped} | 週予定 追加${result.counts.scheduleCreated} / 重複${result.counts.scheduleSkipped} | 作業伝票 追加${result.counts.workSlipsCreated} / 既存${result.counts.workSlipsSkipped}`,
+        `共有同期: 現場 新規${result.counts.sitesCreated} / 補完${result.counts.sitesUpdated} / 既存${result.counts.sitesMatched} / スキップ${result.counts.sitesSkipped} | 週予定 追加${result.counts.scheduleCreated} / 更新${result.counts.scheduleUpdated} / 削除${result.counts.scheduleDeleted} / 変更なし${result.counts.scheduleSkipped} | 作業伝票 追加${result.counts.workSlipsCreated} / 既存${result.counts.workSlipsSkipped}`,
       );
 
       if (result.warnings.length > 0) {
@@ -949,6 +992,13 @@ export default function SiteLedgerPage() {
                 <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{sharedSyncPreview.warnings.join(' / ')}</div>
               ) : null}
               {sharedSyncMsg ? <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{sharedSyncMsg}</div> : null}
+              {canEditSite && sharedSyncStatus ? (
+                <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300" data-testid="shared-sync-status">
+                  {describeSharedSyncStatus('週予定の同期(5分おき)', sharedSyncStatus.schedule)}
+                  <br />
+                  {describeSharedSyncStatus('台帳・関係会社の反映(30分おき)', sharedSyncStatus.ledger)}
+                </div>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {canEditSite ? (

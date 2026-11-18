@@ -1,5 +1,6 @@
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { SharedSyncError, getSharedSyncPreview, runSharedSync } from '@/server/shared-excel-sync';
+import { readSharedSyncStatuses } from '@/server/shared-sync-status';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -42,7 +43,8 @@ export async function GET(request: Request) {
     const targetTerm = toTargetTerm(query.success ? query.data.targetTerm : undefined);
 
     const preview = await getSharedSyncPreview({ kind, targetTerm });
-    return Response.json(preview, { headers: { 'Cache-Control': 'no-store' } });
+    const status = await readSharedSyncStatuses(kind);
+    return Response.json({ ...preview, status }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '共有フォルダの確認に失敗しました';
     return Response.json({ ok: false, error: message }, { status: 500 });

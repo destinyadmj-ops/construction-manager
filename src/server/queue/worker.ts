@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
 import { createRedisConnectionOrNull, RedisUnavailableError } from './connection';
-import { QUEUE_NAMES, getSharedSyncQueue } from './queues';
+import { QUEUE_NAMES, getSharedSyncQueue, getSharedSyncScheduleQueue } from './queues';
 import { SharedSyncError, getSharedSyncSourceVersion, runSharedSync } from '@/server/shared-excel-sync';
 
 export function startRemindersWorker() {
@@ -17,18 +17,24 @@ export function startRemindersWorker() {
   );
 }
 
+type SharedSyncScope = 'schedule' | 'ledger' | 'all';
+
 type SharedSyncJobData = {
   kind: 'NORMAL' | 'DAILY';
   targetTerm: number | null;
   sourceKey: string;
+  // 未指定(旧ジョブ)は all として扱う
+  scope?: SharedSyncScope;
 };
 
-const DEFAULT_SHARED_SYNC_INTERVAL_MS = 30 * 60_000;
+// 週予定(作業表☆)の同期は5分おき、台帳・関係会社(作業伝票)の反映は30分おき。重い台帳反映が週予定を遅らせないよう、キューもロックも分ける。
+const DEFAULT_SCHEDULE_SYNC_INTERVAL_MS = 5 * 60_000;
+const DEFAULT_LEDGER_SYNC_INTERVAL_MS = 30 * 60_000;
 const MIN_SHARED_SYNC_INTERVAL_MS = 60_000;
 
-function readSharedSyncPollIntervalMs() {
-  const raw = Number(process.env.SHARED_SYNC_POLL_INTERVAL_MS ?? DEFAULT_SHARED_SYNC_INTERVAL_MS);
-  if (!Number.isFinite(raw) || raw < MIN_SHARED_SYNC_INTERVAL_MS) return DEFAULT_SHARED_SYNC_INTERVAL_MS;
+function readIntervalMs(envName: string, defaultMs: number) {
+  const raw = Number(process.env[envName] ?? defaultMs);
+  if (!Number.isFinite(raw) || raw < MIN_SHARED_SYNC_INTERVAL_MS) return defaultMs;
   return Math.floor(raw);
 }
 
@@ -46,31 +52,33 @@ function parseTargetTermByKind(kind: 'NORMAL' | 'DAILY'): number | null {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : null;
 }
 
-export function startSharedSyncWorker() {
+function createSharedSyncWorker(queueName: string) {
   const connection = createRedisConnectionOrNull();
   if (!connection) throw new RedisUnavailableError('REDIS_URL is not set');
 
   return new Worker(
-    QUEUE_NAMES.sharedSync,
+    queueName,
     async (job) => {
       const data = (job.data ?? {}) as Partial<SharedSyncJobData>;
       const kind = data.kind === 'DAILY' ? 'DAILY' : 'NORMAL';
+      const scope: SharedSyncScope = data.scope === 'schedule' || data.scope === 'ledger' ? data.scope : 'all';
       const targetTerm = Number.isFinite(data.targetTerm) ? Number(data.targetTerm) : null;
       const sourceKey = typeof data.sourceKey === 'string' ? data.sourceKey : null;
       const startedAt = Date.now();
       try {
-        const result = await runSharedSync({ kind, targetTerm });
+        const result = await runSharedSync({ kind, targetTerm, scope });
         console.log(
-          `[worker][shared-sync] success: kind=${kind} durationMs=${Date.now() - startedAt} counts=${JSON.stringify(result.counts)}`
+          `[worker][shared-sync] success: scope=${scope} kind=${kind} durationMs=${Date.now() - startedAt} counts=${JSON.stringify(result.counts)}${result.warnings.length > 0 ? ` warnings=${JSON.stringify(result.warnings.slice(0, 3))}` : ''}`
         );
-        return { ok: true, kind, sourceKey, counts: result.counts };
+        return { ok: true, scope, kind, sourceKey, counts: result.counts };
       } catch (error) {
         if (error instanceof SharedSyncError && error.code === 'BUSY') {
-          console.log(`[worker][shared-sync] skipped (busy): kind=${kind}`);
-          return { ok: true, skipped: true, kind, sourceKey };
+          // 別の同期(手動同期など)が実行中。次の周期で再実行されるが、見落とさないよう warn で残す。
+          console.warn(`[worker][shared-sync] skipped (busy): scope=${scope} kind=${kind} reason=${error.message}`);
+          return { ok: true, skipped: true, scope, kind, sourceKey };
         }
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[worker][shared-sync] failed: kind=${kind} durationMs=${Date.now() - startedAt} error=${message}`);
+        console.error(`[worker][shared-sync] failed: scope=${scope} kind=${kind} durationMs=${Date.now() - startedAt} error=${message}`);
         throw error;
       }
     },
@@ -78,13 +86,21 @@ export function startSharedSyncWorker() {
   );
 }
 
-export function startSharedSyncPoller() {
+// 台帳・関係会社の反映キュー(30分おき・手動同期の従来キュー)
+export function startSharedSyncWorker() {
+  return createSharedSyncWorker(QUEUE_NAMES.sharedSync);
+}
+
+// 週予定の同期キュー(5分おき)。台帳側の長い処理に待たされないよう別キューにする。
+export function startSharedSyncScheduleWorker() {
+  return createSharedSyncWorker(QUEUE_NAMES.sharedSyncSchedule);
+}
+
+function startScopePoller(scope: Exclude<SharedSyncScope, 'all'>, queue: ReturnType<typeof getSharedSyncQueue>, intervalMs: number) {
   const kinds: Array<'NORMAL' | 'DAILY'> = ['NORMAL', 'DAILY'];
-  const intervalMs = readSharedSyncPollIntervalMs();
-  const queue = getSharedSyncQueue();
   let polling = false;
 
-  console.log(`[worker][shared-sync] poller started: intervalMs=${intervalMs} (sync on start + every interval, regardless of file mtime)`);
+  console.log(`[worker][shared-sync] poller started: scope=${scope} intervalMs=${intervalMs} (sync on start + every interval, regardless of file mtime)`);
 
   // mtime に関わらず毎回同期する(再実行は冪等)。起動前の更新や過去の失敗後でも必ず追従させるため。
   const tick = async (reason: 'start' | 'interval') => {
@@ -94,33 +110,33 @@ export function startSharedSyncPoller() {
       for (const kind of kinds) {
         const targetTerm = parseTargetTermByKind(kind);
         try {
-          const version = await getSharedSyncSourceVersion({ kind, targetTerm });
+          const version = await getSharedSyncSourceVersion({ kind, targetTerm, scope });
           if (!version.hasSources || !version.key) {
             console.warn(
-              `[worker][shared-sync] skip: kind=${kind} sources not found dir=${version.sharedDir} workTable=${version.workTableFileName ?? '-'} workSlip=${version.workSlipFileName ?? '-'}`
+              `[worker][shared-sync] skip: scope=${scope} kind=${kind} sources not found dir=${version.sharedDir} workTable=${version.workTableFileName ?? '-'} workSlip=${version.workSlipFileName ?? '-'}`
             );
             continue;
           }
 
           const pending = await queue.getJobs(['waiting', 'active', 'delayed'], 0, 50);
           if (pending.some((job) => (job.data as Partial<SharedSyncJobData> | undefined)?.kind === kind)) {
-            console.log(`[worker][shared-sync] skip enqueue: kind=${kind} previous job still pending`);
+            console.log(`[worker][shared-sync] skip enqueue: scope=${scope} kind=${kind} previous job still pending`);
             continue;
           }
 
           await queue.add(
             'shared-sync',
-            { kind, targetTerm, sourceKey: version.key } satisfies SharedSyncJobData,
+            { kind, targetTerm, sourceKey: version.key, scope } satisfies SharedSyncJobData,
             {
-              jobId: `shared-sync-${kind}-${Date.now()}`,
+              jobId: `shared-sync-${scope}-${kind}-${Date.now()}`,
               removeOnComplete: 20,
               removeOnFail: 50,
             }
           );
-          console.log(`[worker][shared-sync] enqueued: kind=${kind} reason=${reason} key=${version.key}`);
+          console.log(`[worker][shared-sync] enqueued: scope=${scope} kind=${kind} reason=${reason} key=${version.key}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`[worker][shared-sync] tick failed: kind=${kind} reason=${reason} error=${message}`);
+          console.error(`[worker][shared-sync] tick failed: scope=${scope} kind=${kind} reason=${reason} error=${message}`);
         }
       }
     } finally {
@@ -135,5 +151,22 @@ export function startSharedSyncPoller() {
 
   return () => {
     clearInterval(timer);
+  };
+}
+
+export function startSharedSyncPoller() {
+  const stopSchedule = startScopePoller(
+    'schedule',
+    getSharedSyncScheduleQueue(),
+    readIntervalMs('SHARED_SYNC_SCHEDULE_INTERVAL_MS', DEFAULT_SCHEDULE_SYNC_INTERVAL_MS)
+  );
+  const stopLedger = startScopePoller(
+    'ledger',
+    getSharedSyncQueue(),
+    readIntervalMs('SHARED_SYNC_POLL_INTERVAL_MS', DEFAULT_LEDGER_SYNC_INTERVAL_MS)
+  );
+  return () => {
+    stopSchedule();
+    stopLedger();
   };
 }
