@@ -301,6 +301,56 @@ npm run prod:https
 pg_dump -U postgres -d master_hub > backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql
 ```
 
+## 同期の確認
+
+共有フォルダ同期(worker)が本番ホストで動いているかを確認する手順。本番ホスト(Docker Desktop のPC)の PowerShell で、`DEPLOY_PATH` のリポジトリ直下から実行する。以降の `$c` は次の別名として使う。
+
+```powershell
+$c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
+```
+
+### 確認手順(7ステップ)
+
+1. コンテナが全部 Up か: `docker $c ps` — `redis` / `web` が `healthy`、`worker` が `Up` であること(`Restarting` / `Exited` は異常)。
+2. worker のログに同期の行があるか: `docker $c logs --tail=200 worker | Select-String shared-sync`
+   - 起動時に `poller started: scope=schedule intervalMs=300000` と `scope=ledger intervalMs=1800000` が出ている
+   - 直近5分以内に `enqueued: scope=schedule kind=NORMAL` と `success: scope=schedule kind=NORMAL durationMs=... counts={...}` がある(台帳は30分以内)
+   - `failed` / `skip` / `tick failed` / `skipped (busy)` が続いていない(下の表を参照)
+3. 共有フォルダが worker から見えているか: `docker $c exec worker ls /shared-source` — `作業表☆.xlsx` が見えること。空・`No such file or directory` なら `SHARED_SOURCE_HOST_PATH` が誤り。
+4. 環境変数が入っているか: `docker $c exec worker sh -c "printenv | grep -E 'SHARED|MASTER_HUB'"` — `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` と `MASTER_HUB_STORAGE_DIR` があること。`SHARED_SOURCE_HOST_PATH` は compose 側(ホスト)の値なので、コンテナ内には出ない場合がある。ホスト側は `Select-String -Path .env.production -Pattern 'SHARED'` で確認する。
+5. Redis が生きているか: `docker $c exec redis redis-cli ping` — `PONG`。
+6. 現場台帳画面(編集権限者)の同期ステータス行: 「週予定の同期(5分おき)」の最終成功が5分以内(目安: 最大でも10分)で、「注意: ...が止まっている可能性」の赤/黄の行が出ていないこと。
+7. 修正が本番に届いているか: push 済み(`git log origin/main -n 5` に目的のコミットがある)かつ配備済み(GitHub Actions の `Deploy to Production` が成功、本番ホストで `git log -n 1` が同じコミット)。push するだけで自動配備される。
+
+### よくある失敗
+
+| ログ・画面の表示 | 原因 | 対処 |
+| --- | --- | --- |
+| `skip: ... sources not found dir=/shared-source 共有フォルダにアクセスできません: ... (ENOENT)` | `SHARED_SOURCE_HOST_PATH` のパスが存在しない/誤り(bind mount 失敗) | `.env.production` のパスを直して `docker $c up -d` で worker を再作成 |
+| `skip: ... sources not found ... workTable=- workSlip=-` | 共有フォルダは見えるが `作業表☆.xlsx` が無い(`SHARED_SOURCE_HOST_PATH` 未設定時の空ダミーも同じ表示) | 共有フォルダに原本を置く / パスを設定する |
+| `failed: scope=schedule ... error=必要な元データがありません: ...` | 手動同期など、元データが無い状態で実行された | 共有フォルダとファイル名を確認 |
+| `failed: ... error=Excel 読み取りに失敗: ...` | 原本が壊れている/保存途中/パスワード保護 | ファイルを開き直して保存し直す(次の周期で自動再試行) |
+| `skip enqueue: ... previous job still pending` が連続 | 前回のジョブが終わらない(DB遅延・worker 停止) | `failed` の行と DB 接続を確認し、`docker $c restart worker` |
+| `skipped (busy): ...` が連続 | 手動同期やブック保存の反映と周期同期が競合 | 一時的なら無視。連続するなら手動同期の実行中でないか確認 |
+| `tick failed: ... error=...` | Redis 未接続・キュー操作の失敗 | `redis-cli ping` と `REDIS_URL` を確認 |
+| ログに `poller started` が無い/worker が再起動を繰り返す | `SHARED_SYNC_POLL_ENABLED=0`、`NODE_ENV` 不一致、起動時エラー | `docker $c logs worker` の先頭を確認し、`SHARED_SYNC_POLL_ENABLED` を確認 |
+| デプロイ後に共有フォルダ系の設定が消えた | `.env.production` の再生成で `SHARED_SOURCE_HOST_PATH` 等が落ちた(`deploy.yml` は既存行を引き継ぐが、手で作り直した場合は消える) | `.env.production` に `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` を再設定して `up -d` |
+| ブック保存が台帳に反映されない | 台帳はブックが正本で共有フォルダに依存しない。反映失敗は同期ステータス(台帳)に `failed` / `skipped` として残る | 現場台帳画面の「台帳・関係会社の反映」の結果と worker/web ログを確認 |
+
+### 停止の自動検知(画面警告)
+
+- worker は周期ごとの結果(`enqueued` / `no-sources` / `previous-pending` / `error`)を Redis のキー `masterhub:shared-sync:poller:{scope}:{kind}` に記録する(心拍)。
+- 現場台帳画面(編集権限者のみ)は、最終成功が 週予定 15分 / 台帳 90分 を超える、またはポーラーの記録が古い・無い場合に「注意: ... が止まっている可能性」と理由を表示する。しきい値は `src/shared/shared-sync-health.ts` の定数(`SCHEDULE_STALE_MS` / `LEDGER_STALE_MS`)。
+- 同じ情報は `GET /api/sites/shared-sync`(`status` / `poller` / `health`)でも取得できる。
+
+### worker ヘルスチェックの提案(未適用)
+
+`docker-compose.prod.yml` は変更していない。承認後に適用する案:
+
+- `worker` に `healthcheck` を追加し、Redis の心拍キーが一定時間内に更新されているかを `node -e` で確認する(例: `masterhub:shared-sync:poller:schedule:NORMAL` の `at` が15分以内なら 0、超過なら 1)。
+- 影響: (1) 共有フォルダが無い・空の間も心拍は更新されるので `healthy` のまま(= 「worker が生きている」の判定であり、「同期が成功している」の判定ではない)。(2) `docker compose up -d` は `service_healthy` を待つのは `depends_on` を書いた側だけなので、`deploy.yml` の `check_ready`(web の `/api/health?probe=ready` のみ)は変えなくても動く。worker を `unhealthy` で自動再起動することはない(`restart: unless-stopped` は unhealthy では再起動しない)ので、検知用の表示(`docker ps`)に留まる。(3) 自動再起動まで行うなら別途 autoheal 相当が必要で、今回は対象外。
+- 起動直後(初回 tick 前)は `start_period` を長め(例: 60s)にして誤検知を避ける。
+
 ## トラブルシューティング
 
 ### ポート競合

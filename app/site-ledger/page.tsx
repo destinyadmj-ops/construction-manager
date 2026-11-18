@@ -140,13 +140,19 @@ type SharedSyncPreview = {
 
 type SharedSyncRunStatusView = {
   at: string;
-  result: 'success' | 'failed';
+  result: 'success' | 'failed' | 'skipped';
   message: string | null;
   lastSuccessAt: string | null;
   counts: Record<string, number> | null;
 };
 
-type SharedSyncStatusView = { schedule: SharedSyncRunStatusView | null; ledger: SharedSyncRunStatusView | null };
+type SharedSyncHealthView = { level: 'ok' | 'warn'; reasons: string[] };
+
+type SharedSyncStatusView = {
+  schedule: SharedSyncRunStatusView | null;
+  ledger: SharedSyncRunStatusView | null;
+  health: { schedule: SharedSyncHealthView | null; ledger: SharedSyncHealthView | null };
+};
 
 function formatSyncTime(iso: string): string {
   const date = new Date(iso);
@@ -157,6 +163,7 @@ function formatSyncTime(iso: string): string {
 function describeSharedSyncStatus(label: string, status: SharedSyncRunStatusView | null): string {
   if (!status) return `${label}: 実行記録なし(worker 未稼働の可能性)`;
   if (status.result === 'success') return `${label}: ${formatSyncTime(status.at)} 成功`;
+  if (status.result === 'skipped') return `${label}: ${formatSyncTime(status.at)} 見送り(${status.message ?? '実行中'})`;
   const lastSuccess = status.lastSuccessAt ? `最終成功 ${formatSyncTime(status.lastSuccessAt)}` : '成功実績なし';
   return `${label}: ${formatSyncTime(status.at)} 失敗(${status.message ?? '原因不明'}) / ${lastSuccess}`;
 }
@@ -544,14 +551,25 @@ export default function SiteLedgerPage() {
         if (typeof item.at !== 'string') return null;
         return {
           at: item.at,
-          result: item.result === 'success' ? 'success' : 'failed',
+          result: item.result === 'success' ? 'success' : item.result === 'skipped' ? 'skipped' : 'failed',
           message: typeof item.message === 'string' ? item.message : null,
           lastSuccessAt: typeof item.lastSuccessAt === 'string' ? item.lastSuccessAt : null,
           counts: item.counts && typeof item.counts === 'object' ? (item.counts as Record<string, number>) : null,
         };
       };
       const statusRaw = obj?.status && typeof obj.status === 'object' ? (obj.status as Record<string, unknown>) : null;
-      setSharedSyncStatus({ schedule: parseRunStatus(statusRaw?.schedule), ledger: parseRunStatus(statusRaw?.ledger) });
+      const parseHealth = (raw: unknown): SharedSyncHealthView | null => {
+        if (!raw || typeof raw !== 'object') return null;
+        const item = raw as Record<string, unknown>;
+        const reasons = Array.isArray(item.reasons) ? item.reasons.filter((x): x is string => typeof x === 'string') : [];
+        return { level: item.level === 'warn' ? 'warn' : 'ok', reasons };
+      };
+      const healthRaw = obj?.health && typeof obj.health === 'object' ? (obj.health as Record<string, unknown>) : null;
+      setSharedSyncStatus({
+        schedule: parseRunStatus(statusRaw?.schedule),
+        ledger: parseRunStatus(statusRaw?.ledger),
+        health: { schedule: parseHealth(healthRaw?.schedule), ledger: parseHealth(healthRaw?.ledger) },
+      });
     } catch (e) {
       setSharedSyncPreview(null);
       setSharedSyncMsg(e instanceof Error ? `共有同期の候補確認に失敗: ${e.message}` : '共有同期の候補確認に失敗しました');
@@ -997,6 +1015,15 @@ export default function SiteLedgerPage() {
                   {describeSharedSyncStatus('週予定の同期(5分おき)', sharedSyncStatus.schedule)}
                   <br />
                   {describeSharedSyncStatus('台帳・関係会社の反映(30分おき)', sharedSyncStatus.ledger)}
+                  {(['schedule', 'ledger'] as const).map((scope) => {
+                    const health = sharedSyncStatus.health[scope];
+                    if (!health || health.level !== 'warn') return null;
+                    return (
+                      <div key={scope} className="text-amber-700 dark:text-amber-300" data-testid={`shared-sync-warning-${scope}`}>
+                        注意: {scope === 'schedule' ? '週予定の同期' : '台帳・関係会社の反映'}が止まっている可能性: {health.reasons.join(' / ')}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>

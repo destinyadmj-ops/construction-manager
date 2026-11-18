@@ -1,6 +1,7 @@
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { SharedSyncError, getSharedSyncPreview, runSharedSync } from '@/server/shared-excel-sync';
-import { readSharedSyncStatuses } from '@/server/shared-sync-status';
+import { readSharedPollerTicks, readSharedSyncStatuses } from '@/server/shared-sync-status';
+import { evaluateSharedSyncHealth } from '@/shared/shared-sync-health';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -43,8 +44,13 @@ export async function GET(request: Request) {
     const targetTerm = toTargetTerm(query.success ? query.data.targetTerm : undefined);
 
     const preview = await getSharedSyncPreview({ kind, targetTerm });
-    const status = await readSharedSyncStatuses(kind);
-    return Response.json({ ...preview, status }, { headers: { 'Cache-Control': 'no-store' } });
+    const [status, poller] = await Promise.all([readSharedSyncStatuses(kind), readSharedPollerTicks(kind)]);
+    const nowMs = Date.now();
+    const health = {
+      schedule: evaluateSharedSyncHealth({ scope: 'schedule', run: status.schedule, poller: poller.schedule, nowMs }),
+      ledger: evaluateSharedSyncHealth({ scope: 'ledger', run: status.ledger, poller: poller.ledger, nowMs }),
+    };
+    return Response.json({ ...preview, status, poller, health }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '共有フォルダの確認に失敗しました';
     return Response.json({ ok: false, error: message }, { status: 500 });

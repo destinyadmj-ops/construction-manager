@@ -730,8 +730,11 @@ function MobileWeekHubInner() {
   }, [authUser?.id, readLocalUserOrder, userOrderKey, writeLocalUserOrder]);
 
   // 週予定の取得。現場一覧(約1000件)の取得を待たずに予定を先に表示する
+  const handledAutoRefreshTickRef = useRef(0);
   useEffect(() => {
     const controller = new AbortController();
+    const isAutoRefresh = handledAutoRefreshTickRef.current !== autoRefreshTick;
+    handledAutoRefreshTickRef.current = autoRefreshTick;
     const weekYmd = toYmd(weekStart);
     // 訪問済みの週は前回のデータを先に表示し、裏で必ず最新を取得して置き換える(stale-while-revalidate)
     const cacheKey = `mobile-week:${weekYmd}:${scheduleKind}`;
@@ -745,7 +748,8 @@ function MobileWeekHubInner() {
       }
     }
     queueMicrotask(() => {
-      if (controller.signal.aborted) return;
+      // 自動更新は表示中の予定・読み込み表示・エラー表示に触れない
+      if (controller.signal.aborted || isAutoRefresh) return;
       if (cachedSchedule) {
         setSchedule(cachedSchedule);
         setIsLoading(false);
@@ -768,7 +772,7 @@ function MobileWeekHubInner() {
         writeWeekPayloadCache(cacheKey, text);
       })
       .catch((cause) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || isAutoRefresh) return;
         setSchedule(null);
         setError(cause instanceof Error ? cause.message : '予定の取得に失敗しました');
       })

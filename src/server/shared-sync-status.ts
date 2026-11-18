@@ -85,3 +85,63 @@ export async function readSharedSyncStatuses(
   });
   return result ?? { schedule: null, ledger: null };
 }
+
+export type SharedPollerTick = {
+  scope: Exclude<SharedSyncScope, 'all'>;
+  kind: SiteKind;
+  /** tick を実行した時刻(ISO)。worker が生きている証拠(ハートビート) */
+  at: string;
+  reason: 'enqueued' | 'no-sources' | 'previous-pending' | 'error';
+  message?: string;
+  /** 直近で同期ジョブを投入した時刻(ISO) */
+  lastEnqueuedAt?: string;
+};
+
+function pollerKey(scope: SharedPollerTick['scope'], kind: SiteKind) {
+  return `masterhub:shared-sync:poller:${scope}:${kind}`;
+}
+
+// ポーラーの tick 結果を残す。同期自体の成否とは別に「worker が動いているか・なぜ投入されないか」を web から見えるようにする。
+export async function recordSharedPollerTick(
+  scope: SharedPollerTick['scope'],
+  kind: SiteKind,
+  entry: Pick<SharedPollerTick, 'reason' | 'message'>,
+): Promise<void> {
+  await withRedis(async (redis) => {
+    const key = pollerKey(scope, kind);
+    const now = new Date().toISOString();
+    let lastEnqueuedAt: string | undefined;
+    if (entry.reason === 'enqueued') {
+      lastEnqueuedAt = now;
+    } else {
+      const previousText = await redis.get(key);
+      if (previousText) {
+        try {
+          lastEnqueuedAt = (JSON.parse(previousText) as Partial<SharedPollerTick>).lastEnqueuedAt;
+        } catch {
+          // ignore broken previous record
+        }
+      }
+    }
+    const value: SharedPollerTick = { scope, kind, at: now, ...entry, ...(lastEnqueuedAt ? { lastEnqueuedAt } : {}) };
+    await redis.set(key, JSON.stringify(value), 'EX', STATUS_TTL_SECONDS);
+  });
+}
+
+export async function readSharedPollerTicks(
+  kind: SiteKind,
+): Promise<{ schedule: SharedPollerTick | null; ledger: SharedPollerTick | null }> {
+  const result = await withRedis(async (redis) => {
+    const [scheduleText, ledgerText] = await Promise.all([redis.get(pollerKey('schedule', kind)), redis.get(pollerKey('ledger', kind))]);
+    const parse = (text: string | null): SharedPollerTick | null => {
+      if (!text) return null;
+      try {
+        return JSON.parse(text) as SharedPollerTick;
+      } catch {
+        return null;
+      }
+    };
+    return { schedule: parse(scheduleText), ledger: parse(ledgerText) };
+  });
+  return result ?? { schedule: null, ledger: null };
+}

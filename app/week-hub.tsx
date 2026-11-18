@@ -2943,7 +2943,11 @@ function WeekHubInner() {
     }
   }, [applyWeekPayloadText, kindQuery, mode, viewMonth, viewYear, weekStart]);
 
-  useAutoRefresh(() => void refreshCurrentView(), SCHEDULE_AUTO_REFRESH_INTERVAL_MS);
+  // 入力・ドラッグ・Undo/Redo中は自動更新を見送り、次の周期で反映する
+  useAutoRefresh(() => {
+    if (editingCell || draggedCell || draggedSite || isUndoRedoBusy) return;
+    void refreshCurrentView();
+  }, SCHEDULE_AUTO_REFRESH_INTERVAL_MS);
 
   const createUser = useCallback(
     async (input: { name: string; email: string }) => {

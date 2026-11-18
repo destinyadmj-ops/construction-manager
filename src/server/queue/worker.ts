@@ -2,6 +2,7 @@ import { Worker } from 'bullmq';
 import { createRedisConnectionOrNull, RedisUnavailableError } from './connection';
 import { QUEUE_NAMES, getSharedSyncQueue, getSharedSyncScheduleQueue } from './queues';
 import { SharedSyncError, getSharedSyncSourceVersion, runSharedSync } from '@/server/shared-excel-sync';
+import { recordSharedPollerTick } from '@/server/shared-sync-status';
 
 export function startRemindersWorker() {
   const connection = createRedisConnectionOrNull();
@@ -112,15 +113,19 @@ function startScopePoller(scope: Exclude<SharedSyncScope, 'all'>, queue: ReturnT
         try {
           const version = await getSharedSyncSourceVersion({ kind, targetTerm, scope });
           if (!version.hasSources || !version.key) {
-            console.warn(
-              `[worker][shared-sync] skip: scope=${scope} kind=${kind} sources not found dir=${version.sharedDir} workTable=${version.workTableFileName ?? '-'} workSlip=${version.workSlipFileName ?? '-'}`
-            );
+            const detail = version.accessError ?? `workTable=${version.workTableFileName ?? '-'} workSlip=${version.workSlipFileName ?? '-'}`;
+            console.warn(`[worker][shared-sync] skip: scope=${scope} kind=${kind} sources not found dir=${version.sharedDir} ${detail}`);
+            await recordSharedPollerTick(scope, kind, {
+              reason: 'no-sources',
+              message: version.accessError ?? (scope === 'schedule' ? '共有フォルダに作業表☆がありません' : '作業伝票ブックも共有フォルダの作業伝票もありません'),
+            });
             continue;
           }
 
           const pending = await queue.getJobs(['waiting', 'active', 'delayed'], 0, 50);
           if (pending.some((job) => (job.data as Partial<SharedSyncJobData> | undefined)?.kind === kind)) {
             console.log(`[worker][shared-sync] skip enqueue: scope=${scope} kind=${kind} previous job still pending`);
+            await recordSharedPollerTick(scope, kind, { reason: 'previous-pending' });
             continue;
           }
 
@@ -134,9 +139,11 @@ function startScopePoller(scope: Exclude<SharedSyncScope, 'all'>, queue: ReturnT
             }
           );
           console.log(`[worker][shared-sync] enqueued: scope=${scope} kind=${kind} reason=${reason} key=${version.key}`);
+          await recordSharedPollerTick(scope, kind, { reason: 'enqueued' });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.error(`[worker][shared-sync] tick failed: scope=${scope} kind=${kind} reason=${reason} error=${message}`);
+          await recordSharedPollerTick(scope, kind, { reason: 'error', message });
         }
       }
     } finally {
