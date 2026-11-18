@@ -85,24 +85,14 @@ async function listPartnerCandidates(excludeId?: string): Promise<PartnerCandida
   return items;
 }
 
-export async function findMatchingSite(input: {
-  companyName?: string | null;
-  name: string;
-  kind: RegistrySiteKind;
-  excludeId?: string;
-}): Promise<{ site: SiteCandidate | null; matchType: 'exact' | 'name-only' | null }> {
-  const nameKey = normalizeSiteRegistryKey(input.name);
-  if (!nameKey) return { site: null, matchType: null };
+type SiteMatch = { site: SiteCandidate | null; matchType: 'exact' | 'name-only' | null };
 
-  const companyKey = normalizeRegistryKey(input.companyName);
-  const candidates = (await listSiteCandidates(input.kind, input.excludeId)).filter(
-    (site) => normalizeSiteRegistryKey(site.name) === nameKey,
-  );
-
+function pickSiteMatch(candidates: SiteCandidate[], companyName: string | null | undefined): SiteMatch {
   if (candidates.length === 0) {
     return { site: null, matchType: null };
   }
 
+  const companyKey = normalizeRegistryKey(companyName);
   const exactCompany = candidates.find((site) => normalizeRegistryKey(site.companyName) === companyKey);
   if (exactCompany) {
     return { site: exactCompany, matchType: 'exact' };
@@ -117,6 +107,38 @@ export async function findMatchingSite(input: {
   // 妥協的に candidates[0] を選ばず「不一致」として扱う（誤った現場リンクを防止）。
   return { site: null, matchType: null };
 }
+
+export async function findMatchingSite(input: {
+  companyName?: string | null;
+  name: string;
+  kind: RegistrySiteKind;
+  excludeId?: string;
+}): Promise<SiteMatch> {
+  const nameKey = normalizeSiteRegistryKey(input.name);
+  if (!nameKey) return { site: null, matchType: null };
+
+  const candidates = (await listSiteCandidates(input.kind, input.excludeId)).filter(
+    (site) => normalizeSiteRegistryKey(site.name) === nameKey,
+  );
+  return pickSiteMatch(candidates, input.companyName);
+}
+
+// 現場一覧を1回だけ読み込み、同じ判定(findMatchingSite と同じ)をメモリ上で行う。大量の行を照合する同期用。
+export async function createSiteMatcher(kind: RegistrySiteKind): Promise<(input: { companyName?: string | null; name: string }) => SiteMatch> {
+  const byNameKey = new Map<string, SiteCandidate[]>();
+  for (const site of await listSiteCandidates(kind)) {
+    const key = normalizeSiteRegistryKey(site.name);
+    const list = byNameKey.get(key);
+    if (list) list.push(site);
+    else byNameKey.set(key, [site]);
+  }
+  return (input) => {
+    const nameKey = normalizeSiteRegistryKey(input.name);
+    if (!nameKey) return { site: null, matchType: null };
+    return pickSiteMatch(byNameKey.get(nameKey) ?? [], input.companyName);
+  };
+}
+
 
 export async function backfillSiteCompanyName(siteId: string, companyName: string | null | undefined) {
   const normalizedCompanyName = normalizeOptionalRegistryText(companyName);

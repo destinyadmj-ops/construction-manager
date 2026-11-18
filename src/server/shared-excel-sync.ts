@@ -1,6 +1,6 @@
 import { prisma } from '@/server/db/prisma';
 import { Prisma } from '@/generated/prisma';
-import { ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
+import { createSiteMatcher, ensurePartnerByName, findMatchingSite, normalizeRegistryText } from '@/server/site-registry';
 import { readGlobalScheduleUserOrder, saveScheduleUserOrderForAllUsers } from '@/server/schedule-user-order';
 import { ensureSiteDayFolders } from '@/server/site-storage';
 import {
@@ -17,6 +17,7 @@ import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared
 import { snapshotToSheetJs } from '@/shared/work-slip-book-convert';
 import { getCurrentMeta, readVersion as readBookVersion } from '@/server/work-slip-book';
 import { writeFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import { extname, join } from 'node:path';
 import * as XLSX from 'xlsx';
 
@@ -369,7 +370,7 @@ function isCurrentDateInRange(meta: WorkSlipFileMeta | null): boolean {
 
 async function discoverSharedFiles(targetTerm?: number | null): Promise<DiscoveredSharedFiles> {
   const fs = await import('node:fs/promises');
-  let dirents: Awaited<ReturnType<typeof fs.readdir<{ withFileTypes: true }>>>;
+  let dirents: Dirent[];
   try {
     dirents = await fs.readdir(SHARED_SOURCE_DIR, { withFileTypes: true });
   } catch (error) {
@@ -942,6 +943,47 @@ function stableStringify(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
     .join(',')}}`;
+}
+
+// 同期用キーだけを上書きし、手入力側が持っていた他のキーは残す。オブジェクトでない既存値は legacyAccountingMeta に退避する。
+function mergeSyncAccountingMeta(current: Prisma.JsonValue | null, sync: Record<string, unknown>): Prisma.InputJsonValue {
+  const isObject = current !== null && typeof current === 'object' && !Array.isArray(current);
+  const merged = isObject ? { ...(current as Record<string, unknown>), ...sync } : current == null ? { ...sync } : { ...sync, legacyAccountingMeta: current };
+  // undefined のキーを落とし、保存後の JSON と同じ形にする(same 判定用)
+  return JSON.parse(JSON.stringify(merged)) as Prisma.InputJsonValue;
+}
+
+const BULK_UPDATE_THRESHOLD = 200;
+const BULK_UPDATE_CHUNK = 500;
+
+type ScheduleUpdate = { id: string; data: { startAt: Date; summary: string; siteId: string | null; accountingMeta: Prisma.InputJsonValue } };
+
+// 大量更新は 1 文の UPDATE ... FROM unnest(...) を一定件数ごとに発行し、往復回数を減らす(同じトランザクション内)。
+async function applyScheduleUpdates(tx: Prisma.TransactionClient, updates: ScheduleUpdate[]): Promise<void> {
+  if (updates.length < BULK_UPDATE_THRESHOLD) {
+    for (const update of updates) {
+      await tx.workEntry.update({ where: { id: update.id }, data: update.data, select: { id: true } });
+    }
+    return;
+  }
+  for (let offset = 0; offset < updates.length; offset += BULK_UPDATE_CHUNK) {
+    const chunk = updates.slice(offset, offset + BULK_UPDATE_CHUNK);
+    await tx.$executeRaw`
+      UPDATE "WorkEntry" AS w
+      SET "startAt" = v.start_at,
+          "summary" = v.summary,
+          "siteId" = v.site_id,
+          "accountingMeta" = v.meta::jsonb,
+          "updatedAt" = (now() AT TIME ZONE 'UTC')
+      FROM unnest(
+        ${chunk.map((u) => u.id)}::text[],
+        ${chunk.map((u) => u.data.startAt.toISOString())}::timestamp[],
+        ${chunk.map((u) => u.data.summary)}::text[],
+        ${chunk.map((u) => u.data.siteId)}::text[],
+        ${chunk.map((u) => JSON.stringify(u.data.accountingMeta))}::text[]
+      ) AS v(id, start_at, summary, site_id, meta)
+      WHERE w."id" = v.id`;
+  }
 }
 
 function hasReadingParens(text: string): boolean {
@@ -1742,6 +1784,9 @@ async function syncScheduleEntries(args: {
   );
   await saveScheduleUserOrderForAllUsers(kind, globalUserOrderIds);
 
+  // 現場一覧は1回だけ読み、各行の照合はメモリ上で行う(行ごとに全件を読むと往復が膨らむ)。
+  const matchSite = await createSiteMatcher(kind);
+
   const preparedRows: Array<{
     userId: string;
     dayYmd: string;
@@ -1760,7 +1805,7 @@ async function syncScheduleEntries(args: {
       const entryKey = `${normalizeKey(entry.siteName)}|${entry.color}`;
       if (siteIdByEntryKey.has(entryKey)) continue;
 
-      const siteHit = await findMatchingSite({ companyName: row.companyName, name: entry.siteName, kind });
+      const siteHit = matchSite({ companyName: row.companyName, name: entry.siteName });
       const conflictByNameOnly =
         siteHit.site &&
         siteHit.matchType === 'name-only' &&
@@ -1888,10 +1933,8 @@ async function syncScheduleEntries(args: {
       }
 
       const deleteIds: string[] = [];
-      const updates: Array<{
-        id: string;
-        data: { startAt: Date; summary: string; siteId: string | null; accountingMeta: Prisma.InputJsonValue };
-      }> = [];
+      const updates: ScheduleUpdate[] = [];
+      const overwrittenDays: string[] = [];
       const createData: Array<{
         userId: string;
         kind: SiteKind;
@@ -1946,7 +1989,7 @@ async function syncScheduleEntries(args: {
         const dayYmd = cellKey.slice(cellKey.indexOf('|') + 1);
         desired.forEach((want, index) => {
           const startAt = addMinutes(startOfSharedSyncDay(dayYmd), keptManualCount + index);
-          const accountingMeta = {
+          const syncMeta = {
             scheduleEntryKind: 'site',
             sharedExcelSync: {
               source: '作業表☆',
@@ -1956,7 +1999,7 @@ async function syncScheduleEntries(args: {
             labelColor: want.labelColor,
             scheduleGroupIndex: want.groupIndex,
             scheduleItemIndex: want.itemIndex,
-          } as Prisma.InputJsonValue;
+          };
 
           const current = matchByKey.get(want.sourceKey);
           if (!current) {
@@ -1967,12 +2010,13 @@ async function syncScheduleEntries(args: {
               summary: want.summary,
               note: null,
               siteId: want.siteId,
-              accountingMeta,
+              accountingMeta: mergeSyncAccountingMeta(null, syncMeta),
             });
             counts.scheduleCreated += 1;
             return;
           }
 
+          const accountingMeta = mergeSyncAccountingMeta(current.accountingMeta, syncMeta);
           const wasSyncOrigin = hasSharedExcelSyncMeta(current.accountingMeta);
           const same =
             wasSyncOrigin &&
@@ -1984,17 +2028,24 @@ async function syncScheduleEntries(args: {
             counts.scheduleSkipped += 1;
             return;
           }
-          if (!wasSyncOrigin) counts.scheduleOverwritten += 1;
+          if (!wasSyncOrigin) {
+            counts.scheduleOverwritten += 1;
+            overwrittenDays.push(dayYmd);
+          }
           updates.push({ id: current.id, data: { startAt, summary: want.summary, siteId: want.siteId, accountingMeta } });
           counts.scheduleUpdated += 1;
         });
       }
 
       if (deleteIds.length > 0) await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
-      for (const update of updates) {
-        await tx.workEntry.update({ where: { id: update.id }, data: update.data, select: { id: true } });
-      }
+      await applyScheduleUpdates(tx, updates);
       if (createData.length > 0) await tx.workEntry.createMany({ data: createData });
+      if (overwrittenDays.length > 0) {
+        overwrittenDays.sort();
+        const message = `手入力の予定 ${overwrittenDays.length} 件を原本の内容で上書きしました(日付 ${overwrittenDays[0]}〜${overwrittenDays[overwrittenDays.length - 1]})。`;
+        warnings.push(message);
+        console.warn(`[shared-sync] ${message}`);
+      }
     },
     { timeout: 120_000, maxWait: 10_000 },
   );
