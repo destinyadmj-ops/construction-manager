@@ -1614,6 +1614,142 @@ async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSync
   };
 }
 
+export type ScheduleDesiredRow = {
+  userId: string;
+  dayYmd: string;
+  summary: string;
+  siteId: string | null;
+  labelColor: 'default' | 'red';
+  groupIndex: number;
+  itemIndex: number;
+  sourceKey: string;
+};
+
+export type ScheduleExistingRow = {
+  id: string;
+  userId: string;
+  startAt: Date;
+  summary: string | null;
+  siteId: string | null;
+  accountingMeta: Prisma.JsonValue | null;
+};
+
+export type ScheduleCellPlan = {
+  deleteIds: string[];
+  updates: ScheduleUpdate[];
+  creates: Array<{ userId: string; startAt: Date; summary: string; siteId: string | null; accountingMeta: Prisma.InputJsonValue }>;
+  counts: { created: number; updated: number; deleted: number; skipped: number; overwritten: number };
+  overwrittenDays: string[];
+};
+
+// セル(人×日)ごとに「原本の希望内容」と「現在のDB」を突き合わせ、追加・更新・削除を決める純粋関数(DBを使わない)。
+export function planScheduleCells(input: {
+  desiredByCell: Map<string, ScheduleDesiredRow[]>;
+  existingByCell: Map<string, ScheduleExistingRow[]>;
+  workTableFileName: string;
+}): ScheduleCellPlan {
+  const { desiredByCell, existingByCell, workTableFileName } = input;
+  const plan: ScheduleCellPlan = {
+    deleteIds: [],
+    updates: [],
+    creates: [],
+    counts: { created: 0, updated: 0, deleted: 0, skipped: 0, overwritten: 0 },
+    overwrittenDays: [],
+  };
+
+  const cellKeys = new Set<string>([...desiredByCell.keys(), ...existingByCell.keys()]);
+  for (const cellKey of cellKeys) {
+    const desired = desiredByCell.get(cellKey) ?? [];
+    const existing = existingByCell.get(cellKey) ?? [];
+    const usedIds = new Set<string>();
+    const matchByKey = new Map<string, ScheduleExistingRow>();
+
+    // 1) 同じ rowKey の同期済み予定をそのまま対応づける(ID を保つ)
+    for (const want of desired) {
+      const hit = existing.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
+      if (!hit) continue;
+      usedIds.add(hit.id);
+      matchByKey.set(want.sourceKey, hit);
+    }
+    // 2) 同じ人・日・現場の既存予定(手入力など)は原本の内容で上書きする(ID を保つ)
+    for (const want of desired) {
+      if (matchByKey.has(want.sourceKey)) continue;
+      const wantSummaryKey = normalizeKey(want.summary);
+      const hit = existing.find(
+        (row) =>
+          !usedIds.has(row.id) &&
+          ((want.siteId != null && row.siteId === want.siteId) ||
+            (wantSummaryKey !== '' && normalizeKey(row.summary) === wantSummaryKey)),
+      );
+      if (!hit) continue;
+      usedIds.add(hit.id);
+      matchByKey.set(want.sourceKey, hit);
+    }
+
+    // 3) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
+    let keptManualCount = 0;
+    for (const row of existing) {
+      if (usedIds.has(row.id)) continue;
+      if (hasSharedExcelSyncMeta(row.accountingMeta)) {
+        plan.deleteIds.push(row.id);
+        plan.counts.deleted += 1;
+      } else {
+        keptManualCount += 1;
+      }
+    }
+
+    const dayYmd = cellKey.slice(cellKey.indexOf('|') + 1);
+    desired.forEach((want, index) => {
+      const startAt = addMinutes(startOfSharedSyncDay(dayYmd), keptManualCount + index);
+      const syncMeta = {
+        scheduleEntryKind: 'site',
+        sharedExcelSync: {
+          source: '作業表☆',
+          fileName: workTableFileName,
+          rowKey: want.sourceKey,
+        },
+        labelColor: want.labelColor,
+        scheduleGroupIndex: want.groupIndex,
+        scheduleItemIndex: want.itemIndex,
+      };
+
+      const current = matchByKey.get(want.sourceKey);
+      if (!current) {
+        plan.creates.push({
+          userId: want.userId,
+          startAt,
+          summary: want.summary,
+          siteId: want.siteId,
+          accountingMeta: mergeSyncAccountingMeta(null, syncMeta),
+        });
+        plan.counts.created += 1;
+        return;
+      }
+
+      const accountingMeta = mergeSyncAccountingMeta(current.accountingMeta, syncMeta);
+      const wasSyncOrigin = hasSharedExcelSyncMeta(current.accountingMeta);
+      const same =
+        wasSyncOrigin &&
+        current.startAt.getTime() === startAt.getTime() &&
+        current.summary === want.summary &&
+        current.siteId === want.siteId &&
+        stableStringify(current.accountingMeta) === stableStringify(accountingMeta);
+      if (same) {
+        plan.counts.skipped += 1;
+        return;
+      }
+      if (!wasSyncOrigin) {
+        plan.counts.overwritten += 1;
+        plan.overwrittenDays.push(dayYmd);
+      }
+      plan.updates.push({ id: current.id, data: { startAt, summary: want.summary, siteId: want.siteId, accountingMeta } });
+      plan.counts.updated += 1;
+    });
+  }
+
+  return plan;
+}
+
 // 作業表☆(原本)の内容を週予定へ反映する。原本が扱っている日付範囲を「完全同期」し、差分(追加・更新・削除)だけを1トランザクションで書く。
 async function syncScheduleEntries(args: {
   kind: SiteKind;
@@ -1932,114 +2068,17 @@ async function syncScheduleEntries(args: {
         existingByCell.set(cellKey, list);
       }
 
-      const deleteIds: string[] = [];
-      const updates: ScheduleUpdate[] = [];
-      const overwrittenDays: string[] = [];
-      const createData: Array<{
-        userId: string;
-        kind: SiteKind;
-        startAt: Date;
-        summary: string;
-        note: string | null;
-        siteId: string | null;
-        accountingMeta: Prisma.InputJsonValue;
-      }> = [];
-
-      const cellKeys = new Set<string>([...desiredByCell.keys(), ...existingByCell.keys()]);
-      for (const cellKey of cellKeys) {
-        const desired = desiredByCell.get(cellKey) ?? [];
-        const existing = existingByCell.get(cellKey) ?? [];
-        const usedIds = new Set<string>();
-        const matchByKey = new Map<string, ExistingScheduleRow>();
-
-        // 1) 同じ rowKey の同期済み予定をそのまま対応づける(ID を保つ)
-        for (const want of desired) {
-          const hit = existing.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
-          if (!hit) continue;
-          usedIds.add(hit.id);
-          matchByKey.set(want.sourceKey, hit);
-        }
-        // 2) 同じ人・日・現場の既存予定(手入力など)は原本の内容で上書きする(ID を保つ)
-        for (const want of desired) {
-          if (matchByKey.has(want.sourceKey)) continue;
-          const wantSummaryKey = normalizeKey(want.summary);
-          const hit = existing.find(
-            (row) =>
-              !usedIds.has(row.id) &&
-              ((want.siteId != null && row.siteId === want.siteId) ||
-                (wantSummaryKey !== '' && normalizeKey(row.summary) === wantSummaryKey)),
-          );
-          if (!hit) continue;
-          usedIds.add(hit.id);
-          matchByKey.set(want.sourceKey, hit);
-        }
-
-        // 3) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
-        let keptManualCount = 0;
-        for (const row of existing) {
-          if (usedIds.has(row.id)) continue;
-          if (hasSharedExcelSyncMeta(row.accountingMeta)) {
-            deleteIds.push(row.id);
-            counts.scheduleDeleted += 1;
-          } else {
-            keptManualCount += 1;
-          }
-        }
-
-        const dayYmd = cellKey.slice(cellKey.indexOf('|') + 1);
-        desired.forEach((want, index) => {
-          const startAt = addMinutes(startOfSharedSyncDay(dayYmd), keptManualCount + index);
-          const syncMeta = {
-            scheduleEntryKind: 'site',
-            sharedExcelSync: {
-              source: '作業表☆',
-              fileName: workTableFileName,
-              rowKey: want.sourceKey,
-            },
-            labelColor: want.labelColor,
-            scheduleGroupIndex: want.groupIndex,
-            scheduleItemIndex: want.itemIndex,
-          };
-
-          const current = matchByKey.get(want.sourceKey);
-          if (!current) {
-            createData.push({
-              userId: want.userId,
-              kind,
-              startAt,
-              summary: want.summary,
-              note: null,
-              siteId: want.siteId,
-              accountingMeta: mergeSyncAccountingMeta(null, syncMeta),
-            });
-            counts.scheduleCreated += 1;
-            return;
-          }
-
-          const accountingMeta = mergeSyncAccountingMeta(current.accountingMeta, syncMeta);
-          const wasSyncOrigin = hasSharedExcelSyncMeta(current.accountingMeta);
-          const same =
-            wasSyncOrigin &&
-            current.startAt.getTime() === startAt.getTime() &&
-            current.summary === want.summary &&
-            current.siteId === want.siteId &&
-            stableStringify(current.accountingMeta) === stableStringify(accountingMeta);
-          if (same) {
-            counts.scheduleSkipped += 1;
-            return;
-          }
-          if (!wasSyncOrigin) {
-            counts.scheduleOverwritten += 1;
-            overwrittenDays.push(dayYmd);
-          }
-          updates.push({ id: current.id, data: { startAt, summary: want.summary, siteId: want.siteId, accountingMeta } });
-          counts.scheduleUpdated += 1;
-        });
-      }
+      const plan = planScheduleCells({ desiredByCell, existingByCell, workTableFileName });
+      const { deleteIds, updates, overwrittenDays } = plan;
+      counts.scheduleCreated += plan.counts.created;
+      counts.scheduleUpdated += plan.counts.updated;
+      counts.scheduleDeleted += plan.counts.deleted;
+      counts.scheduleSkipped += plan.counts.skipped;
+      counts.scheduleOverwritten += plan.counts.overwritten;
 
       if (deleteIds.length > 0) await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
       await applyScheduleUpdates(tx, updates);
-      if (createData.length > 0) await tx.workEntry.createMany({ data: createData });
+      if (plan.creates.length > 0) await tx.workEntry.createMany({ data: plan.creates.map((row) => ({ ...row, kind, note: null })) });
       if (overwrittenDays.length > 0) {
         overwrittenDays.sort();
         const message = `手入力の予定 ${overwrittenDays.length} 件を原本の内容で上書きしました(日付 ${overwrittenDays[0]}〜${overwrittenDays[overwrittenDays.length - 1]})。`;
