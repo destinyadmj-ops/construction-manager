@@ -338,6 +338,67 @@ $c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
 | デプロイ後に共有フォルダ系の設定が消えた | `.env.production` の再生成で `SHARED_SOURCE_HOST_PATH` 等が落ちた(`deploy.yml` は既存行を引き継ぐが、手で作り直した場合は消える) | `.env.production` に `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` を再設定して `up -d` |
 | ブック保存が台帳に反映されない | 台帳はブックが正本で共有フォルダに依存しない。反映失敗は同期ステータス(台帳)に `failed` / `skipped` として残る | 現場台帳画面の「台帳・関係会社の反映」の結果と worker/web ログを確認 |
 
+### 設定が消えたときの復旧コマンド(本番ホストの PowerShell・リポジトリ直下)
+
+「同期の確認」のステップ3/4で `/shared-source` が空・環境変数が無い場合の復旧。`$c` は上の別名と同じ。`.env.production` 以外は触らない。
+
+```powershell
+$c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
+
+# 1) 現状(共有フォルダ関係の行だけ)
+Select-String -Path .env.production -Pattern 'SHARED_SOURCE_HOST_PATH|MASTER_HUB_SHARED_SOURCE_DIR|SHARED_SYNC_'
+
+# 2) 2行を入れ直す(既存の同名行を消してから追記。BOM なしで保存)
+$hostPath = 'C:/path/to/共有フォルダ'   # 本番PCから見た共有フォルダの実パス(スラッシュ区切り)
+$keep = Get-Content .env.production | Where-Object { $_ -notmatch '^(SHARED_SOURCE_HOST_PATH|MASTER_HUB_SHARED_SOURCE_DIR)=' }
+$keep += "SHARED_SOURCE_HOST_PATH=$hostPath"
+$keep += 'MASTER_HUB_SHARED_SOURCE_DIR=/shared-source'
+[System.IO.File]::WriteAllLines((Join-Path (Get-Location) '.env.production'), $keep, (New-Object System.Text.UTF8Encoding($false)))
+
+# 3) worker / web を作り直す(環境変数・マウントの変更を反映)
+docker $c up -d --force-recreate worker web
+
+# 4) 確認(作業表☆.xlsx が見える / 環境変数が入っている)
+docker $c exec worker ls /shared-source
+docker $c exec worker sh -c "printenv | grep -E 'MASTER_HUB_SHARED_SOURCE_DIR'"
+docker $c logs --tail=50 worker | Select-String shared-sync
+```
+
+その後、現場台帳画面の同期ステータス行で、週予定の最終成功が数分以内に更新されることを確認する。`MASTER_HUB_SHARED_SOURCE_DIR` を書かないと、worker は既定の `\\192.168.0.210\guest\共有フォルダ`(コンテナ内では開けない)を読みに行き、`ENOENT` で同期できない(worker は起動時にこの状態を1回だけ警告する)。
+
+### 本番PCのIPアドレスの確認と、共有フォルダのホストかどうか
+
+本番ホスト(Docker Desktop のPC)の PowerShell:
+
+```powershell
+# このPCのIPv4(社内LAN)
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '192.168.*' } | Select-Object InterfaceAlias, IPAddress
+
+# 共有フォルダのホストが「このPC」か: ローカルで共有している名前と実パス
+Get-SmbShare | Select-Object Name, Path
+
+# 別PC(例: 192.168.0.210)の共有を、このPCから読めるか
+Test-Path '\\192.168.0.210\guest\共有フォルダ'
+```
+
+- `192.168.0.210` が上のIPに含まれ、`Get-SmbShare` に共有フォルダの実パスが出る → このPCがホスト。`SHARED_SOURCE_HOST_PATH` にその実パス(スラッシュ区切り)を書けばよい(上の復旧コマンド)。
+- IPに含まれない → 共有フォルダは別PC。ホストの実パスは使えないので、次の案が必要。
+
+### 共有フォルダが別PCにある場合の案(未適用・承認待ち)
+
+`docker-compose.prod.yml` は変更していない。本番PCが共有フォルダのホストでないとき、`/shared-source` に SMB 共有を直接マウントする案:
+
+- `docker-compose.prod.yml` に CIFS ボリュームを定義し、`web` / `worker` の `/shared-source:ro` をそのボリュームへ差し替える(`driver: local` / `driver_opts: type: cifs, device: //<共有元IP>/<共有名>/<サブフォルダ>, o: addr=<共有元IP>,username=...,password=...,ro,vers=3.0,iocharset=utf8`)。Docker Desktop(WSL2)では未検証のため、適用前に実機で `docker $c exec worker ls /shared-source` が通ることを確認する。
+- 認証情報: リポジトリ(compose・`.env.production.example`・GitHub)に実値を書かない。本番PCの再生成されない専用ファイル(例: `.env.host`)に置き、読み取り専用の専用アカウントを使う。`deploy.yml` の `.env.production` 再生成で消えない場所に置くのが前提(下記「設定消去の対策」)。
+- 代替: 共有元PC側で本番PCへ同期(robocopy など)して、本番PCのローカルフォルダを `SHARED_SOURCE_HOST_PATH` に指定する。認証情報をコンテナに渡さずに済む。
+
+### 設定消去の対策(提案・未適用)
+
+`deploy.yml` は `.env.production` を再生成し、既存の `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` / `SHARED_SYNC_*` 行だけを引き継ぐため、一度消えると復旧しない。案:
+
+- (a) 再生成時に `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` を常に書く(コンテナ内パスは固定値なので秘密ではない)。`SHARED_SOURCE_HOST_PATH` は GitHub の Variables から渡す。
+- (b) ホスト固有の値を `.env.host`(リポジトリ外・再生成されない)へ分け、`--env-file .env.production --env-file .env.host` と `env_file` の両方で読む。`.env.host` が無い環境でも起動できるよう、存在しない場合は読み込まない書き方にする。
+
 ### 停止の自動検知(画面警告)
 
 - worker は周期ごとの結果(`enqueued` / `no-sources` / `previous-pending` / `error`)を Redis のキー `masterhub:shared-sync:poller:{scope}:{kind}` に記録する(心拍)。
