@@ -2,6 +2,10 @@ import "dotenv/config";
 import type { Worker } from "bullmq";
 import { isSharedSyncPollEnabled, startRemindersWorker, startSharedSyncPoller, startSharedSyncScheduleWorker, startSharedSyncWorker } from "../src/server/queue/worker";
 import { RedisUnavailableError } from "../src/server/queue/connection";
+import { getSharedSourceDirConfigWarning } from "../src/shared/shared-sync-health";
+
+const sharedDirWarning = getSharedSourceDirConfigWarning(process.env);
+if (sharedDirWarning) console.warn(`[worker][shared-sync] WARNING: ${sharedDirWarning}`);
 
 const workers: Worker[] = [];
 let stopSharedSyncPoller: (() => void) | null = null;

@@ -11,6 +11,7 @@ import {
   resolveColorAttrs,
 } from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
+import { describeSharedFolderAccessFailure } from '@/shared/shared-sync-health';
 import { tryAcquireSharedSyncLock, type SharedSyncScope } from '@/server/shared-sync-lock';
 import { recordSharedSyncStatus } from '@/server/shared-sync-status';
 import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
@@ -375,7 +376,10 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
     dirents = await fs.readdir(SHARED_SOURCE_DIR, { withFileTypes: true });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException | null)?.code ?? 'UNKNOWN';
-    throw new SharedSyncError('MISSING_SOURCE', `共有フォルダにアクセスできません: ${SHARED_SOURCE_DIR} (${code})`);
+    throw new SharedSyncError(
+      'MISSING_SOURCE',
+      describeSharedFolderAccessFailure({ dir: SHARED_SOURCE_DIR, code, usingDefaultDir: !process.env.MASTER_HUB_SHARED_SOURCE_DIR }),
+    );
   }
 
   const files: SharedFileInfo[] = [];

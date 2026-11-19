@@ -146,7 +146,7 @@ type SharedSyncRunStatusView = {
   counts: Record<string, number> | null;
 };
 
-type SharedSyncHealthView = { level: 'ok' | 'warn'; reasons: string[] };
+type SharedSyncHealthView = { level: 'ok' | 'warn'; reasons: string[]; cause?: string };
 
 type SharedSyncStatusView = {
   schedule: SharedSyncRunStatusView | null;
@@ -160,8 +160,13 @@ function formatSyncTime(iso: string): string {
   return date.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function describeSharedSyncStatus(label: string, status: SharedSyncRunStatusView | null): string {
-  if (!status) return `${label}: 実行記録なし(worker 未稼働の可能性)`;
+function describeSharedSyncStatus(label: string, status: SharedSyncRunStatusView | null, health?: SharedSyncHealthView | null): string {
+  if (!status) {
+    if (health?.cause === 'folder-unreachable') return `${label}: 実行記録なし(worker は動作中ですが共有フォルダが見えません)`;
+    if (health?.cause === 'no-files') return `${label}: 実行記録なし(共有フォルダに同期元のファイルがありません)`;
+    if (health?.cause === 'no-worker') return `${label}: 実行記録なし(worker が動いていない、または Redis に接続できません)`;
+    return `${label}: 実行記録なし`;
+  }
   if (status.result === 'success') return `${label}: ${formatSyncTime(status.at)} 成功`;
   if (status.result === 'skipped') return `${label}: ${formatSyncTime(status.at)} 見送り(${status.message ?? '実行中'})`;
   const lastSuccess = status.lastSuccessAt ? `最終成功 ${formatSyncTime(status.lastSuccessAt)}` : '成功実績なし';
@@ -1012,9 +1017,9 @@ export default function SiteLedgerPage() {
               {sharedSyncMsg ? <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{sharedSyncMsg}</div> : null}
               {canEditSite && sharedSyncStatus ? (
                 <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300" data-testid="shared-sync-status">
-                  {describeSharedSyncStatus('週予定の同期(5分おき)', sharedSyncStatus.schedule)}
+                  {describeSharedSyncStatus('週予定の同期(5分おき)', sharedSyncStatus.schedule, sharedSyncStatus.health.schedule)}
                   <br />
-                  {describeSharedSyncStatus('台帳・関係会社の反映(30分おき)', sharedSyncStatus.ledger)}
+                  {describeSharedSyncStatus('台帳・関係会社の反映(30分おき)', sharedSyncStatus.ledger, sharedSyncStatus.health.ledger)}
                   {(['schedule', 'ledger'] as const).map((scope) => {
                     const health = sharedSyncStatus.health[scope];
                     if (!health || health.level !== 'warn') return null;
