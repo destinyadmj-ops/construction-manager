@@ -67,16 +67,21 @@ function toDesired(original: Original): Map<string, ScheduleDesiredRow[]> {
     if (items.length === 0) continue;
     map.set(
       cellKey,
-      items.map((item, index) => ({
-        userId,
-        dayYmd,
-        summary: item.summary,
-        siteId: siteIdOf(item.summary),
-        labelColor: item.color,
-        groupIndex: 0,
-        itemIndex: index,
-        sourceKey: `${dayYmd}|${userId}|${item.summary}|${item.color}|0|${index}`,
-      })),
+      items.map((item, index) => {
+        // 実装と同じ: 赤はグループ1、項目番号はグループ内の順番
+        const groupIndex = item.color === 'red' ? 1 : 0;
+        const itemIndex = items.slice(0, index).filter((x) => (x.color === 'red' ? 1 : 0) === groupIndex).length;
+        return {
+          userId,
+          dayYmd,
+          summary: item.summary,
+          siteId: siteIdOf(item.summary),
+          labelColor: item.color,
+          groupIndex,
+          itemIndex,
+          sourceKey: `${dayYmd}|${userId}|${item.summary}|${item.color}|${groupIndex}|${itemIndex}`,
+        };
+      }),
     );
   }
   return map;
@@ -247,4 +252,52 @@ test('手入力の同じ現場の予定は原本の内容で上書きされる(I
   assert.equal(next[0].id, 'manual1');
   assert.equal(next[0].summary, '甲 ビル 3F');
   assert.equal(plan.counts.overwritten, 1);
+});
+
+
+test('現場名の文言だけ直したときは、同じ位置の同期由来の予定を更新する(削除+作成にしない・ID を保つ)', () => {
+  const cell = `u1|${DAYS[0]}`;
+  const original: Original = new Map([[cell, [{ summary: '甲ビル', color: 'default' }, { summary: '乙マンション', color: 'default' }]]]);
+  let db = syncOnce([], original).db;
+  const ids = db.map((r) => r.id).sort();
+  original.set(cell, [{ summary: '丙センター', color: 'default' }, { summary: '乙マンション', color: 'default' }]);
+  const { db: next, plan } = syncOnce(db, original);
+  db = next;
+  assert.deepEqual(db.map((r) => r.id).sort(), ids);
+  assert.equal(plan.counts.created, 0);
+  assert.equal(plan.counts.deleted, 0);
+  assert.equal(plan.counts.updated, 1);
+  assertConverged(db, original, '文言修正');
+});
+
+test('位置の対応づけは手入力の予定を対象にしない', () => {
+  const cell = `u1|${DAYS[0]}`;
+  const [y, m, d] = DAYS[0].split('-').map(Number);
+  const manual: DbRow = {
+    id: 'manual1',
+    userId: 'u1',
+    startAt: new Date(y, m - 1, d, 9, 0),
+    summary: '戊ホール',
+    siteId: null,
+    accountingMeta: { scheduleGroupIndex: 0, scheduleItemIndex: 0 } as Prisma.JsonValue,
+  };
+  const original: Original = new Map([[cell, [{ summary: '甲ビル', color: 'default' }]]]);
+  let db = syncOnce([manual], original).db;
+  original.set(cell, [{ summary: '丙センター', color: 'default' }]);
+  db = syncOnce(db, original).db;
+  const kept = db.find((r) => r.id === 'manual1');
+  assert.equal(kept?.summary, '戊ホール');
+  assert.equal(db.filter(hasSyncMeta).length, 1);
+  assertConverged(db, original, '手入力は対象外');
+});
+
+test('項目の削除と追加が同時でも、結果は原本と一致する(位置の誤対応でも)', () => {
+  const cell = `u1|${DAYS[0]}`;
+  const original: Original = new Map([[cell, [{ summary: '甲ビル', color: 'default' }, { summary: '乙マンション', color: 'default' }, { summary: '丙センター', color: 'default' }]]]);
+  let db = syncOnce([], original).db;
+  original.set(cell, [{ summary: '乙マンション', color: 'default' }, { summary: '丁工場', color: 'default' }, { summary: '丙センター', color: 'default' }]);
+  db = syncOnce(db, original).db;
+  assertConverged(db, original, '削除+追加');
+  const again = syncOnce(db, original);
+  assert.equal(again.plan.creates.length + again.plan.updates.length + again.plan.deleteIds.length, 0);
 });

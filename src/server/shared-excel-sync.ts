@@ -1689,8 +1689,20 @@ export function planScheduleCells(input: {
       usedIds.add(hit.id);
       matchByKey.set(want.sourceKey, hit);
     }
+    // 3) 現場名の文言だけ直したときは、同じ位置(グループ/項目番号)の同期由来の予定を同じ予定として更新する(ID を保つ)。手入力は対象外。
+    for (const want of desired) {
+      if (matchByKey.has(want.sourceKey)) continue;
+      const hit = existing.find((row) => {
+        if (usedIds.has(row.id) || !hasSharedExcelSyncMeta(row.accountingMeta)) return false;
+        const meta = row.accountingMeta as Record<string, unknown>;
+        return meta.scheduleGroupIndex === want.groupIndex && meta.scheduleItemIndex === want.itemIndex;
+      });
+      if (!hit) continue;
+      usedIds.add(hit.id);
+      matchByKey.set(want.sourceKey, hit);
+    }
 
-    // 3) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
+    // 4) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
     let keptManualCount = 0;
     for (const row of existing) {
       if (usedIds.has(row.id)) continue;
