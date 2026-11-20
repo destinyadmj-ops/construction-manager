@@ -24,7 +24,7 @@ function statusKey(scope: SharedSyncRunStatus['scope'], kind: SiteKind) {
   return `masterhub:shared-sync:status:${scope}:${kind}`;
 }
 
-async function withRedis<T>(fn: (redis: NonNullable<ReturnType<typeof createRedisConnectionOrNull>>) => Promise<T>): Promise<T | null> {
+export async function withRedis<T>(fn: (redis: NonNullable<ReturnType<typeof createRedisConnectionOrNull>>) => Promise<T>): Promise<T | null> {
   const redis = createRedisConnectionOrNull();
   if (!redis) return null;
   try {
@@ -91,7 +91,7 @@ export type SharedPollerTick = {
   kind: SiteKind;
   /** tick を実行した時刻(ISO)。worker が生きている証拠(ハートビート) */
   at: string;
-  reason: 'enqueued' | 'no-sources' | 'previous-pending' | 'error';
+  reason: 'enqueued' | 'no-sources' | 'previous-pending' | 'unchanged' | 'error';
   message?: string;
   /** 直近で同期ジョブを投入した時刻(ISO) */
   lastEnqueuedAt?: string;

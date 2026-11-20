@@ -3,6 +3,8 @@ import { createRedisConnectionOrNull, RedisUnavailableError } from './connection
 import { QUEUE_NAMES, getSharedSyncQueue, getSharedSyncScheduleQueue } from './queues';
 import { SharedSyncError, getSharedSyncSourceVersion, runSharedSync } from '@/server/shared-excel-sync';
 import { recordSharedPollerTick } from '@/server/shared-sync-status';
+import { markUploadSynced, readUploadSynced } from '@/server/shared-upload';
+import { UNCHANGED_RESYNC_MS } from '@/shared/shared-sync-health';
 
 export function startRemindersWorker() {
   const connection = createRedisConnectionOrNull();
@@ -68,6 +70,8 @@ function createSharedSyncWorker(queueName: string) {
       const startedAt = Date.now();
       try {
         const result = await runSharedSync({ kind, targetTerm, scope });
+        // 会社PCから受信した原本を同期した記録(変化がない間は次回以降の同期を省く)
+        if (scope === 'schedule' && sourceKey?.includes('|upload:')) await markUploadSynced(scope, kind, sourceKey);
         console.log(
           `[worker][shared-sync] success: scope=${scope} kind=${kind} durationMs=${Date.now() - startedAt} counts=${JSON.stringify(result.counts)}${result.warnings.length > 0 ? ` warnings=${JSON.stringify(result.warnings.slice(0, 3))}` : ''}`
         );
@@ -117,9 +121,18 @@ function startScopePoller(scope: Exclude<SharedSyncScope, 'all'>, queue: ReturnT
             console.warn(`[worker][shared-sync] skip: scope=${scope} kind=${kind} sources not found dir=${version.sharedDir} ${detail}`);
             await recordSharedPollerTick(scope, kind, {
               reason: 'no-sources',
-              message: version.accessError ?? (scope === 'schedule' ? '共有フォルダに作業表☆がありません' : '作業伝票ブックも共有フォルダの作業伝票もありません'),
+              message: version.accessError ?? (scope === 'schedule' ? '作業表☆がありません(会社PCからの送信を受信していません)' : '作業伝票ブックも共有フォルダの作業伝票もありません'),
             });
             continue;
+          }
+
+          // 会社PCから受信した原本に変化がない間は同期を省く(念のため一定時間ごとには再同期する)
+          if (scope === 'schedule' && version.workTableSource === 'upload') {
+            const synced = await readUploadSynced(scope, kind);
+            if (synced && synced.key === version.key && Date.now() - new Date(synced.at).getTime() < UNCHANGED_RESYNC_MS) {
+              await recordSharedPollerTick(scope, kind, { reason: 'unchanged' });
+              continue;
+            }
           }
 
           const pending = await queue.getJobs(['waiting', 'active', 'delayed'], 0, 50);

@@ -18,6 +18,16 @@ test('schedule は 15 分超で警告、ledger は 90 分までは警告なし',
   assert.equal(evaluateSharedSyncHealth({ scope: 'ledger', run: old, poller: null, nowMs: now }).level, 'warn');
 });
 
+test('原本に変化なしで同期を省いている間は、再同期の期限内なら警告しない', () => {
+  const run = { at: ago(50), result: 'success' as const, lastSuccessAt: ago(50) };
+  assert.equal(evaluateSharedSyncHealth({ scope: 'schedule', run, poller: { at: ago(1), reason: 'unchanged' }, nowMs: now }).level, 'ok');
+  // 期限(再同期間隔+余裕)を超えても同期されていなければ警告
+  const stale = { at: ago(120), result: 'success' as const, lastSuccessAt: ago(120) };
+  assert.equal(evaluateSharedSyncHealth({ scope: 'schedule', run: stale, poller: { at: ago(1), reason: 'unchanged' }, nowMs: now }).level, 'warn');
+  // ポーラー自体が止まっていれば警告
+  assert.equal(evaluateSharedSyncHealth({ scope: 'schedule', run, poller: { at: ago(40), reason: 'unchanged' }, nowMs: now }).level, 'warn');
+});
+
 test('worker 停止(ポーラーの記録が古い)', () => {
   const h = evaluateSharedSyncHealth({
     scope: 'schedule',
@@ -80,5 +90,6 @@ test('記録が何も無ければ警告', () => {
 test('worker 起動時の警告は本番かつ MASTER_HUB_SHARED_SOURCE_DIR 未設定のときだけ', () => {
   assert.match(getSharedSourceDirConfigWarning({ NODE_ENV: 'production' }) ?? '', /SHARED_SOURCE_HOST_PATH/);
   assert.equal(getSharedSourceDirConfigWarning({ NODE_ENV: 'production', MASTER_HUB_SHARED_SOURCE_DIR: '/shared-source' }), null);
+  assert.equal(getSharedSourceDirConfigWarning({ NODE_ENV: 'production', SHARED_SYNC_UPLOAD_TOKEN: 'x'.repeat(32) }), null);
   assert.equal(getSharedSourceDirConfigWarning({ NODE_ENV: 'development' }), null);
 });

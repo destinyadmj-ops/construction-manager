@@ -14,6 +14,7 @@ import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { describeSharedFolderAccessFailure } from '@/shared/shared-sync-health';
 import { buildSuppressionSet, isAppEditedSyncMeta, isSuppressedByTombstone } from '@/shared/shared-sync-protection';
 import { readSyncTombstones } from '@/server/shared-sync-tombstones';
+import { getUploadedWorkTableFile } from '@/server/shared-upload';
 import { tryAcquireSharedSyncLock, type SharedSyncScope } from '@/server/shared-sync-lock';
 import { recordSharedSyncStatus } from '@/server/shared-sync-status';
 import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
@@ -33,6 +34,8 @@ type SharedFileInfo = {
   extension: string;
   mtimeMs: number;
   sizeBytes: number;
+  /** 会社PCから受信した原本のときの識別値(SHA-256) */
+  uploadSha256?: string;
 };
 
 type WorkSlipFileMeta = {
@@ -74,8 +77,9 @@ type SharedSyncCounts = {
   scheduleDeleted: number;
   /** 変更なし(既に原本と一致) */
   scheduleSkipped: number;
-  /** 原本の内容で上書きした、同期由来でない既存予定(手入力など) */
+  /** 原本の内容で上書きした…ではなく、手入力/アプリ編集済みの予定があるため追加しなかった原本の項目数 */
   scheduleProtected: number;
+  /** アプリで削除済みのため再作成しなかった原本の項目数 */
   scheduleSuppressed: number;
   workSlipsCreated: number;
   workSlipsSkipped: number;
@@ -119,6 +123,8 @@ export type SharedSyncSourceVersion = {
   key: string | null;
   workTableFileName: string | null;
   workTableMtimeMs: number | null;
+  /** 作業表☆の入手元: 会社PCから受信した原本(upload) / 共有フォルダ(folder) */
+  workTableSource: 'upload' | 'folder' | null;
   workSlipFileName: string | null;
   workSlipMtimeMs: number | null;
 };
@@ -480,15 +486,26 @@ async function discoverSharedFiles(targetTerm?: number | null): Promise<Discover
 }
 
 // 共有フォルダが見えない環境(本番の worker など)でも、アプリ内の作業伝票ブックだけで台帳反映できるよう、アクセス失敗はファイル無し扱いにして理由だけ返す。
+// 作業表☆は会社PCから受信した原本を優先し、共有フォルダ側が新しいとき(開発PCなど)だけフォルダを使う。
 async function discoverSharedFilesOrEmpty(targetTerm?: number | null): Promise<{ files: DiscoveredSharedFiles; accessError: string | null }> {
+  let result: { files: DiscoveredSharedFiles; accessError: string | null };
   try {
-    return { files: await discoverSharedFiles(targetTerm), accessError: null };
+    result = { files: await discoverSharedFiles(targetTerm), accessError: null };
   } catch (error) {
-    return {
+    result = {
       files: { sharedDir: SHARED_SOURCE_DIR, workTable: null, workSlip: null, workSlipMeta: null, workSlipCandidates: 0 },
       accessError: error instanceof Error ? error.message : String(error),
     };
   }
+  try {
+    const uploaded = await getUploadedWorkTableFile();
+    if (uploaded && (!result.files.workTable || uploaded.mtimeMs >= result.files.workTable.mtimeMs)) {
+      result.files = { ...result.files, workTable: { ...uploaded, uploadSha256: uploaded.sha256 } };
+    }
+  } catch (error) {
+    console.warn('[shared-sync] 受信した原本の取り出しに失敗しました:', error instanceof Error ? error.message : error);
+  }
+  return result;
 }
 
 export function readWorkbook(filePath: string, options?: { fontColors?: boolean }): XLSX.WorkBook {
@@ -1402,7 +1419,9 @@ export async function getSharedSyncSourceVersion(input: {
   const needLedger = scope !== 'schedule';
   const bookMeta = needLedger ? await getCurrentMeta() : null;
   const hasSources = (!needSchedule || !!files.workTable) && (!needLedger || !!bookMeta || !!files.workSlip);
-  const scheduleKey = `${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workTable?.sizeBytes ?? 0}`;
+  const scheduleKey = files.workTable?.uploadSha256
+    ? `upload:${files.workTable.uploadSha256}`
+    : `${files.workTable?.fileName ?? ''}|${workTableMtimeMs ?? 0}|${files.workTable?.sizeBytes ?? 0}`;
   const ledgerKey = bookMeta ? `book:v${bookMeta.version}` : `${files.workSlip?.fileName ?? ''}|${workSlipMtimeMs ?? 0}`;
   const key = !hasSources ? null : [input.kind, needSchedule ? scheduleKey : null, needLedger ? ledgerKey : null].filter((x) => x != null).join('|');
 
@@ -1414,6 +1433,7 @@ export async function getSharedSyncSourceVersion(input: {
     key,
     workTableFileName: files.workTable?.fileName ?? null,
     workTableMtimeMs,
+    workTableSource: files.workTable ? (files.workTable.uploadSha256 ? 'upload' : 'folder') : null,
     workSlipFileName: files.workSlip?.fileName ?? null,
     workSlipMtimeMs,
   };
