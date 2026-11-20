@@ -34,6 +34,8 @@
 ## 前提条件
 
 ### 必須環境
+> 本番は Vultr の Linux VPS(上の「推奨構成」)で、Docker Desktop/Windows は使わない。以下は Windows で自前運用する場合の前提。
+
 - Windows Server または Windows 10/11
 - Docker Desktop for Windows（WSL2バックエンド推奨）
 - Node.js 18.x 以上
@@ -81,11 +83,14 @@ MASTER_HUB_STORAGE_DIR="/data/masterhub-storage"
 PRINT_OUTBOX_DIR="/data/masterhub-outbox/print"
 FAX_OUTBOX_DIR="/data/masterhub-outbox/fax"
 
-# 共有フォルダ(作業表☆/作業伝票)自動同期用。
-# 本番を動かす Docker Desktop のPCが共有フォルダのホストPCと同一の場合、
-# ネットワーク越しのCIFSマウントは不要。ホスト側ローカルパスを bind mount で直接コンテナへ渡す。
-SHARED_SOURCE_HOST_PATH="C:/path/to/共有フォルダ"
-MASTER_HUB_SHARED_SOURCE_DIR="/shared-source"
+# 作業表☆(原本)は会社PCの送信ツールから受け取る(本番の正式経路。下の「作業表☆の受け取り」参照)。
+# 受け口のトークン(32文字以上のランダム文字列。リポジトリ・チャットに実値を書かない)
+SHARED_SYNC_UPLOAD_TOKEN="<32文字以上のランダム文字列>"
+
+# (任意・フォールバック) 共有フォルダをホストと同じマシンから直接読む場合のみ。
+# 本番は Vultr(Linux)で会社の共有フォルダ(社内LANの Synology)に届かないため、通常は使わない。
+# SHARED_SOURCE_HOST_PATH="/path/to/shared-folder"
+# MASTER_HUB_SHARED_SOURCE_DIR="/shared-source"
 
 # 認証（任意の強力なパスワードを設定）
 NEXTAUTH_SECRET="<ランダムな文字列>"
@@ -109,7 +114,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 - `masterhub_storage` ボリュームに写真・帳票の保存先を載せる
 - `masterhub_outbox` ボリュームに印刷/FAX 出力ファイルを載せる
 - まずは 1 台構成で十分で、Redis を外出しするのは負荷や可用性要件が出てからでよい
-- 共有フォルダ(作業表☆/作業伝票)自動同期を使う場合、本番ホスト上で共有フォルダが置かれているローカルパスを `SHARED_SOURCE_HOST_PATH` に設定する（未設定時はダミーの空フォルダがマウントされ同期は「ファイル無し」扱いになるだけで起動は失敗しない）。共有フォルダがこの本番PC自体でホストされている前提のため、別PC/NAS宛のネットワーク越しマウント設定は不要。
+- 作業表☆(原本)は、会社PCの送信ツールから `POST /api/sites/shared-sync/upload` で受け取り Redis に保存する(詳細は下の「作業表☆の受け取り」)。`SHARED_SYNC_UPLOAD_TOKEN` を設定しないと受け口は常に 503 で拒否する。共有フォルダをホストから直接読む方式(`SHARED_SOURCE_HOST_PATH`)は、共有フォルダが本番ホスト自身にある場合のフォールバック(未設定時はダミーの空フォルダがマウントされ、フォルダ側は「ファイル無し」扱いになるだけで起動は失敗しない)。受信済みの原本と共有フォルダのファイルが両方あるときは、更新日時が新しい方(同じなら受信分)を使う。
 - 共有フォルダ同期(worker): 起動直後に1回、その後ファイル更新時刻に関わらず定期実行する。2系統に分かれている。
   - 週予定(`scope=schedule`): 作業表☆(原本)だけを読み、`SHARED_SYNC_SCHEDULE_INTERVAL_MS`（既定 300000 = 5分、最小 60000）ごとに週予定へ反映する。作業伝票ファイルが無くても動く。専用キュー(`shared-sync-schedule`)・専用ロックで、台帳同期の長時間処理に待たされない。原本が扱っている日付範囲を原本と完全一致させる差分同期(追加・更新・削除。変更のない予定は ID を保つ)。同じ人・日・現場の手入力の予定は原本の内容で上書きし、同じセルのそれ以外の手入力は残す。
   - 台帳・関係会社(`scope=ledger`): 作業伝票(アプリ内ブック)から `SHARED_SYNC_POLL_INTERVAL_MS`（既定 1800000 = 30分、最小 60000）ごと。ブック保存時は即時に反映する。ブックが正本のため共有フォルダ(作業表☆含む)には依存しない。ブックが未作成のときだけ共有フォルダの作業伝票ファイルを元データにする。
@@ -302,23 +307,90 @@ npm run prod:https
 pg_dump -U postgres -d master_hub > backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql
 ```
 
+## 作業表☆の受け取り(会社PCから読み取り専用で送信)
+
+本番は Vultr(東京)の Linux VPS で、会社の社内LAN(Synology の共有フォルダ)には届かない。そのため、原本(作業表☆)は**会社PCから本番へ送る**方式にしている。原本には一切書き込まない。
+
+```mermaid
+flowchart LR
+  A[会社PC 送信ツール<br/>読み取り専用で原本を読む] -- HTTPS POST 変更時のみ --> B[web /api/sites/shared-sync/upload]
+  B --> C[(Redis 受信済みの原本)]
+  C --> D[worker 5分ごとに照合]
+  D --> E[週予定 WorkEntry]
+```
+
+### 受け口(`/api/sites/shared-sync/upload`)の仕様
+
+- 認証: `Authorization: Bearer <SHARED_SYNC_UPLOAD_TOKEN>`(32文字以上。未設定・短すぎる場合は常に 503 で拒否)。比較は定数時間。トークンはログ・レスポンスに出さない。
+- `GET`: 送信ツールの生存確認。受信済みの原本の SHA-256 を返す(変更が無ければ送らない判断に使う)。呼ぶたびに「最終連絡」が更新される。
+- `POST`: 原本の本体(バイナリ)。ヘッダ `x-file-name`(URL エンコード。`作業表☆` で始まる `.xlsx`/`.xls` のみ)、`x-source-mtime`(原本の更新日時 ms。年なし日付の年補完に使う)、`x-sha256`(任意。不一致は 400)。
+- 制限: 最大 25MB(`SHARED_SYNC_UPLOAD_MAX_BYTES` で変更可)。中身が Excel(ZIP/OLE)でなければ 415。IP ごとに 120件/分、認証失敗は 10回/10分で 429。
+- 保存先は Redis(最新1件・90日保持)。web と worker は別コンテナだが、どちらも Redis から取り出してコンテナ内の保存ディレクトリへ書き出すので共有ボリュームは不要。
+- 画面の「原本を手動アップロード」(`/site-ledger/shared-upload`、週予定の編集権限が必要)は、同じ受け口を Cookie 認証で使う緊急用。
+- worker は受信した原本に変化が無い間は同期を省く(1時間ごとの念のための再同期はする)。受信した原本と共有フォルダのファイルが両方あるときは、更新日時が新しい方(同じなら受信分)を使う。
+
+### 本番サーバーの設定(1回だけ)
+
+1. トークンを作る(本番ホストで。値は画面・チャット・リポジトリに貼らない): `openssl rand -base64 36`
+2. 本番ホストの `.env.production` に `SHARED_SYNC_UPLOAD_TOKEN=<トークン>` を1行追記する。`deploy.yml` は再生成のたびに `SHARED_SYNC_` で始まる既存行を引き継ぐので、デプロイで消えない(`deploy.yml` は変更不要)。
+3. `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --force-recreate web worker`
+4. HTTPS のリバースプロキシ(Cloudflare/Nginx 等)を使っている場合、リクエストボディの上限が 25MB 以上であること(Nginx は `client_max_body_size 30m;`。既定 1MB だと 413 になる)。送信は `https://` のみ(送信ツールは `http://` を拒否する)。
+
+### 会社PCの設定(送信ツール)
+
+前提: Windows PowerShell 5.1(標準)。管理者権限は不要。原本のある共有フォルダを、そのPCのログオンユーザーが読めること。
+
+1. リポジトリ(または `scripts/shared-sync-agent.ps1` と `scripts/install-shared-sync-agent.ps1` の2ファイル)を会社PCへコピーする。
+2. 次を実行する(`-SourceDir` は既定の `\\192.168.0.210\guest\共有フォルダ` と違うときだけ指定):
+   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-shared-sync-agent.ps1 -ServerUrl https://<本番のURL>`
+3. トークンの入力を求められたら、画面に出ない入力欄へ直接貼る(DPAPI で暗号化して `%LOCALAPPDATA%\MasterHubAgent\token.dat` に保存。そのPCのそのユーザーだけが復号できる)。
+4. タスクスケジューラに「MasterHub Shared Sync Agent」が登録される(ログオン時と5分おき。現在のユーザーで実行)。終了時にテスト実行され、終了コード 0 なら成功(1=エラー、2=原本が見つからない/読めない。詳細は `%LOCALAPPDATA%\MasterHubAgent\agent.log`)。
+5. 削除: `scripts\install-shared-sync-agent.ps1 -Uninstall`(`-RemoveFiles` で保存先も削除)。トークンを変えるときは再実行して置き換える。
+
+送信ツールの動き: 原本を読み取り専用(他のプログラムが開いたままでも読める共有モード)で開いてメモリへ読み込み、SHA-256 を計算 → 受け口の `GET` で受信済みの SHA-256 と比べ → 違うときだけ `POST`。ネットワークエラー・5xx・429 は 5/20/60秒で再試行、認証・検証エラー(4xx)は再試行しない。同時実行は1つだけ。ログは1MBで切り替え。
+
+### 会社PCの停電・停止対策
+
+原本を送れるのは、会社PCが起動しログオンしている間だけ。次を設定しておく。
+
+- UPS(無停電電源)をつなぐ。
+- BIOS/UEFI の「AC電源復帰時の動作(Restore on AC Power Loss / After Power Failure)」を「電源オン(Power On)」にする(停電復旧で自動起動)。
+- スリープ・休止を無効にする(管理者のコマンドプロンプト): `powercfg /change standby-timeout-ac 0` / `powercfg /change hibernate-timeout-ac 0` / `powercfg /hibernate off`。高速スタートアップも無効にする(電源オプション → 電源ボタンの動作 → 高速スタートアップを無効)。ネットワークアダプターの「電力の節約のためにこのデバイスをオフにできる」のチェックを外す。
+- 自動ログオン(送信タスクは「ログオン時」から動くため、再起動後にサインインが必要)。`netplwiz` か Sysinternals の Autologon で設定する。パスワードが端末に保存されるので、物理的に人が入れない場所のPCに限り、可能なら送信専用の権限の低いユーザーにする。
+- Windows Update: アクティブ時間を 7:00〜20:00 にし、営業時間中に自動再起動しないようにする(再起動のあとも自動ログオンで復帰する)。
+- 停止の検知: 稼働時間(日本時間 月〜土 7:00〜20:00)に45分以上、会社PCからの連絡も受信も無いと、現場台帳画面に「注意: 会社PCからの原本送信: ...」が出る。急ぎのときは「原本を手動アップロード」を使う。
+
+### アプリ側の編集の保護(要点)
+
+- 原本の同期は一方向だが、アプリで手入力・編集・削除した予定は同期で上書き・削除されない(編集した行には印が付く)。
+- アプリで削除した原本由来の予定は、原本に残っていても再作成されない(削除記録 = 墓標。`UserUiSetting` のグローバル設定 `shared-sync:{normal|daily}:tombstones` に保存。保持期間 400 日は未承認の暫定値)。
+- 制限: 原本側が、アプリで編集済みの予定の内容を後から変えると、新しい内容の予定が別行として追加される(編集済みの行は自動では消えない)。
+
+### 提案(未適用・承認後に実施)
+
+- `deploy.yml` でのトークン保持: 現状は本番ホストの `.env.production` に一度書けば引き継がれる(上記)。ホストを作り直しても復元できるようにするなら、GitHub Secrets に `PROD_SHARED_SYNC_UPLOAD_TOKEN` を登録し、`deploy.yml` の `env:` / `envs:` に追加して `append_env_if_set SHARED_SYNC_UPLOAD_TOKEN "${SHARED_SYNC_UPLOAD_TOKEN:-}"` を書く(Settings → Secrets and variables → Actions → New repository secret)。
+- Docker ビルドキャッシュの掃除(ディスク逼迫対策): 週1回の cron で `docker builder prune -af --filter until=168h` と `docker image prune -f` を実行する(実行中のコンテナ・ボリュームには影響しない)。
+- マイグレーション: この機能で必要な DB 変更は無い(Redis と既存の `UserUiSetting` のみ使用)。
+
 ## 同期の確認
 
-共有フォルダ同期(worker)が本番ホストで動いているかを確認する手順。本番ホスト(Docker Desktop のPC)の PowerShell で、`DEPLOY_PATH` のリポジトリ直下から実行する。以降の `$c` は次の別名として使う。
+共有フォルダ同期(worker)が本番ホストで動いているかを確認する手順。本番は Vultr の Linux VPS なので、SSH で入って bash で `DEPLOY_PATH` のリポジトリ直下から実行する(Docker Desktop や PowerShell は使わない。手順中の PowerShell 表記は旧構成の名残で、Linux では下の bash 版に読み替える)。以降の `$c` は次の別名として使う。
 
-```powershell
-$c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
+```bash
+c="compose -f docker-compose.prod.yml --env-file .env.production"   # 使い方: docker $c ps
 ```
+
+原本を会社PCの送信ツールから受け取っている場合(本番の標準)、確認の中心は「現場台帳画面の同期ステータス行(会社PCからの原本送信の最終受信/最終連絡)」と worker ログです。
 
 ### 確認手順(7ステップ)
 
 1. コンテナが全部 Up か: `docker $c ps` — `redis` / `web` が `healthy`、`worker` が `Up` であること(`Restarting` / `Exited` は異常)。
-2. worker のログに同期の行があるか: `docker $c logs --tail=200 worker | Select-String shared-sync`
+2. worker のログに同期の行があるか: `docker $c logs --tail=200 worker | grep shared-sync`
    - 起動時に `poller started: scope=schedule intervalMs=300000` と `scope=ledger intervalMs=1800000` が出ている
-   - 直近5分以内に `enqueued: scope=schedule kind=NORMAL` と `success: scope=schedule kind=NORMAL durationMs=... counts={...}` がある(台帳は30分以内)
+   - 原本に変化がある間は直近5分以内に `enqueued: scope=schedule kind=NORMAL` と `success: scope=schedule kind=NORMAL durationMs=... counts={...}` がある(台帳は30分以内)。会社PCから受信した原本に変化が無い間は同期を省くため `enqueued` は出ず、1時間ごとの念のための再同期だけがログに出る(画面の同期ステータスは「正常」のまま)
    - `failed` / `skip` / `tick failed` / `skipped (busy)` が続いていない(下の表を参照)
-3. 共有フォルダが worker から見えているか: `docker $c exec worker ls /shared-source` — `作業表☆.xlsx` が見えること。空・`No such file or directory` なら `SHARED_SOURCE_HOST_PATH` が誤り。
-4. 環境変数が入っているか: `docker $c exec worker sh -c "printenv | grep -E 'SHARED|MASTER_HUB'"` — `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` と `MASTER_HUB_STORAGE_DIR` があること。`SHARED_SOURCE_HOST_PATH` は compose 側(ホスト)の値なので、コンテナ内には出ない場合がある。ホスト側は `Select-String -Path .env.production -Pattern 'SHARED'` で確認する。
+3. 原本を受信しているか: 現場台帳画面の「会社PCからの原本送信」行で最終受信/最終連絡が新しいこと。共有フォルダを直接読むフォールバックを使っている場合のみ: `docker $c exec worker ls /shared-source` で `作業表☆.xlsx` が見えること(空・`No such file or directory` なら `SHARED_SOURCE_HOST_PATH` が誤り)。
+4. 環境変数が入っているか: `docker $c exec worker sh -c "printenv | grep -E 'SHARED_SYNC|MASTER_HUB'"` — worker と web の両方で `SHARED_SYNC_UPLOAD_TOKEN` が存在し、`MASTER_HUB_STORAGE_DIR` があること(値はチャット等に貼らない)。ホスト側は `grep -c SHARED_SYNC_UPLOAD_TOKEN .env.production`(1 以上)で確認する。
 5. Redis が生きているか: `docker $c exec redis redis-cli ping` — `PONG`。
 6. 現場台帳画面(編集権限者)の同期ステータス行: 「週予定の同期(5分おき)」の最終成功が5分前後以内で、「注意: ...が止まっている可能性」の行が出ていないこと(警告は最終成功が15分を超えた時点から出る)。
 7. 修正が本番に届いているか: push 済み(`git log origin/main -n 5` に目的のコミットがある)かつ配備済み(GitHub Actions の `Deploy to Production` が成功、本番ホストで `git log -n 1` が同じコミット)。push するだけで自動配備される。
@@ -327,7 +399,8 @@ $c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
 
 | ログ・画面の表示 | 原因 | 対処 |
 | --- | --- | --- |
-| `skip: ... sources not found dir=/shared-source 共有フォルダにアクセスできません: ... (ENOENT)` | `SHARED_SOURCE_HOST_PATH` のパスが存在しない/誤り(bind mount 失敗) | `.env.production` のパスを直して `docker $c up -d` で worker を再作成 |
+| `skip: ... sources not found ... 作業表☆がありません(会社PCからの送信を受信していません)` / 画面「会社PCからの連絡が N 分間ありません」 | 会社PCの送信ツールが動いていない(PC停止・スリープ・ログオフ・ネットワーク・トークン不一致) | 会社PCの `%LOCALAPPDATA%\MasterHubAgent\agent.log` を確認。急ぎなら「原本を手動アップロード」を使う |
+| `skip: ... sources not found dir=/shared-source 共有フォルダにアクセスできません: ... (ENOENT)` | (フォルダ直読みのフォールバックを使う場合のみ) `SHARED_SOURCE_HOST_PATH` のパスが存在しない/誤り(bind mount 失敗)。本番で原本を受信済みならこの行は出ても無視してよい | 受信済みの原本があれば同期は受信分で動く。フォルダ直読みを使うなら `.env.production` のパスを直して `docker $c up -d` で worker を再作成 |
 | `skip: ... sources not found ... workTable=- workSlip=-` | 共有フォルダは見えるが `作業表☆.xlsx` が無い(`SHARED_SOURCE_HOST_PATH` 未設定時の空ダミーも同じ表示) | 共有フォルダに原本を置く / パスを設定する |
 | `failed: scope=schedule ... error=必要な元データがありません: ...` | 手動同期など、元データが無い状態で実行された | 共有フォルダとファイル名を確認 |
 | `failed: ... error=Excel 読み取りに失敗: ...` | 原本が壊れている/保存途中/パスワード保護 | ファイルを開き直して保存し直す(次の周期で自動再試行) |
@@ -338,7 +411,9 @@ $c = @('compose','-f','docker-compose.prod.yml','--env-file','.env.production')
 | デプロイ後に共有フォルダ系の設定が消えた | `.env.production` の再生成で `SHARED_SOURCE_HOST_PATH` 等が落ちた(`deploy.yml` は既存行を引き継ぐが、手で作り直した場合は消える) | `.env.production` に `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` を再設定して `up -d` |
 | ブック保存が台帳に反映されない | 台帳はブックが正本で共有フォルダに依存しない。反映失敗は同期ステータス(台帳)に `failed` / `skipped` として残る | 現場台帳画面の「台帳・関係会社の反映」の結果と worker/web ログを確認 |
 
-### 設定が消えたときの復旧コマンド(本番ホストの PowerShell・リポジトリ直下)
+### (旧構成・参考)フォルダ直読みの設定が消えたときの復旧コマンド(Windows の Docker Desktop ホスト・リポジトリ直下)
+
+> 本番(Vultr Linux)は共有フォルダを直接読まないため、この節と次の2節(IP 確認・CIFS)は「共有フォルダと同じネットワーク上の Windows ホストでアプリを動かす場合」の参考です。Vultr では上の「作業表☆の受け取り」を使います。
 
 「同期の確認」のステップ3/4で `/shared-source` が空・環境変数が無い場合の復旧。`$c` は上の別名と同じ。`.env.production` 以外は触らない。
 
@@ -366,9 +441,9 @@ docker $c logs --tail=50 worker | Select-String shared-sync
 
 その後、現場台帳画面の同期ステータス行で、週予定の最終成功が数分以内に更新されることを確認する。`MASTER_HUB_SHARED_SOURCE_DIR` を書かないと、worker は既定の `\\192.168.0.210\guest\共有フォルダ`(コンテナ内では開けない)を読みに行き、`ENOENT` で同期できない(worker は起動時にこの状態を1回だけ警告する)。
 
-### 本番PCのIPアドレスの確認と、共有フォルダのホストかどうか
+### (旧構成・参考)本番PCのIPアドレスの確認と、共有フォルダのホストかどうか
 
-本番ホスト(Docker Desktop のPC)の PowerShell:
+Windows ホスト(Docker Desktop のPC)でアプリを動かす場合の PowerShell:
 
 ```powershell
 # このPCのIPv4(社内LAN)
@@ -384,7 +459,9 @@ Test-Path '\\192.168.0.210\guest\共有フォルダ'
 - `192.168.0.210` が上のIPに含まれ、`Get-SmbShare` に共有フォルダの実パスが出る → このPCがホスト。`SHARED_SOURCE_HOST_PATH` にその実パス(スラッシュ区切り)を書けばよい(上の復旧コマンド)。
 - IPに含まれない → 共有フォルダは別PC。ホストの実パスは使えないので、次の案が必要。
 
-### 共有フォルダが別PCにある場合(CIFS・適用済み・本番反映は push 後)
+### (旧計画・本番 Vultr では使えない)共有フォルダが別PCにある場合(CIFS)
+
+> Vultr は社内LAN(192.168.x.x)の Synology へ届かないため、本番ではこの方式を使わない(コード・`deploy.yml` の分岐はフォールバックとして残しているだけ)。以下は Windows ホスト向けの旧記述。
 
 本番PCが共有フォルダのホストでないとき、`/shared-source` に SMB 共有を直接マウントする。`docker-compose.shared-cifs.yml`(上書きファイル)を使い、`deploy.yml` は本番PCの `.env.host` に `SHARED_CIFS_HOST` があるときだけ `-f docker-compose.shared-cifs.yml` を追加して読み込む(無ければ従来どおり `SHARED_SOURCE_HOST_PATH` の bind mount)。
 
@@ -394,7 +471,7 @@ Test-Path '\\192.168.0.210\guest\共有フォルダ'
 - Docker Desktop(WSL2)では未検証。適用後に `docker $c exec worker ls /shared-source` で `作業表☆.xlsx` が見えることを必ず確認する。
 - 代替: 共有元PC側で本番PCへ同期(robocopy など)して、本番PCのローカルフォルダを `SHARED_SOURCE_HOST_PATH` に指定する。認証情報をコンテナに渡さずに済む。
 
-### 設定消去の対策(適用済み・本番反映は push 後)
+### 設定消去の対策(適用済み・本番反映は push 後・フォルダ直読みのフォールバック用)
 
 `deploy.yml` は `.env.production` を毎回再生成する。今は次のとおり、再生成されても消えない:
 
@@ -412,7 +489,9 @@ Test-Path '\\192.168.0.210\guest\共有フォルダ'
 
 - worker は周期ごとの結果(`enqueued` / `no-sources` / `previous-pending` / `error`)を Redis のキー `masterhub:shared-sync:poller:{scope}:{kind}` に記録する(心拍)。
 - 現場台帳画面(編集権限者のみ)は、最終成功が 週予定 15分 / 台帳 90分 を超えた場合に、理由(ポーラーの記録が無い・古い / 同期元なし / 滞留 / 直近の失敗)つきで「注意: ... が止まっている可能性」を表示する。成功が新しい間は警告しない。しきい値は `src/shared/shared-sync-health.ts` の定数(`SCHEDULE_STALE_MS` / `LEDGER_STALE_MS`)。
-- 同じ情報は `GET /api/sites/shared-sync`(`status` / `poller` / `health`)でも取得できる。
+- 同じ情報は `GET /api/sites/shared-sync`(`status` / `poller` / `health` / `upload`)でも取得できる。
+- 理由 `unchanged`: 会社PCから受信した原本に変化が無いため同期を省いた状態。最後の成功が1時間定期の再同期の範囲(約1時間半以内)なら「正常」扱いで警告しない。
+- 会社PCの送信ツールの停止: 日本時間 月〜土 7:00〜20:00 に連絡(GET/POST)も受信も 45分以上無いと警告する(定数は `src/shared/shared-sync-upload.ts` の `AGENT_SILENT_MS`、`src/shared/shared-sync-health.ts` の `UNCHANGED_*`)。トークン未設定のときは「作業表☆の入手手段が未設定」の設定警告を出す。
 
 ### worker ヘルスチェックの提案(未適用)
 
