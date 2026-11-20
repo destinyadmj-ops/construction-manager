@@ -384,25 +384,29 @@ Test-Path '\\192.168.0.210\guest\共有フォルダ'
 - `192.168.0.210` が上のIPに含まれ、`Get-SmbShare` に共有フォルダの実パスが出る → このPCがホスト。`SHARED_SOURCE_HOST_PATH` にその実パス(スラッシュ区切り)を書けばよい(上の復旧コマンド)。
 - IPに含まれない → 共有フォルダは別PC。ホストの実パスは使えないので、次の案が必要。
 
-### 共有フォルダが別PCにある場合の案(未適用・承認待ち)
+### 共有フォルダが別PCにある場合(CIFS・適用済み・本番反映は push 後)
 
-`docker-compose.prod.yml` は変更していない。本番PCが共有フォルダのホストでないとき、`/shared-source` に SMB 共有を直接マウントする案:
+本番PCが共有フォルダのホストでないとき、`/shared-source` に SMB 共有を直接マウントする。`docker-compose.shared-cifs.yml`(上書きファイル)を使い、`deploy.yml` は本番PCの `.env.host` に `SHARED_CIFS_HOST` があるときだけ `-f docker-compose.shared-cifs.yml` を追加して読み込む(無ければ従来どおり `SHARED_SOURCE_HOST_PATH` の bind mount)。
 
-- `docker-compose.prod.yml` に CIFS ボリュームを定義し、`web` / `worker` の `/shared-source:ro` をそのボリュームへ差し替える(`driver: local` / `driver_opts: type: cifs, device: //<共有元IP>/<共有名>/<サブフォルダ>, o: addr=<共有元IP>,username=...,password=...,ro,vers=3.0,iocharset=utf8`)。Docker Desktop(WSL2)では未検証のため、適用前に実機で `docker $c exec worker ls /shared-source` が通ることを確認する。
-- 認証情報: リポジトリ(compose・`.env.production.example`・GitHub)に実値を書かない。本番PCの再生成されない専用ファイル(例: `.env.host`)に置き、読み取り専用の専用アカウントを使う。`deploy.yml` の `.env.production` 再生成で消えない場所に置くのが前提(下記「設定消去の対策」)。
+- 本番PCのデプロイ先(`DEPLOY_PATH`)に `.env.host` を作り、次の4行を書く(読み取り専用アカウント。リポジトリ・GitHub・compose には実値を書かない。`.env.host` は再生成されない):
+  `SHARED_CIFS_HOST=192.168.0.210` / `SHARED_CIFS_PATH=guest/共有フォルダ` / `SHARED_CIFS_USER=...` / `SHARED_CIFS_PASSWORD=...`
+- 手動で起動・確認するとき(`$c` を差し替える): `$c = @('compose','-f','docker-compose.prod.yml','-f','docker-compose.shared-cifs.yml','--env-file','.env.production','--env-file','.env.host')`
+- Docker Desktop(WSL2)では未検証。適用後に `docker $c exec worker ls /shared-source` で `作業表☆.xlsx` が見えることを必ず確認する。
 - 代替: 共有元PC側で本番PCへ同期(robocopy など)して、本番PCのローカルフォルダを `SHARED_SOURCE_HOST_PATH` に指定する。認証情報をコンテナに渡さずに済む。
 
-### 設定消去の対策(提案・未適用)
+### 設定消去の対策(適用済み・本番反映は push 後)
 
-`deploy.yml` は `.env.production` を再生成し、既存の `SHARED_SOURCE_HOST_PATH` / `MASTER_HUB_SHARED_SOURCE_DIR` / `SHARED_SYNC_*` 行だけを引き継ぐため、一度消えると復旧しない。案:
+`deploy.yml` は `.env.production` を毎回再生成する。今は次のとおり、再生成されても消えない:
 
-- (a) 再生成時に `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` を常に書く(コンテナ内パスは固定値なので秘密ではない)。`SHARED_SOURCE_HOST_PATH` は GitHub の Variables から渡す。
-- (b) ホスト固有の値を `.env.host`(リポジトリ外・再生成されない)へ分け、`--env-file .env.production --env-file .env.host` と `env_file` の両方で読む。`.env.host` が無い環境でも起動できるよう、存在しない場合は読み込まない書き方にする。
+- `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` は常に書く(コンテナ内の固定パス。設定が無くても既定の `\\...` を読みに行かない)。
+- `SHARED_SOURCE_HOST_PATH` は、GitHub の Variables `PROD_SHARED_SOURCE_HOST_PATH` があればそれを書き、無ければ既存の行を引き継ぐ(`SHARED_SYNC_*` も引き継ぐ)。
+- ホスト固有の値は `.env.host`(リポジトリ外)にも置ける。`.env.host` があれば `--env-file .env.production --env-file .env.host` で読む(変数展開用。`SHARED_SOURCE_HOST_PATH` や CIFS の値)。
 
-### 印のない旧予定とタイムゾーン(結論と提案・未適用)
+本番の復旧は、GitHub の Settings → Secrets and variables → Actions → Variables に `PROD_SHARED_SOURCE_HOST_PATH`(本番PCから見た共有フォルダの実パス、スラッシュ区切り)を登録して、デプロイ(`workflow_dispatch` でも可)を1回実行するだけでよい。
+### 印のない旧予定とタイムゾーン
 
-- 印のない旧予定(`sharedExcelSync` の印が付く前に作られた予定): 手入力と区別できないため、同期は消さない。同じ人・日・現場(または同じ文字)のものは原本で上書きされて同期由来になる。文言も違う場合だけ残り、画面に二重表示される。案: 承認済みの一括整理(`scripts/ledger-requote.ts` と同様の dry-run → 承認ID指定の削除)を別途用意する。
-- タイムゾーン: 同期由来の予定は日付の UTC 12:00 で保存するので、UTC のコンテナでも日本時間のPCでも日付はずれない(UTC-11〜+11 の範囲で同じ日)。ずれる可能性があるのは、日本時間の 0:00 付近で作られた手入力の予定を UTC のコンテナが読む場合(前日扱い)で、同じ人・日・現場の上書き判定を外すことがある。対策案: 本番の `web` / `worker` に `TZ=Asia/Tokyo` を設定する(`docker-compose.prod.yml` と `.env.production.example` の変更になるため承認待ち)。
+- 印のない旧予定(`sharedExcelSync` の印が付く前に作られた予定): 手入力と区別できないため、同期は消さない。同じ人・日・現場(または同じ文字)のものは原本で上書きされて同期由来になる。文言も違う場合だけ残り、画面に二重表示される。案(未適用): 承認済みの一括整理(`scripts/ledger-requote.ts` と同様の dry-run → 承認ID指定の削除)を別途用意する。
+- タイムゾーン: 同期由来の予定は日付の UTC 12:00 で保存するので、UTC のコンテナでも日本時間のPCでも日付はずれない(UTC-11〜+11 の範囲で同じ日)。ずれる可能性があるのは、日本時間の 0:00 付近で作られた手入力の予定を UTC のコンテナが読む場合(前日扱い)で、同じ人・日・現場の上書き判定を外すことがある。対策(適用済み・本番反映は push 後): `docker-compose.prod.yml` の `web` / `worker` に `TZ=Asia/Tokyo` を設定した。
 
 ### 停止の自動検知(画面警告)
 

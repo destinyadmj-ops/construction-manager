@@ -27,6 +27,7 @@ jobs:
       DESKTOP_APP_RELEASE_NOTES_B64: ${{ secrets.PROD_DESKTOP_APP_RELEASE_NOTES_B64 }}
       DESKTOP_APP_PUBLISHED_AT: ${{ secrets.PROD_DESKTOP_APP_PUBLISHED_AT }}
       DESKTOP_APP_CHANNEL: ${{ secrets.PROD_DESKTOP_APP_CHANNEL }}
+      SHARED_SOURCE_HOST_PATH: ${{ vars.PROD_SHARED_SOURCE_HOST_PATH }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -72,17 +73,27 @@ jobs:
           DESKTOP_APP_RELEASE_NOTES_B64: ${{ env.DESKTOP_APP_RELEASE_NOTES_B64 }}
           DESKTOP_APP_PUBLISHED_AT: ${{ env.DESKTOP_APP_PUBLISHED_AT }}
           DESKTOP_APP_CHANNEL: ${{ env.DESKTOP_APP_CHANNEL }}
+          SHARED_SOURCE_HOST_PATH: ${{ env.SHARED_SOURCE_HOST_PATH }}
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ env.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN,DESKTOP_APP_VERSION,DESKTOP_APP_DOWNLOAD_URL,DESKTOP_APP_RELEASE_NOTES,DESKTOP_APP_RELEASE_NOTES_B64,DESKTOP_APP_PUBLISHED_AT,DESKTOP_APP_CHANNEL
+          envs: GITHUB_SHA,GITHUB_REPOSITORY,DEPLOY_PATH,DATABASE_URL,DIRECT_URL,REDIS_URL,NEXTAUTH_SECRET,NEXTAUTH_URL,ADMIN_TOKEN,DESKTOP_APP_VERSION,DESKTOP_APP_DOWNLOAD_URL,DESKTOP_APP_RELEASE_NOTES,DESKTOP_APP_RELEASE_NOTES_B64,DESKTOP_APP_PUBLISHED_AT,DESKTOP_APP_CHANNEL,SHARED_SOURCE_HOST_PATH
           script: |
             set -eu
 
+            # .env.host(リポジトリ外・再生成しない)があれば変数展開に追加し、CIFS設定があれば共有マウントを差し替える
             run_compose() {
-              docker compose -f docker-compose.prod.yml --env-file .env.production "$@"
+              compose_files="-f docker-compose.prod.yml"
+              compose_envs="--env-file .env.production"
+              if [ -f .env.host ]; then
+                compose_envs="$compose_envs --env-file .env.host"
+                if grep -q '^SHARED_CIFS_HOST=' .env.host; then
+                  compose_files="$compose_files -f docker-compose.shared-cifs.yml"
+                fi
+              fi
+              docker compose $compose_files $compose_envs "$@"
             }
 
             append_env_if_set() {
@@ -136,7 +147,10 @@ jobs:
             desktop_env_lines=""
             shared_sync_env_lines=""
             if [ -f .env.production ]; then
-              shared_sync_env_lines="$(grep -E '^(SHARED_SOURCE_HOST_PATH|MASTER_HUB_SHARED_SOURCE_DIR|SHARED_SYNC_)' .env.production || true)"
+              shared_sync_env_lines="$(grep -E '^(SHARED_SOURCE_HOST_PATH|SHARED_SYNC_)' .env.production || true)"
+              if [ -n "${SHARED_SOURCE_HOST_PATH:-}" ]; then
+                shared_sync_env_lines="$(printf '%s\n' "$shared_sync_env_lines" | grep -v '^SHARED_SOURCE_HOST_PATH=' || true)"
+              fi
               desktop_env_lines="$(grep '^DESKTOP_APP_' .env.production || true)"
               if [ -n "${DESKTOP_APP_VERSION:-}" ]; then
                 desktop_env_lines="$(printf '%s\n' "$desktop_env_lines" | grep -v '^DESKTOP_APP_VERSION=' || true)"
@@ -176,6 +190,9 @@ jobs:
             if [ -n "$shared_sync_env_lines" ]; then
               printf '\n%s\n' "$shared_sync_env_lines" >> .env.production
             fi
+            # コンテナ内パスは固定値。常に書くことで、再生成で設定が消えても既定UNCを読みに行かない
+            printf 'MASTER_HUB_SHARED_SOURCE_DIR=/shared-source\n' >> .env.production
+            append_env_if_set SHARED_SOURCE_HOST_PATH "${SHARED_SOURCE_HOST_PATH:-}"
             append_env_if_set DESKTOP_APP_VERSION "${DESKTOP_APP_VERSION:-}"
             append_env_if_set DESKTOP_APP_DOWNLOAD_URL "${DESKTOP_APP_DOWNLOAD_URL:-}"
             append_env_if_set DESKTOP_APP_RELEASE_NOTES "$decoded_desktop_release_notes"

@@ -1,0 +1,21 @@
+# 共有フォルダが別PCにあるときの上書き。deploy.yml は .env.host に SHARED_CIFS_HOST があるときだけ読み込む。
+# 値(認証情報を含む)は .env.host(リポジトリ外)に置く。読み取り専用アカウントを使うこと。
+#   SHARED_CIFS_HOST=192.168.0.210
+#   SHARED_CIFS_PATH=guest/共有フォルダ
+#   SHARED_CIFS_USER=...
+#   SHARED_CIFS_PASSWORD=...
+services:
+  web:
+    volumes:
+      - shared_source_cifs:/shared-source:ro
+  worker:
+    volumes:
+      - shared_source_cifs:/shared-source:ro
+
+volumes:
+  shared_source_cifs:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${SHARED_CIFS_HOST}/${SHARED_CIFS_PATH}"
+      o: "addr=${SHARED_CIFS_HOST},username=${SHARED_CIFS_USER},password=${SHARED_CIFS_PASSWORD},ro,vers=3.0,iocharset=utf8"
