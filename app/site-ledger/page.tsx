@@ -148,10 +148,17 @@ type SharedSyncRunStatusView = {
 
 type SharedSyncHealthView = { level: 'ok' | 'warn'; reasons: string[]; cause?: string };
 
+type SharedSyncUploadView = {
+  meta: { fileName: string; receivedAt: string; via: string } | null;
+  lastContactAt: string | null;
+  health: SharedSyncHealthView;
+};
+
 type SharedSyncStatusView = {
   schedule: SharedSyncRunStatusView | null;
   ledger: SharedSyncRunStatusView | null;
   health: { schedule: SharedSyncHealthView | null; ledger: SharedSyncHealthView | null };
+  upload: SharedSyncUploadView | null;
 };
 
 function formatSyncTime(iso: string): string {
@@ -163,7 +170,7 @@ function formatSyncTime(iso: string): string {
 function describeSharedSyncStatus(label: string, status: SharedSyncRunStatusView | null, health?: SharedSyncHealthView | null): string {
   if (!status) {
     if (health?.cause === 'folder-unreachable') return `${label}: 実行記録なし(worker は動作中ですが共有フォルダが見えません)`;
-    if (health?.cause === 'no-files') return `${label}: 実行記録なし(共有フォルダに同期元のファイルがありません)`;
+    if (health?.cause === 'no-files') return `${label}: 実行記録なし(同期元のファイルがありません)`;
     if (health?.cause === 'no-worker') return `${label}: 実行記録なし(worker が動いていない、または Redis に接続できません)`;
     return `${label}: 実行記録なし`;
   }
@@ -570,10 +577,24 @@ export default function SiteLedgerPage() {
         return { level: item.level === 'warn' ? 'warn' : 'ok', reasons };
       };
       const healthRaw = obj?.health && typeof obj.health === 'object' ? (obj.health as Record<string, unknown>) : null;
+      const uploadRaw = obj?.upload && typeof obj.upload === 'object' ? (obj.upload as Record<string, unknown>) : null;
+      const uploadMetaRaw = uploadRaw?.meta && typeof uploadRaw.meta === 'object' ? (uploadRaw.meta as Record<string, unknown>) : null;
+      const uploadHealth = parseHealth(uploadRaw?.health);
       setSharedSyncStatus({
         schedule: parseRunStatus(statusRaw?.schedule),
         ledger: parseRunStatus(statusRaw?.ledger),
         health: { schedule: parseHealth(healthRaw?.schedule), ledger: parseHealth(healthRaw?.ledger) },
+        upload:
+          uploadRaw && uploadHealth
+            ? {
+                meta:
+                  uploadMetaRaw && typeof uploadMetaRaw.fileName === 'string' && typeof uploadMetaRaw.receivedAt === 'string'
+                    ? { fileName: uploadMetaRaw.fileName, receivedAt: uploadMetaRaw.receivedAt, via: typeof uploadMetaRaw.via === 'string' ? uploadMetaRaw.via : 'agent' }
+                    : null,
+                lastContactAt: typeof uploadRaw.lastContactAt === 'string' ? uploadRaw.lastContactAt : null,
+                health: uploadHealth,
+              }
+            : null,
       });
     } catch (e) {
       setSharedSyncPreview(null);
@@ -1020,6 +1041,17 @@ export default function SiteLedgerPage() {
                   {describeSharedSyncStatus('週予定の同期(5分おき)', sharedSyncStatus.schedule, sharedSyncStatus.health.schedule)}
                   <br />
                   {describeSharedSyncStatus('台帳・関係会社の反映(30分おき)', sharedSyncStatus.ledger, sharedSyncStatus.health.ledger)}
+                  {sharedSyncStatus.upload ? (
+                    <div data-testid="shared-sync-upload-status">
+                      会社PCからの原本送信: {sharedSyncStatus.upload.meta ? `最終受信 ${formatSyncTime(sharedSyncStatus.upload.meta.receivedAt)}(${sharedSyncStatus.upload.meta.via === 'manual' ? '手動' : '自動'})` : '受信なし'}
+                      {sharedSyncStatus.upload.lastContactAt ? ` / 最終連絡 ${formatSyncTime(sharedSyncStatus.upload.lastContactAt)}` : ''}
+                    </div>
+                  ) : null}
+                  {sharedSyncStatus.upload?.health.level === 'warn' ? (
+                    <div className="text-amber-700 dark:text-amber-300" data-testid="shared-sync-upload-warning">
+                      注意: 会社PCからの原本送信: {sharedSyncStatus.upload.health.reasons.join(' / ')}
+                    </div>
+                  ) : null}
                   {(['schedule', 'ledger'] as const).map((scope) => {
                     const health = sharedSyncStatus.health[scope];
                     if (!health || health.level !== 'warn') return null;
@@ -1040,6 +1072,15 @@ export default function SiteLedgerPage() {
                   title="作業伝票ブック（編集権限者のみ。第32期の作業伝票と同じ内容をアプリ内で編集・保存）"
                 >
                   作業伝票
+                </Link>
+              ) : null}
+              {canEditSite ? (
+                <Link
+                  href="/site-ledger/shared-upload"
+                  className="rounded-md border border-zinc-300 bg-white/70 px-3 py-2 text-xs hover:bg-white dark:border-zinc-700 dark:bg-black/60 dark:hover:bg-black"
+                  title="会社PCの送信が止まったときの緊急用: 作業表☆を手動でアップロード"
+                >
+                  原本を手動アップロード
                 </Link>
               ) : null}
               <button

@@ -1,7 +1,9 @@
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { SharedSyncError, getSharedSyncPreview, runSharedSync } from '@/server/shared-excel-sync';
 import { readSharedPollerTicks, readSharedSyncStatuses } from '@/server/shared-sync-status';
+import { readAgentContact, readUploadMeta } from '@/server/shared-upload';
 import { evaluateSharedSyncHealth } from '@/shared/shared-sync-health';
+import { evaluateUploadHealth } from '@/shared/shared-sync-upload';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -44,13 +46,27 @@ export async function GET(request: Request) {
     const targetTerm = toTargetTerm(query.success ? query.data.targetTerm : undefined);
 
     const preview = await getSharedSyncPreview({ kind, targetTerm });
-    const [status, poller] = await Promise.all([readSharedSyncStatuses(kind), readSharedPollerTicks(kind)]);
+    const [status, poller, uploadMeta, agentContact] = await Promise.all([
+      readSharedSyncStatuses(kind),
+      readSharedPollerTicks(kind),
+      readUploadMeta(),
+      readAgentContact(),
+    ]);
     const nowMs = Date.now();
     const health = {
       schedule: evaluateSharedSyncHealth({ scope: 'schedule', run: status.schedule, poller: poller.schedule, nowMs }),
       ledger: evaluateSharedSyncHealth({ scope: 'ledger', run: status.ledger, poller: poller.ledger, nowMs }),
     };
-    return Response.json({ ...preview, status, poller, health }, { headers: { 'Cache-Control': 'no-store' } });
+    // 会社PCからの送信方式を使っている環境(受け口のトークン設定あり/受信実績あり)だけで表示する
+    const uploadEnabled = !!(process.env.SHARED_SYNC_UPLOAD_TOKEN ?? '').trim() || !!uploadMeta;
+    const upload = uploadEnabled
+      ? {
+          meta: uploadMeta ? { fileName: uploadMeta.fileName, receivedAt: uploadMeta.receivedAt, via: uploadMeta.via, sizeBytes: uploadMeta.sizeBytes } : null,
+          lastContactAt: agentContact?.lastContactAt ?? null,
+          health: evaluateUploadHealth({ meta: uploadMeta, contact: agentContact, nowMs }),
+        }
+      : null;
+    return Response.json({ ...preview, status, poller, health, upload }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '共有フォルダの確認に失敗しました';
     return Response.json({ ok: false, error: message }, { status: 500 });
