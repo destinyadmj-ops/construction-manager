@@ -399,6 +399,11 @@ Test-Path '\\192.168.0.210\guest\共有フォルダ'
 - (a) 再生成時に `MASTER_HUB_SHARED_SOURCE_DIR=/shared-source` を常に書く(コンテナ内パスは固定値なので秘密ではない)。`SHARED_SOURCE_HOST_PATH` は GitHub の Variables から渡す。
 - (b) ホスト固有の値を `.env.host`(リポジトリ外・再生成されない)へ分け、`--env-file .env.production --env-file .env.host` と `env_file` の両方で読む。`.env.host` が無い環境でも起動できるよう、存在しない場合は読み込まない書き方にする。
 
+### 印のない旧予定とタイムゾーン(結論と提案・未適用)
+
+- 印のない旧予定(`sharedExcelSync` の印が付く前に作られた予定): 手入力と区別できないため、同期は消さない。同じ人・日・現場(または同じ文字)のものは原本で上書きされて同期由来になる。文言も違う場合だけ残り、画面に二重表示される。案: 承認済みの一括整理(`scripts/ledger-requote.ts` と同様の dry-run → 承認ID指定の削除)を別途用意する。
+- タイムゾーン: 同期由来の予定は日付の UTC 12:00 で保存するので、UTC のコンテナでも日本時間のPCでも日付はずれない(UTC-11〜+11 の範囲で同じ日)。ずれる可能性があるのは、日本時間の 0:00 付近で作られた手入力の予定を UTC のコンテナが読む場合(前日扱い)で、同じ人・日・現場の上書き判定を外すことがある。対策案: 本番の `web` / `worker` に `TZ=Asia/Tokyo` を設定する(`docker-compose.prod.yml` と `.env.production.example` の変更になるため承認待ち)。
+
 ### 停止の自動検知(画面警告)
 
 - worker は周期ごとの結果(`enqueued` / `no-sources` / `previous-pending` / `error`)を Redis のキー `masterhub:shared-sync:poller:{scope}:{kind}` に記録する(心拍)。

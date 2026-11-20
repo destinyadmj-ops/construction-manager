@@ -239,11 +239,46 @@ function parseRichRunParts(
 }
 
 
+const ENTRY_DELIMITER = /[、,，\/／\r\n]+|[ \t]{2,}|　{2,}/y;
+
+function tokenizeOutsideParens(text: string, state: { depth: number }): Array<{ text: string; delim: boolean; inParen: boolean }> {
+  const out: Array<{ text: string; delim: boolean; inParen: boolean }> = [];
+  let cur = '';
+  let curInParen = state.depth > 0;
+  const pushCur = () => {
+    if (cur) out.push({ text: cur, delim: false, inParen: curInParen });
+    cur = '';
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    // 閉じ忘れの括弧が次の行へ波及しないよう、改行で深さを戻す
+    if (state.depth > 0 && (ch === '\n' || ch === '\r')) state.depth = 0;
+    if (state.depth === 0) {
+      ENTRY_DELIMITER.lastIndex = i;
+      const m = ENTRY_DELIMITER.exec(text);
+      if (m) {
+        pushCur();
+        out.push({ text: m[0], delim: true, inParen: false });
+        i += m[0].length;
+        curInParen = false;
+        continue;
+      }
+    }
+    if (!cur) curInParen = state.depth > 0;
+    if (ch === '(' || ch === '（') state.depth += 1;
+    else if ((ch === ')' || ch === '）') && state.depth > 0) state.depth -= 1;
+    cur += ch;
+    i += 1;
+  }
+  pushCur();
+  return out;
+}
+
 export function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): Array<{ siteName: string; color: 'default' | 'red'; itemIndex: number }> {
   const c = cell as { r?: unknown } | null;
   const parts = parseRichRunParts(typeof c?.r === 'string' ? c.r : null, cell);
   const partList = parts.length > 0 ? parts : [{ text: fallbackText, color: detectCellEntryColor(cell) }];
-  const delimiter = /([、,，\/／\r\n]+|[ \t]{2,}|　{2,})/;
 
   const collected: Array<{ siteName: string; color: 'default' | 'red' }> = [];
   let buf = '';
@@ -257,11 +292,12 @@ export function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): A
     collected.push({ siteName: normalized, color: bufColor });
   };
 
+  // 括弧内の区切り(「魁力屋(府中、渋谷)」「(6/9中止分)」)では分割しない。色の run をまたいで深さを引き継ぐ。
+  const parenState = { depth: 0 };
   for (const part of partList) {
-    const tokens = part.text.split(delimiter);
-    for (const token of tokens) {
-      if (!token) continue;
-      if (delimiter.test(token)) {
+    const tokens = tokenizeOutsideParens(part.text, parenState);
+    for (const { text: token, delim, inParen } of tokens) {
+      if (delim) {
         flush();
         continue;
       }
@@ -272,7 +308,11 @@ export function splitSiteEntriesFromCell(cell: unknown, fallbackText: string): A
       }
 
       if (buf && part.color !== bufColor) {
-        flush();
+        if (inParen) {
+          if (part.color === 'red') bufColor = 'red';
+        } else {
+          flush();
+        }
       }
       if (!buf) {
         bufColor = part.color;
@@ -575,6 +615,29 @@ function parseDateToYmd(value: unknown, baseDate: Date): string | null {
   return null;
 }
 
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+
+// 日付セルの年が古いと曜日行(「月」「火」…)と食い違う(翻年の1月の週を前年日付のまま使い回した原本)。曜日が合う年のうち基準日に最も近い年へ揃える。合う年が無いときはそのまま。
+export function alignYmdToWeekday(ymd: string, weekdayCell: unknown, baseDate: Date): string {
+  const label = normalizeRegistryText(toCellText(weekdayCell)).slice(0, 1);
+  const wanted = WEEKDAY_LABELS.indexOf(label);
+  if (wanted < 0) return ymd;
+  const [y, m, d] = ymd.split('-').map(Number);
+  const weekdayOf = (year: number) => new Date(Date.UTC(year, m - 1, d)).getUTCDay();
+  if (weekdayOf(y) === wanted) return ymd;
+  let best: number | null = null;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (let year = y - 3; year <= y + 3; year += 1) {
+    if (new Date(Date.UTC(year, m - 1, d)).getUTCMonth() !== m - 1 || weekdayOf(year) !== wanted) continue;
+    const diff = Math.abs(new Date(year, m - 1, d).getTime() - baseDate.getTime());
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = year;
+    }
+  }
+  return best == null ? ymd : `${best}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 function splitAssigneeTokens(input: string | null | undefined): string[] {
   const normalized = normalizeRegistryText(input);
   if (!normalized) return [];
@@ -679,9 +742,13 @@ function extractWorkTableRowsFromMatrix(
   if (headerRowIndex < 0 || dateCols.length === 0) return rows;
 
   // 日付見出しの日は、予定が空でも「原本が扱っている日」として扱う(消した予定を反映するため)
+  const dayByCol = new Map<number, string>();
   for (const col of dateCols) {
-    const headerDay = parseDateToYmd((grid[headerRowIndex] ?? [])[col], baseDate);
-    if (headerDay) coveredDays.add(headerDay);
+    const parsed = parseDateToYmd((grid[headerRowIndex] ?? [])[col], baseDate);
+    if (!parsed) continue;
+    const headerDay = alignYmdToWeekday(parsed, (grid[headerRowIndex + 1] ?? [])[col], baseDate);
+    dayByCol.set(col, headerDay);
+    coveredDays.add(headerDay);
   }
 
   let emptyRun = 0;
@@ -700,7 +767,7 @@ function extractWorkTableRowsFromMatrix(
     if (!looksLikeAssigneeName(assignee)) continue;
 
     for (const col of dateCols) {
-      const dayYmd = parseDateToYmd((grid[headerRowIndex] ?? [])[col], baseDate);
+      const dayYmd = dayByCol.get(col) ?? null;
       const siteName = normalizeTextStrippingReadingParens(toCellText(row[col]));
       if (!dayYmd || !siteName) continue;
 
