@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import type { Prisma } from '../generated/prisma';
 import type { planScheduleCells as PlanFn, ScheduleDesiredRow, ScheduleExistingRow } from './shared-excel-sync';
+import { buildSuppressionSet, getSyncRowKey, isAppEditedSyncMeta, markAppEditedMeta, buildSyncTombstone } from '../shared/shared-sync-protection';
 
 let planScheduleCells: typeof PlanFn;
 
@@ -110,11 +111,12 @@ const hasSyncMeta = (row: DbRow) => {
 
 let idCounter = 0;
 
-function syncOnce(db: DbRow[], original: Original) {
+function syncOnce(db: DbRow[], original: Original, suppression?: ReadonlySet<string>) {
   const plan = planScheduleCells({
     desiredByCell: toDesired(original),
     existingByCell: groupByCell(db),
     workTableFileName: 'test.xlsx',
+    suppression,
   });
   const deleted = new Set(plan.deleteIds);
   const updates = new Map(plan.updates.map((u) => [u.id, u.data]));
@@ -134,17 +136,42 @@ function assertConverged(db: DbRow[], original: Original, label: string) {
   const desired = toDesired(original);
   const cells = groupByCell(db);
   for (const [cellKey, wants] of desired) {
-    const syncRows = (cells.get(cellKey) ?? []).filter(hasSyncMeta);
+    const rows = cells.get(cellKey) ?? [];
+    const syncRows = rows.filter((r) => hasSyncMeta(r) && !isAppEditedSyncMeta(r.accountingMeta));
+    const expected = expectedSyncWants(wants, rows.filter(isGuardedRow));
     assert.deepEqual(
       syncRows.map((r) => [r.summary, (r.accountingMeta as { labelColor?: string }).labelColor]),
-      wants.map((w) => [w.summary, w.labelColor]),
+      expected.map((w) => [w.summary, w.labelColor]),
       `${label}: ${cellKey} の内容/順序/色が原本と一致しない`,
     );
   }
   for (const [cellKey, rows] of cells) {
     if (desired.has(cellKey)) continue;
-    assert.equal(rows.filter(hasSyncMeta).length, 0, `${label}: ${cellKey} に原本に無い同期予定が残っている`);
+    assert.equal(rows.filter((r) => hasSyncMeta(r) && !isAppEditedSyncMeta(r.accountingMeta)).length, 0, `${label}: ${cellKey} に原本に無い未編集の同期予定が残っている`);
   }
+}
+
+// 手入力・アプリで編集済みの予定(保護対象)
+const isGuardedRow = (row: DbRow) => !hasSyncMeta(row) || isAppEditedSyncMeta(row.accountingMeta);
+
+// 実装と同じ消費規則: 保護対象の予定がある原本の項目は同期で作らない
+function expectedSyncWants(wants: ScheduleDesiredRow[], guarded: DbRow[]): ScheduleDesiredRow[] {
+  const used = new Set<string>();
+  const consumed = new Set<string>();
+  for (const w of wants) {
+    const hit = guarded.find((r) => !used.has(r.id) && getSyncRowKey(r.accountingMeta) === w.sourceKey);
+    if (!hit) continue;
+    used.add(hit.id);
+    consumed.add(w.sourceKey);
+  }
+  for (const w of wants) {
+    if (consumed.has(w.sourceKey)) continue;
+    const hit = guarded.find((r) => !used.has(r.id) && ((w.siteId != null && r.siteId === w.siteId) || r.summary === w.summary));
+    if (!hit) continue;
+    used.add(hit.id);
+    consumed.add(w.sourceKey);
+  }
+  return wants.filter((w) => !consumed.has(w.sourceKey));
 }
 
 function randomItems(rand: () => number): Item[] {
@@ -205,6 +232,8 @@ test('原本をランダムに編集して同期を繰り返しても、DB は�
       }
     }
     const initialManual = db.filter((r) => !hasSyncMeta(r)).length;
+    const editedIds = new Set<string>();
+    const manualIds = new Set(db.filter((r) => !hasSyncMeta(r)).map((r) => r.id));
 
     for (let step = 0; step < 12; step += 1) {
       const synced = syncOnce(db, original);
@@ -214,12 +243,29 @@ test('原本をランダムに編集して同期を繰り返しても、DB は�
       const again = syncOnce(db, original);
       assert.equal(again.plan.creates.length + again.plan.updates.length + again.plan.deleteIds.length, 0, `seed=${seed} step=${step}: 再実行で変化した`);
       db = again.db;
+      for (const id of [...editedIds, ...manualIds]) {
+        assert.ok(db.some((r) => r.id === id), `seed=${seed} step=${step}: 手入力/編集済みの予定が消えた(${id})`);
+      }
 
       // 同じ人・日の重複なし(同期由来の同一rowKey)
       const keys = db.filter(hasSyncMeta).map((r) => `${r.userId}|${localYmd(r.startAt)}|${(r.accountingMeta as { sharedExcelSync: { rowKey: string } }).sharedExcelSync.rowKey}`);
       assert.equal(new Set(keys).size, keys.length, `seed=${seed} step=${step}: 同期予定が重複`);
 
       mutate(original, rand);
+      if (rand() < 0.25) {
+        // 利用者が同期由来の予定をアプリで編集する(編集印を付け、文言を変えることもある)
+        const candidates = db.filter((r) => hasSyncMeta(r) && !isAppEditedSyncMeta(r.accountingMeta) && getSyncRowKey(r.accountingMeta) !== 'old');
+        if (candidates.length > 0) {
+          const target = candidates[Math.floor(rand() * candidates.length)];
+          target.accountingMeta = markAppEditedMeta(target.accountingMeta, '2030-01-01T00:00:00.000Z') as Prisma.JsonValue;
+          if (rand() < 0.5) {
+            const site = SITES[Math.floor(rand() * SITES.length)];
+            target.summary = site.summary;
+            target.siteId = site.siteId;
+          }
+          editedIds.add(target.id);
+        }
+      }
       if (rand() < 0.2) {
         // 同期の合間に利用者が手入力で予定を足す
         const user = USERS[Math.floor(rand() * USERS.length)];
@@ -243,15 +289,80 @@ test('原本から消えた予定は削除し、手入力の予定(原本と別�
   assert.deepEqual(db.map((r) => r.id), ['manual1']);
 });
 
-test('手入力の同じ現場の予定は原本の内容で上書きされる(ID は保たれる)', () => {
+test('手入力の同じ現場の予定は原本で上書きせず、同期で重複も作らない', () => {
   const original: Original = new Map([[`u1|${DAYS[0]}`, [{ summary: '甲 ビル 3F', color: 'red' }]]]);
   const [y, m, d] = DAYS[0].split('-').map(Number);
   const db: DbRow[] = [{ id: 'manual1', userId: 'u1', startAt: new Date(y, m - 1, d, 9, 0), summary: '甲ビル', siteId: 's1', accountingMeta: null }];
   const { db: next, plan } = syncOnce(db, original);
   assert.equal(next.length, 1);
   assert.equal(next[0].id, 'manual1');
-  assert.equal(next[0].summary, '甲 ビル 3F');
-  assert.equal(plan.counts.overwritten, 1);
+  assert.equal(next[0].summary, '甲ビル');
+  assert.equal(next[0].accountingMeta, null);
+  assert.equal(plan.counts.protectedKept, 1);
+  assert.equal(plan.counts.created + plan.counts.updated + plan.counts.deleted, 0);
+});
+
+test('アプリで編集した同期由来の予定は、原本が変わっても書き換え・削除されない', () => {
+  const cell = `u1|${DAYS[0]}`;
+  const original: Original = new Map([[cell, [{ summary: '甲ビル', color: 'default' }]]]);
+  const db = syncOnce([], original).db;
+  assert.equal(db.length, 1);
+  // アプリで現場を変える(編集印付き)
+  db[0] = { ...db[0], summary: '丙センター', siteId: 's3', accountingMeta: markAppEditedMeta(db[0].accountingMeta, '2030-01-01T00:00:00.000Z') as Prisma.JsonValue };
+  const editedId = db[0].id;
+
+  // 原本はそのまま: 編集済みは維持(rowKey で対応)し、重複も作らない
+  let res = syncOnce(db, original);
+  assert.equal(res.db.length, 1);
+  assert.equal(res.db[0].summary, '丙センター');
+  assert.equal(res.plan.counts.created + res.plan.counts.updated + res.plan.counts.deleted, 0);
+
+  // 原本から消えても編集済みは残る
+  original.set(cell, []);
+  res = syncOnce(res.db, original);
+  assert.deepEqual(res.db.map((r) => r.id), [editedId]);
+  assert.equal(res.plan.counts.deleted, 0);
+});
+
+test('アプリで削除した予定は再作成しない。原本で文言が変われば新しい予定として作る', () => {
+  const cell = `u1|${DAYS[0]}`;
+  const original: Original = new Map([[cell, [{ summary: '甲ビル', color: 'default' }, { summary: '乙マンション', color: 'default' }]]]);
+  let db = syncOnce([], original).db;
+  const victim = db.find((r) => r.summary === '甲ビル')!;
+  const tomb = buildSyncTombstone({ userId: 'u1', dayYmd: DAYS[0], summary: victim.summary, accountingMeta: victim.accountingMeta }, '2030-01-01T00:00:00.000Z');
+  assert.ok(tomb);
+  const suppression = buildSuppressionSet([tomb!]);
+  db = db.filter((r) => r.id !== victim.id);
+
+  let res = syncOnce(db, original, suppression);
+  assert.equal(res.plan.counts.created, 0);
+  assert.equal(res.plan.counts.suppressed, 1);
+  assert.deepEqual(res.db.map((r) => r.summary), ['乙マンション']);
+  db = res.db;
+
+  // 再実行でも変わらない
+  res = syncOnce(db, original, suppression);
+  assert.equal(res.plan.creates.length + res.plan.updates.length + res.plan.deleteIds.length, 0);
+
+  // 原本で文言が変わった(別の現場名)ら新しい予定として作る
+  original.set(cell, [{ summary: '丙センター', color: 'default' }, { summary: '乙マンション', color: 'default' }]);
+  res = syncOnce(db, original, suppression);
+  assert.ok(res.db.some((r) => r.summary === '丙センター'));
+});
+
+test('別の日・別の人の削除記録は影響しない', () => {
+  const original: Original = new Map([[`u2|${DAYS[1]}`, [{ summary: '甲ビル', color: 'default' }]]]);
+  const tomb = buildSyncTombstone(
+    { userId: 'u1', dayYmd: DAYS[0], summary: '甲ビル', accountingMeta: { sharedExcelSync: { rowKey: 'other' } } },
+    '2030-01-01T00:00:00.000Z',
+  );
+  const res = syncOnce([], original, buildSuppressionSet([tomb!]));
+  assert.equal(res.plan.counts.created, 1);
+  assert.equal(res.plan.counts.suppressed, 0);
+});
+
+test('手入力の予定(無印)は削除記録を作らない', () => {
+  assert.equal(buildSyncTombstone({ userId: 'u1', dayYmd: DAYS[0], summary: '甲ビル', accountingMeta: null }, '2030-01-01T00:00:00.000Z'), null);
 });
 
 

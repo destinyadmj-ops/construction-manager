@@ -12,6 +12,8 @@ import {
 } from '@/server/excel-font-color';
 import { normalizeTextStrippingReadingParens } from '@/shared/site-lookup';
 import { describeSharedFolderAccessFailure } from '@/shared/shared-sync-health';
+import { buildSuppressionSet, isAppEditedSyncMeta, isSuppressedByTombstone } from '@/shared/shared-sync-protection';
+import { readSyncTombstones } from '@/server/shared-sync-tombstones';
 import { tryAcquireSharedSyncLock, type SharedSyncScope } from '@/server/shared-sync-lock';
 import { recordSharedSyncStatus } from '@/server/shared-sync-status';
 import { resolveWorkSlipLedgerSheets, type WorkSlipLedgerSheets } from '@/shared/work-slip-tabs';
@@ -73,7 +75,8 @@ type SharedSyncCounts = {
   /** 変更なし(既に原本と一致) */
   scheduleSkipped: number;
   /** 原本の内容で上書きした、同期由来でない既存予定(手入力など) */
-  scheduleOverwritten: number;
+  scheduleProtected: number;
+  scheduleSuppressed: number;
   workSlipsCreated: number;
   workSlipsSkipped: number;
   unknownUsers: number;
@@ -1517,7 +1520,8 @@ async function runSharedSyncUnlocked(input: SharedSyncInput): Promise<SharedSync
     scheduleUpdated: 0,
     scheduleDeleted: 0,
     scheduleSkipped: 0,
-    scheduleOverwritten: 0,
+    scheduleProtected: 0,
+    scheduleSuppressed: 0,
     workSlipsCreated: 0,
     workSlipsSkipped: 0,
     unknownUsers: 0,
@@ -1709,44 +1713,74 @@ export type ScheduleCellPlan = {
   deleteIds: string[];
   updates: ScheduleUpdate[];
   creates: Array<{ userId: string; startAt: Date; summary: string; siteId: string | null; accountingMeta: Prisma.InputJsonValue }>;
-  counts: { created: number; updated: number; deleted: number; skipped: number; overwritten: number };
-  overwrittenDays: string[];
+  counts: { created: number; updated: number; deleted: number; skipped: number; protectedKept: number; suppressed: number };
 };
 
 // セル(人×日)ごとに「原本の希望内容」と「現在のDB」を突き合わせ、追加・更新・削除を決める純粋関数(DBを使わない)。
+// アプリ側の保護: 手入力の予定・アプリで編集した同期由来の予定は書き換えも削除もしない。アプリで削除した予定(suppression)は再作成しない。
 export function planScheduleCells(input: {
   desiredByCell: Map<string, ScheduleDesiredRow[]>;
   existingByCell: Map<string, ScheduleExistingRow[]>;
   workTableFileName: string;
+  suppression?: ReadonlySet<string>;
 }): ScheduleCellPlan {
   const { desiredByCell, existingByCell, workTableFileName } = input;
+  const suppression = input.suppression ?? new Set<string>();
   const plan: ScheduleCellPlan = {
     deleteIds: [],
     updates: [],
     creates: [],
-    counts: { created: 0, updated: 0, deleted: 0, skipped: 0, overwritten: 0 },
-    overwrittenDays: [],
+    counts: { created: 0, updated: 0, deleted: 0, skipped: 0, protectedKept: 0, suppressed: 0 },
   };
 
   const cellKeys = new Set<string>([...desiredByCell.keys(), ...existingByCell.keys()]);
   for (const cellKey of cellKeys) {
     const desired = desiredByCell.get(cellKey) ?? [];
     const existing = existingByCell.get(cellKey) ?? [];
+    // 同期が触れてよいのは「同期由来で、アプリで編集されていない」予定だけ。それ以外(手入力・編集済み)は保護対象。
+    const isGuarded = (row: ScheduleExistingRow) => !hasSharedExcelSyncMeta(row.accountingMeta) || isAppEditedSyncMeta(row.accountingMeta);
+    const guarded = existing.filter(isGuarded);
     const usedIds = new Set<string>();
+    const consumedKeys = new Set<string>(); // 保護対象の予定が既に表している原本の項目(作成・更新しない)
     const matchByKey = new Map<string, ScheduleExistingRow>();
 
+    // 0a) アプリで編集した同期由来の予定は、同じ rowKey の原本の項目を表すものとして残す
+    for (const want of desired) {
+      const hit = guarded.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
+      if (!hit) continue;
+      usedIds.add(hit.id);
+      consumedKeys.add(want.sourceKey);
+    }
+    // 0b) 同じ人・日・現場の手入力/編集済みの予定がある原本の項目は追加しない(手入力を上書きしない)
+    for (const want of desired) {
+      if (consumedKeys.has(want.sourceKey)) continue;
+      const wantSummaryKey = normalizeKey(want.summary);
+      const hit = guarded.find(
+        (row) =>
+          !usedIds.has(row.id) &&
+          ((want.siteId != null && row.siteId === want.siteId) ||
+            (wantSummaryKey !== '' && normalizeKey(row.summary) === wantSummaryKey)),
+      );
+      if (!hit) continue;
+      usedIds.add(hit.id);
+      consumedKeys.add(want.sourceKey);
+    }
+    plan.counts.protectedKept += consumedKeys.size;
+
+    const free = existing.filter((row) => !isGuarded(row));
     // 1) 同じ rowKey の同期済み予定をそのまま対応づける(ID を保つ)
     for (const want of desired) {
-      const hit = existing.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
+      if (consumedKeys.has(want.sourceKey)) continue;
+      const hit = free.find((row) => !usedIds.has(row.id) && getSharedSyncRowKey(row.accountingMeta) === want.sourceKey);
       if (!hit) continue;
       usedIds.add(hit.id);
       matchByKey.set(want.sourceKey, hit);
     }
-    // 2) 同じ人・日・現場の既存予定(手入力など)は原本の内容で上書きする(ID を保つ)
+    // 2) 同じ人・日・現場の同期由来の予定は原本の内容で更新する(ID を保つ)
     for (const want of desired) {
-      if (matchByKey.has(want.sourceKey)) continue;
+      if (consumedKeys.has(want.sourceKey) || matchByKey.has(want.sourceKey)) continue;
       const wantSummaryKey = normalizeKey(want.summary);
-      const hit = existing.find(
+      const hit = free.find(
         (row) =>
           !usedIds.has(row.id) &&
           ((want.siteId != null && row.siteId === want.siteId) ||
@@ -1756,11 +1790,11 @@ export function planScheduleCells(input: {
       usedIds.add(hit.id);
       matchByKey.set(want.sourceKey, hit);
     }
-    // 3) 現場名の文言だけ直したときは、同じ位置(グループ/項目番号)の同期由来の予定を同じ予定として更新する(ID を保つ)。手入力は対象外。
+    // 3) 現場名の文言だけ直したときは、同じ位置(グループ/項目番号)の同期由来の予定を同じ予定として更新する(ID を保つ)。
     for (const want of desired) {
-      if (matchByKey.has(want.sourceKey)) continue;
-      const hit = existing.find((row) => {
-        if (usedIds.has(row.id) || !hasSharedExcelSyncMeta(row.accountingMeta)) return false;
+      if (consumedKeys.has(want.sourceKey) || matchByKey.has(want.sourceKey)) continue;
+      const hit = free.find((row) => {
+        if (usedIds.has(row.id)) return false;
         const meta = row.accountingMeta as Record<string, unknown>;
         return meta.scheduleGroupIndex === want.groupIndex && meta.scheduleItemIndex === want.itemIndex;
       });
@@ -1769,20 +1803,17 @@ export function planScheduleCells(input: {
       matchByKey.set(want.sourceKey, hit);
     }
 
-    // 4) 対応づかなかった同期由来の予定は原本から消えたので削除。手入力の予定は残す。
-    let keptManualCount = 0;
-    for (const row of existing) {
+    // 4) 対応づかなかった「未編集の同期由来」の予定は原本から消えたので削除。手入力・編集済みは残す。
+    for (const row of free) {
       if (usedIds.has(row.id)) continue;
-      if (hasSharedExcelSyncMeta(row.accountingMeta)) {
-        plan.deleteIds.push(row.id);
-        plan.counts.deleted += 1;
-      } else {
-        keptManualCount += 1;
-      }
+      plan.deleteIds.push(row.id);
+      plan.counts.deleted += 1;
     }
+    const keptManualCount = guarded.length;
 
     const dayYmd = cellKey.slice(cellKey.indexOf('|') + 1);
     desired.forEach((want, index) => {
+      if (consumedKeys.has(want.sourceKey)) return;
       const startAt = addMinutes(startOfSharedSyncDay(dayYmd), keptManualCount + index);
       const syncMeta = {
         scheduleEntryKind: 'site',
@@ -1798,6 +1829,11 @@ export function planScheduleCells(input: {
 
       const current = matchByKey.get(want.sourceKey);
       if (!current) {
+        // アプリで削除した予定は再作成しない
+        if (isSuppressedByTombstone(suppression, want)) {
+          plan.counts.suppressed += 1;
+          return;
+        }
         plan.creates.push({
           userId: want.userId,
           startAt,
@@ -1810,9 +1846,7 @@ export function planScheduleCells(input: {
       }
 
       const accountingMeta = mergeSyncAccountingMeta(current.accountingMeta, syncMeta);
-      const wasSyncOrigin = hasSharedExcelSyncMeta(current.accountingMeta);
       const same =
-        wasSyncOrigin &&
         current.startAt.getTime() === startAt.getTime() &&
         current.summary === want.summary &&
         current.siteId === want.siteId &&
@@ -1820,10 +1854,6 @@ export function planScheduleCells(input: {
       if (same) {
         plan.counts.skipped += 1;
         return;
-      }
-      if (!wasSyncOrigin) {
-        plan.counts.overwritten += 1;
-        plan.overwrittenDays.push(dayYmd);
       }
       plan.updates.push({ id: current.id, data: { startAt, summary: want.summary, siteId: want.siteId, accountingMeta } });
       plan.counts.updated += 1;
@@ -1848,6 +1878,7 @@ async function syncScheduleEntries(args: {
   const users = await listSharedSyncUsers(prisma, kind);
   const globalOrder = await readGlobalScheduleUserOrder(kind);
   const globalOrderIndex = new Map<string, number>(globalOrder.map((id, index) => [id, index] as const));
+  const suppression = buildSuppressionSet(await readSyncTombstones(kind));
 
   const assigneeByKey = new Map<string, { name: string; color: 'default' | 'red' }>();
   const assigneeKeyOrder: string[] = [];
@@ -2151,23 +2182,18 @@ async function syncScheduleEntries(args: {
         existingByCell.set(cellKey, list);
       }
 
-      const plan = planScheduleCells({ desiredByCell, existingByCell, workTableFileName });
-      const { deleteIds, updates, overwrittenDays } = plan;
+      const plan = planScheduleCells({ desiredByCell, existingByCell, workTableFileName, suppression });
+      const { deleteIds, updates } = plan;
       counts.scheduleCreated += plan.counts.created;
       counts.scheduleUpdated += plan.counts.updated;
       counts.scheduleDeleted += plan.counts.deleted;
       counts.scheduleSkipped += plan.counts.skipped;
-      counts.scheduleOverwritten += plan.counts.overwritten;
+      counts.scheduleProtected += plan.counts.protectedKept;
+      counts.scheduleSuppressed += plan.counts.suppressed;
 
       if (deleteIds.length > 0) await tx.workEntry.deleteMany({ where: { id: { in: deleteIds } } });
       await applyScheduleUpdates(tx, updates);
       if (plan.creates.length > 0) await tx.workEntry.createMany({ data: plan.creates.map((row) => ({ ...row, kind, note: null })) });
-      if (overwrittenDays.length > 0) {
-        overwrittenDays.sort();
-        const message = `手入力の予定 ${overwrittenDays.length} 件を原本の内容で上書きしました(日付 ${overwrittenDays[0]}〜${overwrittenDays[overwrittenDays.length - 1]})。`;
-        warnings.push(message);
-        console.warn(`[shared-sync] ${message}`);
-      }
     },
     { timeout: 120_000, maxWait: 10_000 },
   );

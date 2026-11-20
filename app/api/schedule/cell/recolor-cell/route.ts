@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { guardScheduleEdit } from '@/server/shared-sync-edit-guard';
 import { Prisma } from '@/generated/prisma';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import { z } from 'zod';
@@ -39,6 +40,10 @@ function addDays(d: Date, days: number) {
 }
 
 export async function POST(request: Request) {
+  return guardScheduleEdit(request, handlePost);
+}
+
+async function handlePost(request: Request) {
   const authError = await requireScheduleEditor(request);
   if (authError) return authError;
 

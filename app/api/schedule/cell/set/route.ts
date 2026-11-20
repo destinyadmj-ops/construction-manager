@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/prisma';
+import { guardScheduleEdit } from '@/server/shared-sync-edit-guard';
 import { requireScheduleEditor } from '@/server/auth/schedule-edit';
 import {
   createScheduleCellSnapshot,
@@ -254,6 +255,10 @@ async function resolveSiteByName(
 }
 
 export async function POST(request: Request) {
+  return guardScheduleEdit(request, handlePost);
+}
+
+async function handlePost(request: Request) {
   const authError = await requireScheduleEditor(request);
   if (authError) return authError;
 
